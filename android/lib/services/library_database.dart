@@ -304,6 +304,30 @@ class LibraryDatabase {
     return version;
   });
 
+  /// Changes the per-song offset of the current version in place (an offset
+  /// tweak is not a new version).
+  Future<void> setLyricsOffset(int songId, int offsetMs) =>
+      db.transaction((txn) async {
+        final docs = await txn.query(
+          'lyric_doc',
+          where: 'song_id = ?',
+          whereArgs: [songId],
+          orderBy: 'version DESC',
+          limit: 1,
+        );
+        if (docs.isEmpty) return;
+        final json = (jsonDecode(docs.first['json'] as String) as Map)
+            .cast<String, dynamic>();
+        await txn.update(
+          'lyric_doc',
+          {
+            'json': jsonEncode({...json, 'offsetMs': offsetMs}),
+          },
+          where: 'song_id = ? AND version = ?',
+          whereArgs: [songId, docs.first['version']],
+        );
+      });
+
   /// The current lyric document with its layers merged into the lines.
   Future<LyricDocument?> lyrics(int songId) async {
     final docs = await db.query(

@@ -8,6 +8,7 @@ import 'package:kalao/constants/app_info.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/l10n/supported_locales.dart';
 import 'package:kalao/providers/settings_provider.dart';
+import 'package:kalao/screens/lyrics_sync_screen.dart';
 import 'package:kalao/screens/main_shell.dart';
 import 'package:kalao/screens/now_playing_screen.dart';
 import 'package:kalao/screens/settings/log_screen.dart';
@@ -32,6 +33,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/player',
         builder: (context, state) => const NowPlayingScreen(),
+        routes: [
+          GoRoute(
+            path: 'sync',
+            builder: (context, state) => const LyricsSyncScreen(),
+          ),
+        ],
       ),
       GoRoute(
         path: '/settings/logs',

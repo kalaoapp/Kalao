@@ -29,6 +29,7 @@ class FakeBackend {
     'buffering': false,
     'vocalLevel': 1.0,
     'volume': 1.0,
+    'tempo': 1.0,
   };
 
   /// Readings for the few characters tests use.
@@ -101,6 +102,7 @@ class FakeBackend {
           'durationMs': 180000,
           'positionMs': args['startMs'] ?? 0,
           'vocalLevel': player['vocalLevel'],
+          'tempo': player['tempo'],
         };
         return jsonEncode(player);
       case 'playerPlay':
@@ -124,6 +126,9 @@ class FakeBackend {
       case 'playerSetVolume':
         player['volume'] = args['volume'];
         return jsonEncode(player);
+      case 'playerSetTempo':
+        player['tempo'] = args['rate'];
+        return jsonEncode(player);
       case 'playerState':
         return jsonEncode(player);
       case 'probeAudio':
@@ -142,6 +147,13 @@ class FakeBackend {
         return jsonEncode(_pair(args['files'] as List));
       case 'parseLyrics':
         return jsonEncode(_parse(args['raw'] as String));
+      case 'exportLyrics':
+        return jsonEncode({
+          'text': _export(
+            (args['doc'] as Map).cast<String, Object?>(),
+            args['format'] as String,
+          ),
+        });
       case 'annotateLyrics':
         return jsonEncode(_annotate((args['lines'] as List).cast<String>()));
       case 'runNativeDataJob':
@@ -212,9 +224,27 @@ class FakeBackend {
             int.parse(match[1]!) * 60000 +
             int.parse(match[2]!) * 1000 +
             int.parse(match[3]!) * 10;
+        // Word tags `<mm:ss.xx>word`: each tag starts the word after it.
+        final tag = RegExp(r'<(\d+):(\d+)\.(\d+)>');
+        final body = match[4]!.trim();
+        final words = <Map<String, Object?>>[];
+        final tags = tag.allMatches(body).toList();
+        for (var i = 0; i < tags.length; i++) {
+          final end = i + 1 < tags.length ? tags[i + 1].start : body.length;
+          final word = body.substring(tags[i].end, end).trim();
+          if (word.isEmpty) continue;
+          words.add({
+            'timeMs':
+                int.parse(tags[i][1]!) * 60000 +
+                int.parse(tags[i][2]!) * 1000 +
+                int.parse(tags[i][3]!) * 10,
+            'text': word,
+          });
+        }
         lines.add({
           'timeMs': ms,
-          'text': match[4]!.trim(),
+          'text': body.replaceAll(tag, '').trim(),
+          if (words.isNotEmpty) 'words': words,
           'sectionBreakBefore': false,
         });
         continue;
@@ -234,12 +264,38 @@ class FakeBackend {
       pendingBreak = false;
     }
     return {
-      'version': 1,
+      'version': 2,
       'format': isTimed ? 'lrc' : 'plain',
       'timed': isTimed,
       'offsetMs': 0,
       'lines': lines,
     };
+  }
+
+  static String _stamp(Object? ms) {
+    final value = (ms as num).toInt();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(value ~/ 60000)}:${two(value ~/ 1000 % 60)}.${two(value % 1000 ~/ 10)}';
+  }
+
+  /// `[mm:ss.xx]text` rows; `elrc` adds a `<mm:ss.xx>` tag before each word.
+  static String _export(Map<String, Object?> doc, String format) {
+    final rows = <String>[
+      if (doc['title'] != null) '[ti:${doc['title']}]',
+      if (doc['artist'] != null) '[ar:${doc['artist']}]',
+    ];
+    for (final item in doc['lines'] as List) {
+      final line = (item as Map).cast<String, Object?>();
+      final words = line['words'] as List?;
+      final body = format == 'elrc' && words != null
+          ? [
+              for (final word in words)
+                '<${_stamp((word as Map)['timeMs'])}>${word['text']}',
+            ].join(' ')
+          : line['text'];
+      rows.add('[${_stamp(line['timeMs'])}]$body');
+    }
+    return '${rows.join('\n')}\n';
   }
 
   static List<Map<String, Object?>> _annotate(List<String> lines) => [

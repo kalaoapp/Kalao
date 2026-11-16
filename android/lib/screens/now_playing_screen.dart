@@ -7,19 +7,21 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/models/lyrics.dart';
-import 'package:kalao/models/settings.dart';
 import 'package:kalao/providers/player_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
 import 'package:kalao/screens/lyrics_import_sheet.dart';
+import 'package:kalao/screens/lyrics_options_sheet.dart';
 import 'package:kalao/services/custom_font_service.dart';
 import 'package:kalao/theme/app_tokens.dart';
+import 'package:kalao/utils/lyrics_timeline.dart';
 import 'package:kalao/widgets/empty_state.dart';
 import 'package:kalao/widgets/ruby_lyric_line.dart';
 import 'package:kalao/widgets/song_widgets.dart';
 
-/// Now playing (M1.13): layered lyrics, transport, seek, original ↔
-/// instrumental and the vocal-guide blend. Untimed lyrics are stepped by
-/// hand (tap a line, ↑/↓, or the line buttons).
+/// Now playing (M1.13, M2): layered lyrics, transport, seek, original ↔
+/// instrumental and the vocal-guide blend. Timed lyrics follow the engine
+/// clock with a karaoke sweep over the active line; untimed lyrics are
+/// stepped by hand (tap a line, ↑/↓, or the line buttons).
 class NowPlayingScreen extends ConsumerWidget {
   const NowPlayingScreen({super.key});
 
@@ -80,6 +82,7 @@ class NowPlayingScreen extends ConsumerWidget {
                 onPressed: () => showModalBottomSheet<void>(
                   context: context,
                   showDragHandle: true,
+                  isScrollControlled: true,
                   builder: (_) => const LyricsOptionsSheet(),
                 ),
               ),
@@ -138,9 +141,10 @@ class _NoLyrics extends ConsumerWidget {
 }
 
 /// The lyric lines. For timed lyrics a ticker follows the interpolated engine
-/// position; otherwise the manual line is highlighted. The active line is
-/// kept near the top third, without animation when the system asks for
-/// reduced motion.
+/// position: it picks the active line and drives the sweep across it (word
+/// by word with word timing, linearly without). Otherwise the manual line is
+/// highlighted. The active line is kept near the top third, without
+/// animation when the system asks for reduced motion.
 class LyricsView extends ConsumerStatefulWidget {
   const LyricsView({super.key, required this.lyrics});
 
@@ -154,6 +158,10 @@ class _LyricsViewState extends ConsumerState<LyricsView>
     with SingleTickerProviderStateMixin {
   late final Ticker _ticker = createTicker(_tick);
   final _keys = <int, GlobalKey>{};
+
+  /// UTF-16 units of the active line sung so far; only the sweep's clip
+  /// listens, so a frame repaints one line instead of rebuilding the list.
+  final _swept = ValueNotifier<double>(0);
   int? _active;
 
   @override
@@ -172,13 +180,21 @@ class _LyricsViewState extends ConsumerState<LyricsView>
   @override
   void dispose() {
     _ticker.dispose();
+    _swept.dispose();
     super.dispose();
   }
 
   void _tick(Duration _) {
-    final active = widget.lyrics.activeLineAt(
-      ref.read(playerProvider.notifier).position,
-    );
+    final lyrics = widget.lyrics;
+    final position = ref.read(playerProvider.notifier).position;
+    final active = lyrics.activeLineAt(position);
+    if (active != null) {
+      _swept.value = sweptChars(
+        lyrics.lines[active],
+        position.inMilliseconds + lyrics.offsetMs,
+        nextStartMs: nextLeadStartMs(lyrics.lines, active),
+      );
+    }
     if (active != _active) {
       setState(() => _active = active);
       _reveal(active);
@@ -228,12 +244,32 @@ class _LyricsViewState extends ConsumerState<LyricsView>
       itemBuilder: (context, index) {
         final line = lines[index];
         final isActive = index == active;
+        // Backing vocals light up with the lead line they follow.
+        final highlighted =
+            isActive ||
+            (line.isBacking &&
+                active != null &&
+                index > active &&
+                lines
+                    .getRange(active + 1, index)
+                    .every((between) => between.isBacking));
+        final sweeping = isActive && widget.lyrics.timed && settings.wordSweep;
         final style = base.copyWith(
-          fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-          color: isActive
+          fontSize: line.isBacking ? base.fontSize! * 0.8 : null,
+          fontStyle: line.isBacking ? FontStyle.italic : null,
+          fontWeight: highlighted ? FontWeight.w700 : FontWeight.w500,
+          color: sweeping
+              ? theme.colorScheme.onSurface
+              : highlighted
               ? theme.colorScheme.primary
               : theme.colorScheme.onSurfaceVariant,
         );
+        // Duet sides: the first voice on the left, the others on the right.
+        final align = switch (line.voice) {
+          null || backingVoice => TextAlign.center,
+          'v1' => TextAlign.start,
+          _ => TextAlign.end,
+        };
         return Padding(
           key: _keys.putIfAbsent(index, GlobalKey.new),
           padding: EdgeInsets.only(
@@ -241,6 +277,11 @@ class _LyricsViewState extends ConsumerState<LyricsView>
             bottom: AppTokens.space8,
           ),
           child: Column(
+            crossAxisAlignment: switch (align) {
+              TextAlign.start => CrossAxisAlignment.start,
+              TextAlign.end => CrossAxisAlignment.end,
+              _ => CrossAxisAlignment.center,
+            },
             children: [
               if (line.section != null)
                 Padding(
@@ -276,10 +317,21 @@ class _LyricsViewState extends ConsumerState<LyricsView>
                       line: line,
                       style: style,
                       layer: layer,
+                      textAlign: align,
+                      swept: sweeping ? _swept : null,
+                      sweepColor: theme.colorScheme.primary,
                     ),
                   ),
                 ),
               ),
+              if (line.translation != null)
+                Text(
+                  line.translation!,
+                  textAlign: align,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
             ],
           ),
         );
@@ -464,64 +516,6 @@ class _PlayerControlsState extends ConsumerState<PlayerControls> {
                 ),
               ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Layer toggles and lyric size (Mornye's lyrics options sheet, reduced).
-class LyricsOptionsSheet extends ConsumerWidget {
-  const LyricsOptionsSheet({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context);
-    final settings = ref.watch(settingsProvider);
-    final notifier = ref.read(settingsProvider.notifier);
-    return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SwitchListTile(
-            secondary: const Icon(Icons.translate),
-            title: Text(l10n.lyricsShowPinyin),
-            value: settings.showPinyin,
-            onChanged: notifier.setShowPinyin,
-          ),
-          const LyricsSizeTile(),
-        ],
-      ),
-    );
-  }
-}
-
-/// Lyric size S–XXL, shared by the options sheet and appearance settings.
-class LyricsSizeTile extends ConsumerWidget {
-  const LyricsSizeTile({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context);
-    final size = ref.watch(settingsProvider.select((s) => s.lyricsSize));
-    return ListTile(
-      leading: const Icon(Icons.format_size),
-      title: Text(l10n.settingsLyricsSize),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: AppTokens.space8),
-        child: SegmentedButton<LyricsSize>(
-          showSelectedIcon: false,
-          segments: [
-            for (final value in LyricsSize.values)
-              ButtonSegment(
-                value: value,
-                label: Text(value.name.toUpperCase()),
-              ),
-          ],
-          selected: {size},
-          onSelectionChanged: (selection) => ref
-              .read(settingsProvider.notifier)
-              .setLyricsSize(selection.first),
         ),
       ),
     );

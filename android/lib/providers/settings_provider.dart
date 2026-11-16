@@ -63,6 +63,12 @@ class SettingsNotifier extends Notifier<AppSettings> {
   Future<void> setShowPinyin(bool value) =>
       _save(state.copyWith(showPinyin: value));
 
+  Future<void> setWordSweep(bool value) =>
+      _save(state.copyWith(wordSweep: value));
+
+  Future<void> setTapLatencyMs(int value) =>
+      _save(state.copyWith(tapLatencyMs: value.clamp(0, 200)));
+
   Future<void> setVerboseLogging(bool value) async {
     await _save(state.copyWith(verboseLogging: value));
     LogBuffer().verbose = value;

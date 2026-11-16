@@ -55,16 +55,20 @@ Tests added: Rust `kalao-audio` (stem sync by phase cancellation, seek frame acc
 
 **Exit:** an imported original + instrumental pair plays, switches without losing position, blends, survives backgrounding and headset controls; Chinese lyrics show pinyin; POC pinyin/bracket/section fixtures pass; search by pinyin works.
 
-## M2 Timed lyrics
+## M2 Timed lyrics — implemented (2026-11-17)
 
-| # | Task | Features | Source / § |
-| --- | --- | --- | --- |
-| M2.1 | Timed model: line start/end, word timing, `timed` flag, per-song offset; active line/word from the engine clock (Dart interpolation) | 2.6 | `lyrics_timeline.dart`, `synced_lyrics_scroll.dart` |
-| M2.2 | LRC and enhanced-LRC import/export; TTML import | 2.8 | `native_lyrics/{lrc,ttml}` |
-| M2.3 | Word sweep (and linear sweep fallback) | 2.13 | `player_lyrics_word_sweep.dart` |
-| M2.4 | Tap-to-time sync editor: line and word modes, slow tempo while timing, latency compensation, nudge, undo, save as new version, export | 2.9 | `lyrics_editor_sheet.dart`, `lyrics_draft.dart`, §4 |
-| M2.5 | Offset adjust control in the lyrics options sheet | 2.6 | `lyrics_options_button.dart` |
-| M2.6 | Timing accuracy integration test (click track + LRC, ±30 ms) | 2.6 | §17 |
+Status: ✅ built and tested locally (Rust: fmt, clippy, all workspace tests incl. the eLRC round trip, TTML import and the engine click-track timing test; Flutter analyze clean, 48 Dart tests); ⏳ the on-device exit check (`integration_test/lyrics_timing_test.dart`, and the editor used by hand on a real song) needs an emulator or device run.
+
+| # | Task | Features | Status | Source / § |
+| --- | --- | --- | --- | --- |
+| M2.1 | Timed model: line start/end, word timing (`LyricWord` with its range in the line text), voices (`v1`/`v2`, backing `bg`), line translation, `timed` flag, per-song offset; document JSON version 2; active line from the interpolated engine clock (`KaraokeDeck.position`, song time × tempo), swept characters per frame (`utils/lyrics_timeline.dart`) | 2.6 | ✅ (Mornye's `lyrics_timeline.dart`/`synced_lyrics_scroll.dart` are not copied: Kalao-sized versions, as in M1; a Rust `core::sync` mirror is added when a Rust consumer needs it, M7/M8) | `models/lyrics.dart`, `utils/lyrics_timeline.dart` |
+| M2.2 | `core::lyrics::doc`: LRC and enhanced LRC (word tags in both common styles, line ends, `v1:`/`v2:` voices, `[bg:…]` rows) import; TTML import through Mornye's Apple payload reader (word timing, duet sides, backing vocals, head translations); `exportLyrics(doc, format)` to LRC (line starts) and enhanced LRC (round-trips line and word timing, ends, sections, breaks, voices); `.ttml` in the import pickers and pairing | 2.8 | ✅ | §4 |
+| M2.3 | Sweep over the active line: word by word with word timing, linear over the line duration otherwise (capped at 10 s); `SweepText` clips a highlight layer to the sung characters and repaints without rebuilding; works under ruby (pinyin) too; setting "Karaoke sweep" | 2.13 | ✅ (Mornye's `player_lyrics_word_sweep.dart` is not copied) | `ruby_lyric_line.dart` |
+| M2.4 | Tap-to-time sync editor (`/player/sync`): line and word modes (words = one per CJK character, else per word), hold to stamp the end, 50/75/100% speed while timing (`playerSetTempo`), tap-latency setting (default 40 ms; output latency is already in the engine clock), nudge ±10/±50 ms, replay line, undo, save as a new `lyric_doc` version (`userEdited`, layers kept), export LRC/eLRC | 2.9 | ✅ (`playerSetTempo` is a resampler speed change, so the pitch drops with the speed; M3.1's Signalsmith Stretch keeps the pitch behind the same method) | `lyrics_sync_editor_controller.dart`, `lyrics_sync_screen.dart`, §4 |
+| M2.5 | Offset control in the lyrics options sheet (±5 s in 50 ms steps, reset), stored in the current lyric version; LRC `[offset:]` is read and written | 2.6 | ✅ | `lyrics_options_sheet.dart` |
+| M2.6 | Timing accuracy (±30 ms): engine test on rendered click tracks (through the resampler, at tempo 1 and 0.5); Dart test of the deck's interpolation against a simulated 30 Hz engine; on-device `integration_test/lyrics_timing_test.dart` (click track + LRC on the real engine) | 2.6 | ✅ tests written and the host ones pass; ⏳ the device test has not been run | §17 |
+
+Tests added: Rust `core::lyrics::doc` (eLRC styles, round trip, LRC export, TTML), `mobile` (`exportLyrics`), `kalao-audio` (tempo, click-track timing); Dart `lyrics_test` (model, sweep maths, word splitting, editor, timing model, import/offset/export, Now playing sweep and offset, sync editor flow).
 
 **Exit:** LRC import auto-follows within ±30 ms; the editor produces enhanced LRC that round-trips.
 

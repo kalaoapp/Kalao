@@ -25,6 +25,7 @@ pub const METHODS: &[&str] = &[
     "annotateLyrics",
     "clearLogs",
     "detectSections",
+    "exportLyrics",
     "getBackendInfo",
     "getLogs",
     "initBackend",
@@ -35,6 +36,7 @@ pub const METHODS: &[&str] = &[
     "playerPlay",
     "playerSeek",
     "playerSetStemGains",
+    "playerSetTempo",
     "playerSetVolume",
     "playerState",
     "playerStop",
@@ -82,6 +84,7 @@ fn dispatch(method: &str, args: &Value) -> Result<Value, BackendError> {
         }
         "annotateLyrics" => crate::lyrics::annotate(method, args),
         "detectSections" => crate::lyrics::detect_sections(method, args),
+        "exportLyrics" => crate::lyrics::export(method, args),
         "parseLyrics" => crate::lyrics::parse(method, args),
         "pairImportFiles" => crate::media::pair(method, args),
         "probeAudio" => crate::media::probe(method, args),

@@ -135,6 +135,10 @@ class PlatformBridge {
     'instrumental': ?instrumental,
   });
 
+  /// Playback speed 0.5–1.5 (1 = normal; the pitch follows until M3.1).
+  static Future<EnginePlayerState> playerSetTempo(double rate) =>
+      _player('playerSetTempo', {'rate': rate});
+
   /// `original` or `instrumental`, with a short crossfade.
   static Future<EnginePlayerState> playerSwitchTrack(String kind) =>
       _player('playerSwitchTrack', {'kind': kind});
@@ -161,11 +165,24 @@ class PlatformBridge {
     List<Map<String, Object?>> files,
   ) => _requiredList('pairImportFiles', {'files': files});
 
-  /// A lyric document from LRC or plain text ([format] `lrc`/`plain`/null).
+  /// A lyric document from LRC, enhanced LRC, TTML or plain text ([format]
+  /// `lrc`/`elrc`/`ttml`/`plain`, or null to detect).
   static Future<Map<String, dynamic>> parseLyrics(
     String raw, {
     String? format,
   }) => _requiredMap('parseLyrics', {'raw': raw, 'format': ?format});
+
+  /// [doc] (a lyric document as JSON) as `lrc` or `elrc` text.
+  static Future<String> exportLyrics(
+    Map<String, Object?> doc,
+    String format,
+  ) async =>
+      (await _requiredMap('exportLyrics', {
+            'doc': doc,
+            'format': format,
+          }))['text']
+          as String? ??
+      '';
 
   /// Layers `{lineIndex, kind, origin, segments}` for [lines].
   static Future<List<Map<String, dynamic>>> annotateLyrics(

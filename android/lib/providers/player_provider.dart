@@ -129,6 +129,7 @@ class PlayerController extends Notifier<NowPlaying>
     final lyrics = await _services.library.lyrics(song.id);
     state = NowPlaying(song: song, lyrics: lyrics, engine: state.engine);
     await _deck.load(songId: '${song.id}', sources: sources, start: start);
+    if (_deck.state.tempo != 1) await _deck.setTempo(1);
     final useBacking = instrumental ?? song.lastMode == PlayMode.karaoke.name;
     if (song.hasBacking) {
       await _deck.switchTrack(instrumental: useBacking);
@@ -243,6 +244,22 @@ class PlayerController extends Notifier<NowPlaying>
     final count = state.lyrics?.lines.length ?? 0;
     if (count == 0) return;
     state = state.copyWith(manualLine: index.clamp(0, count - 1));
+  }
+
+  /// Shifts timed lyrics against the audio (positive = lyrics earlier),
+  /// ±5 s; stored with the song's current lyric version.
+  Future<void> setLyricsOffset(int offsetMs) async {
+    final song = state.song;
+    final lyrics = state.lyrics;
+    if (song == null || lyrics == null) return;
+    final saved = await _services.lyrics.setOffset(song.id, offsetMs);
+    state = state.copyWith(lyrics: () => lyrics.copyWith(offsetMs: saved));
+  }
+
+  /// Playback speed (the sync editor slows the song while timing).
+  Future<void> setTempo(double rate) async {
+    if (state.song == null) return;
+    await _deck.setTempo(rate);
   }
 
   /// Reloads the current song's lyrics after an import or edit.

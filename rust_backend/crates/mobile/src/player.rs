@@ -65,6 +65,11 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, BackendError> {
         "playerSetStemGains" => {
             engine.set_stem_gains(level(args, "vocals"), level(args, "instrumental"))
         }
+        "playerSetTempo" => engine
+            .set_tempo(
+                level(args, "rate").ok_or_else(|| invalid(method, "missing number field rate"))?,
+            )
+            .map_err(operation)?,
         "playerSwitchTrack" => engine
             .switch_track(kind(method, str_arg(method, args, "kind")?)?)
             .map_err(operation)?,

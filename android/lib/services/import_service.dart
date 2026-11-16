@@ -1,9 +1,9 @@
 import 'dart:io';
 
-import 'package:kalao/models/lyrics.dart';
 import 'package:kalao/models/song.dart';
 import 'package:kalao/services/app_storage.dart';
 import 'package:kalao/services/library_database.dart';
+import 'package:kalao/services/lyrics_service.dart';
 import 'package:kalao/services/platform_bridge.dart';
 import 'package:kalao/utils/logger.dart';
 import 'package:path/path.dart' as p;
@@ -18,7 +18,7 @@ const audioExtensions = {
   'mp3', 'm4a', 'aac', 'flac', 'wav', 'ogg', 'oga', 'opus', 'alac', 'mp4', //
   'wma', 'ape', 'aiff', 'aif',
 };
-const lyricsExtensions = {'lrc', 'txt'};
+const lyricsExtensions = {'lrc', 'txt', 'ttml'};
 
 String _extension(String name) {
   final ext = p.extension(name);
@@ -81,6 +81,7 @@ class ImportService {
   final LibraryDatabase library;
   final AppStorage storage;
   final AudioConverter convert;
+  late final lyrics = LyricsService(library);
   var _requests = 0;
 
   String _requestId() =>
@@ -194,13 +195,13 @@ class ImportService {
     );
     final embedded = (probe['lyrics'] as String?)?.trim();
     if (proposal.lyrics case final lyrics?) {
-      await importLyrics(
+      await this.lyrics.importText(
         id,
         await File(lyrics.path).readAsString(),
         source: 'file',
       );
     } else if (embedded != null && embedded.isNotEmpty) {
-      await importLyrics(id, embedded, source: 'embedded');
+      await lyrics.importText(id, embedded, source: 'embedded');
     }
     return id;
   }
@@ -253,50 +254,6 @@ class ImportService {
     final stored = await storeMedia(file, MediaKind.instrumental);
     await library.setMedia(songId, stored.file);
     await discardStaging();
-  }
-
-  /// Parses [raw] (LRC or plain text), generates pinyin for Chinese lines
-  /// and saves a new lyric version.
-  Future<LyricDocument> importLyrics(
-    int songId,
-    String raw, {
-    String? format,
-    String source = 'paste',
-  }) async {
-    final doc = LyricDocument.fromJson(
-      await PlatformBridge.parseLyrics(raw, format: format),
-    );
-    if (doc.isEmpty) throw const ImportException('No lyric lines found');
-    final layers = <int, Map<LyricLayerKind, LyricLayer>>{};
-    if (doc.hasHan) {
-      final annotated = await PlatformBridge.annotateLyrics([
-        for (final line in doc.lines) line.text,
-      ]);
-      for (final entry in annotated) {
-        final kind = LyricLayerKind.values.asNameMap()[entry['kind']];
-        if (kind == null) continue;
-        (layers[(entry['lineIndex'] as num).toInt()] ??= {})[kind] = LyricLayer(
-          segments: [
-            for (final segment in entry['segments'] as List)
-              RubySegment.fromJson((segment as Map).cast<String, dynamic>()),
-          ],
-        );
-      }
-    }
-    final stored = LyricDocument(
-      lines: doc.lines,
-      timed: doc.timed,
-      offsetMs: doc.offsetMs,
-      format: doc.format,
-      sourceLang: doc.hasHan ? 'zh' : doc.sourceLang,
-    );
-    await library.saveLyrics(
-      songId,
-      stored,
-      sourceKind: source,
-      layers: layers,
-    );
-    return stored;
   }
 
   /// Rebuilds `song_search` rows (all songs when [ids] is null).

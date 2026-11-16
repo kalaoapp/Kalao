@@ -81,8 +81,11 @@ struct Shared {
     seeking: AtomicBool,
     completed: AtomicBool,
     buffering: AtomicBool,
-    /// Output frames rendered since position zero.
-    frames: AtomicU64,
+    /// Song position in thousandths of an output frame: each rendered frame
+    /// adds the tempo in permille, so it advances in song time.
+    position: AtomicU64,
+    /// Playback speed in permille (1000 = normal).
+    tempo: AtomicU32,
     output_rate: AtomicU32,
     latency_us: AtomicU64,
     vocal_target: AtomicU32,
@@ -172,7 +175,9 @@ impl Shared {
         mixer.mix(session.layout, &session.kinds, frames, &mut bus);
         write_channels(&bus, out, channels);
         mixer.bus = bus;
-        self.frames.fetch_add(frames as u64, Ordering::AcqRel);
+        let tempo = u64::from(self.tempo.load(Ordering::Acquire));
+        self.position
+            .fetch_add(frames as u64 * tempo, Ordering::AcqRel);
     }
 
     fn apply_mix_targets(&self, mixer: &mut Mixer) {
@@ -244,7 +249,8 @@ impl Engine {
             seeking: AtomicBool::new(false),
             completed: AtomicBool::new(false),
             buffering: AtomicBool::new(false),
-            frames: AtomicU64::new(0),
+            position: AtomicU64::new(0),
+            tempo: AtomicU32::new(1000),
             output_rate: AtomicU32::new(rate),
             latency_us: AtomicU64::new(0),
             vocal_target: AtomicU32::new(1.0f32.to_bits()),
@@ -308,7 +314,7 @@ impl Engine {
             }
             let probe = probe_file(path)?;
             duration_ms = duration_ms.max(probe.duration_ms);
-            let source = Source::open(*kind, path, rate, RING_FRAMES)?;
+            let source = Source::open(*kind, path, rate, RING_FRAMES, self.tempo())?;
             if start_ms > 0 {
                 source.seek(start_ms)?;
             }
@@ -326,8 +332,8 @@ impl Engine {
         };
         let previous = lock(&self.shared.session).replace(session);
         self.shared
-            .frames
-            .store(ms_to_frames(start_ms, rate), Ordering::Release);
+            .position
+            .store(ms_to_position(start_ms, rate), Ordering::Release);
         self.shared.completed.store(false, Ordering::Release);
         // Join the old decoder threads outside the lock.
         drop(previous);
@@ -355,7 +361,7 @@ impl Engine {
     pub fn stop(&self) {
         self.pause();
         let previous = lock(&self.shared.session).take();
-        self.shared.frames.store(0, Ordering::Release);
+        self.shared.position.store(0, Ordering::Release);
         self.shared.completed.store(false, Ordering::Release);
         drop(previous);
     }
@@ -376,8 +382,8 @@ impl Engine {
         }
         let rate = self.shared.output_rate.load(Ordering::Acquire);
         self.shared
-            .frames
-            .store(ms_to_frames(ms, rate), Ordering::Release);
+            .position
+            .store(ms_to_position(ms, rate), Ordering::Release);
         self.shared.completed.store(false, Ordering::Release);
         self.shared.seeking.store(false, Ordering::Release);
         result
@@ -416,14 +422,49 @@ impl Engine {
         Ok(())
     }
 
-    pub fn position_ms(&self) -> u64 {
+    fn tempo(&self) -> f32 {
+        self.shared.tempo.load(Ordering::Acquire) as f32 / 1000.0
+    }
+
+    /// Playback speed, 0.5–1.5 (1 = normal). The pitch follows the speed;
+    /// positions stay in song time. Buffered audio is dropped so the change
+    /// is heard at once.
+    pub fn set_tempo(&self, tempo: f32) -> Result<(), AudioError> {
+        if !tempo.is_finite() {
+            return Err(AudioError::Invalid("tempo must be a number".into()));
+        }
+        let permille = (tempo.clamp(source::MIN_TEMPO, source::MAX_TEMPO) * 1000.0).round() as u32;
+        if self.shared.tempo.swap(permille, Ordering::AcqRel) == permille {
+            return Ok(());
+        }
+        let loaded = {
+            let session = lock(&self.shared.session);
+            for source in session.iter().flat_map(|session| &session.sources) {
+                source.set_tempo(permille as f32 / 1000.0)?;
+            }
+            session.is_some()
+        };
+        if loaded {
+            self.seek(self.rendered_ms())?;
+        }
+        Ok(())
+    }
+
+    /// Song time of the frames handed to the output so far.
+    fn rendered_ms(&self) -> u64 {
         let rate = u64::from(self.shared.output_rate.load(Ordering::Acquire).max(1));
-        let frames = self.shared.frames.load(Ordering::Acquire);
-        let played_ms = frames * 1000 / rate;
+        self.shared.position.load(Ordering::Acquire) / rate
+    }
+
+    pub fn position_ms(&self) -> u64 {
+        let rendered_ms = self.rendered_ms();
         if self.shared.playing.load(Ordering::Acquire) {
-            played_ms.saturating_sub(self.shared.latency_us.load(Ordering::Acquire) / 1000)
+            // What is heard now left the engine one output latency ago.
+            let latency_us = self.shared.latency_us.load(Ordering::Acquire);
+            let tempo = u64::from(self.shared.tempo.load(Ordering::Acquire));
+            rendered_ms.saturating_sub(latency_us * tempo / 1_000_000)
         } else {
-            played_ms
+            rendered_ms
         }
     }
 
@@ -451,6 +492,7 @@ impl Engine {
             "buffering": self.shared.buffering.load(Ordering::Acquire),
             "vocalLevel": load_f32(&self.shared.vocal_target),
             "volume": load_f32(&self.shared.volume_target),
+            "tempo": self.tempo(),
             "outputLatencyMs": self.shared.latency_us.load(Ordering::Acquire) / 1000,
             "sampleRate": self.shared.output_rate.load(Ordering::Acquire),
             "error": errors.first(),
@@ -481,8 +523,8 @@ impl Engine {
     }
 }
 
-fn ms_to_frames(ms: u64, rate: u32) -> u64 {
-    ms * u64::from(rate) / 1000
+fn ms_to_position(ms: u64, rate: u32) -> u64 {
+    ms * u64::from(rate)
 }
 
 #[cfg(test)]

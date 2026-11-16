@@ -27,7 +27,7 @@ const AUDIO_EXTENSIONS: &[&str] = &[
     "mp3", "m4a", "aac", "flac", "wav", "ogg", "oga", "opus", "alac", "mp4", "wma", "ape", "aiff",
     "aif",
 ];
-const LYRICS_EXTENSIONS: &[&str] = &["lrc", "txt"];
+const LYRICS_EXTENSIONS: &[&str] = &["lrc", "txt", "ttml"];
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

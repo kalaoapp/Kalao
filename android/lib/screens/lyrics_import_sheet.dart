@@ -9,8 +9,8 @@ import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/player_provider.dart';
 import 'package:kalao/theme/app_tokens.dart';
 
-/// Lyrics import (M1.10): paste text or pick a `.txt`/`.lrc` file. Chinese
-/// lines get pinyin automatically.
+/// Lyrics import (M1.10, M2.2): paste text or pick a `.txt`, `.lrc` (plain or
+/// enhanced) or `.ttml` file. Chinese lines get pinyin automatically.
 Future<void> showLyricsImportSheet(
   BuildContext context,
   WidgetRef ref,
@@ -45,7 +45,7 @@ class _LyricsImportSheetState extends ConsumerState<LyricsImportSheet> {
   Future<void> _pickFile() async {
     final files = await FilePicker.pickFiles(
       type: FileType.custom,
-      allowedExtensions: const ['lrc', 'txt'],
+      allowedExtensions: const ['lrc', 'txt', 'ttml'],
     );
     if (files.isEmpty) return;
     final bytes = await files.first.readAsBytes();
@@ -65,8 +65,8 @@ class _LyricsImportSheetState extends ConsumerState<LyricsImportSheet> {
     try {
       await ref
           .read(libraryServicesProvider)
-          .importer
-          .importLyrics(widget.song.id, _text.text);
+          .lyrics
+          .importText(widget.song.id, _text.text);
       ref.read(libraryRevisionProvider.notifier).bump();
       final player = ref.read(playerProvider);
       if (player.song?.id == widget.song.id) {

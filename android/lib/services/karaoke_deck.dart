@@ -17,16 +17,23 @@ const _log = AppLogger('Deck');
 /// one engine, so this class is the deck and the player service talks to it
 /// directly.
 class KaraokeDeck {
-  KaraokeDeck({Stream<Object?>? events})
+  /// [now] is a monotonic clock (tests pass a simulated one).
+  KaraokeDeck({Stream<Object?>? events, Duration Function()? now})
     : _events =
           events ??
           const EventChannel(
             'com.brinsley.kalao/player_position_stream',
-          ).receiveBroadcastStream();
+          ).receiveBroadcastStream(),
+      _now = now ?? _stopwatchClock();
+
+  static Duration Function() _stopwatchClock() {
+    final stopwatch = Stopwatch()..start();
+    return () => stopwatch.elapsed;
+  }
 
   final Stream<Object?> _events;
+  final Duration Function() _now;
   final _states = StreamController<EnginePlayerState>.broadcast();
-  final _clock = Stopwatch()..start();
   StreamSubscription<Object?>? _subscription;
   EnginePlayerState _state = EnginePlayerState.idle;
   Duration _stateAt = Duration.zero;
@@ -34,11 +41,12 @@ class KaraokeDeck {
   Stream<EnginePlayerState> get states => _states.stream;
   EnginePlayerState get state => _state;
 
-  /// The engine position now: the last reported position plus the time since
-  /// it was reported while playing, capped at the duration.
+  /// The engine position now: the last reported position plus the song time
+  /// since it was reported while playing (wall time × tempo), capped at the
+  /// duration.
   Duration get position {
     if (!_state.playing) return _state.position;
-    final elapsed = _clock.elapsed - _stateAt;
+    final elapsed = (_now() - _stateAt) * _state.tempo;
     final estimate = _state.position + elapsed;
     final duration = _state.duration;
     return duration != null && estimate > duration ? duration : estimate;
@@ -57,7 +65,7 @@ class KaraokeDeck {
   }
 
   void _apply(EnginePlayerState next) {
-    _stateAt = _clock.elapsed;
+    _stateAt = _now();
     if (next == _state) return;
     _state = next;
     _states.add(next);
@@ -91,6 +99,10 @@ class KaraokeDeck {
 
   Future<EnginePlayerState> setVolume(double volume) =>
       _run(PlatformBridge.playerSetVolume(volume));
+
+  /// Playback speed 0.5–1.5 (the sync editor slows down while timing).
+  Future<EnginePlayerState> setTempo(double rate) =>
+      _run(PlatformBridge.playerSetTempo(rate));
 
   /// Vocal-guide blend: 1 = full vocals, 0 = instrumental only.
   Future<EnginePlayerState> setVocalLevel(double level) =>

@@ -268,7 +268,7 @@ void main() {
     test('lyrics import rejects empty documents', () async {
       final id = await services.library.insertSong(song('Empty'));
       await expectLater(
-        services.importer.importLyrics(id, '\n\n'),
+        services.lyrics.importText(id, '\n\n'),
         throwsA(anything),
       );
     });

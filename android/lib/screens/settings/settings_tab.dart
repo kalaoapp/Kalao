@@ -9,7 +9,7 @@ import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/l10n/supported_locales.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
-import 'package:kalao/screens/now_playing_screen.dart';
+import 'package:kalao/screens/lyrics_options_sheet.dart';
 import 'package:kalao/services/custom_font_service.dart';
 import 'package:kalao/services/platform_bridge.dart';
 import 'package:kalao/theme/app_tokens.dart';

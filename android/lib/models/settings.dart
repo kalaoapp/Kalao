@@ -30,6 +30,8 @@ class AppSettings {
     this.lyricsSize = LyricsSize.m,
     this.customFontPath,
     this.showPinyin = true,
+    this.wordSweep = true,
+    this.tapLatencyMs = 40,
   });
 
   factory AppSettings.fromJson(Map<String, dynamic> json) => AppSettings(
@@ -43,6 +45,8 @@ class AppSettings {
         LyricsSize.values.asNameMap()[json['lyricsSize']] ?? LyricsSize.m,
     customFontPath: json['customFontPath'] as String?,
     showPinyin: json['showPinyin'] as bool? ?? true,
+    wordSweep: json['wordSweep'] as bool? ?? true,
+    tapLatencyMs: (json['tapLatencyMs'] as num?)?.toInt() ?? 40,
   );
 
   /// The user finished the first-run setup.
@@ -66,6 +70,14 @@ class AppSettings {
   /// Show the pinyin layer above Chinese lyrics.
   final bool showPinyin;
 
+  /// Sweep the active line of timed lyrics (word by word when the lyrics
+  /// have word timing, linearly otherwise).
+  final bool wordSweep;
+
+  /// How long a tap takes to register, subtracted from taps in the sync
+  /// editor (0–200 ms).
+  final int tapLatencyMs;
+
   Map<String, dynamic> toJson() => {
     'setupCompleted': setupCompleted,
     'themeMode': themeMode.name,
@@ -75,6 +87,8 @@ class AppSettings {
     'lyricsSize': lyricsSize.name,
     'customFontPath': customFontPath,
     'showPinyin': showPinyin,
+    'wordSweep': wordSweep,
+    'tapLatencyMs': tapLatencyMs,
   };
 
   AppSettings copyWith({
@@ -86,6 +100,8 @@ class AppSettings {
     LyricsSize? lyricsSize,
     String? Function()? customFontPath,
     bool? showPinyin,
+    bool? wordSweep,
+    int? tapLatencyMs,
   }) => AppSettings(
     setupCompleted: setupCompleted ?? this.setupCompleted,
     themeMode: themeMode ?? this.themeMode,
@@ -97,6 +113,8 @@ class AppSettings {
         ? customFontPath()
         : this.customFontPath,
     showPinyin: showPinyin ?? this.showPinyin,
+    wordSweep: wordSweep ?? this.wordSweep,
+    tapLatencyMs: tapLatencyMs ?? this.tapLatencyMs,
   );
 
   @override
@@ -109,7 +127,9 @@ class AppSettings {
       other.dynamicColor == dynamicColor &&
       other.lyricsSize == lyricsSize &&
       other.customFontPath == customFontPath &&
-      other.showPinyin == showPinyin;
+      other.showPinyin == showPinyin &&
+      other.wordSweep == wordSweep &&
+      other.tapLatencyMs == tapLatencyMs;
 
   @override
   int get hashCode => Object.hash(
@@ -121,5 +141,7 @@ class AppSettings {
     lyricsSize,
     customFontPath,
     showPinyin,
+    wordSweep,
+    tapLatencyMs,
   );
 }

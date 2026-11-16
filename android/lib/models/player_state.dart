@@ -14,6 +14,7 @@ class EnginePlayerState {
     this.buffering = false,
     this.vocalLevel = 1,
     this.volume = 1,
+    this.tempo = 1,
     this.error,
   });
 
@@ -32,6 +33,7 @@ class EnginePlayerState {
         buffering: json['buffering'] as bool? ?? false,
         vocalLevel: (json['vocalLevel'] as num?)?.toDouble() ?? 1,
         volume: (json['volume'] as num?)?.toDouble() ?? 1,
+        tempo: (json['tempo'] as num?)?.toDouble() ?? 1,
         error: json['error'] as String?,
       );
 
@@ -51,6 +53,9 @@ class EnginePlayerState {
   /// 1 = original vocals, 0 = instrumental only.
   final double vocalLevel;
   final double volume;
+
+  /// Playback speed (1 = normal); positions are always song time.
+  final double tempo;
   final String? error;
 
   Duration get position => Duration(milliseconds: positionMs);
@@ -69,6 +74,7 @@ class EnginePlayerState {
       other.buffering == buffering &&
       other.vocalLevel == vocalLevel &&
       other.volume == volume &&
+      other.tempo == tempo &&
       other.layout == layout &&
       other.durationMs == durationMs &&
       other.error == error;
@@ -82,6 +88,7 @@ class EnginePlayerState {
     buffering,
     vocalLevel,
     volume,
+    tempo,
     layout,
     durationMs,
     error,

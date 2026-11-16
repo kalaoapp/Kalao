@@ -1,7 +1,8 @@
-//! Lyrics methods: `parseLyrics` (LRC or plain text → lyric document),
+//! Lyrics methods: `parseLyrics` (LRC, enhanced LRC, TTML or plain text →
+//! lyric document), `exportLyrics` (document → LRC or enhanced LRC),
 //! `detectSections` and `annotateLyrics` (reading layers).
 
-use crate::backend::{BackendError, invalid, str_arg};
+use crate::backend::{BackendError, invalid, operation, str_arg};
 use kalao_core::{annotate, lyrics::doc, sections};
 use serde_json::{Value, json};
 
@@ -23,11 +24,24 @@ pub fn parse(method: &str, args: &Value) -> Result<Value, BackendError> {
         .ok_or_else(|| invalid(method, "missing string field raw"))?;
     let format = args["format"].as_str();
     if let Some(format) = format
-        && !matches!(format, "lrc" | "plain")
+        && !matches!(format, "lrc" | "elrc" | "ttml" | "plain")
     {
         return Err(invalid(method, format!("unknown format {format}")));
     }
-    serde_json::to_value(doc::parse(raw, format)).map_err(crate::backend::operation)
+    let doc = doc::parse(raw, format).map_err(operation)?;
+    serde_json::to_value(doc).map_err(operation)
+}
+
+/// `{doc, format}` -> `{text}`: the document as LRC or enhanced LRC.
+pub fn export(method: &str, args: &Value) -> Result<Value, BackendError> {
+    let doc: doc::LyricDoc = serde_json::from_value(args["doc"].clone())
+        .map_err(|error| invalid(method, format!("invalid doc: {error}")))?;
+    let format = str_arg(method, args, "format")?;
+    if !matches!(format, "lrc" | "elrc") {
+        return Err(invalid(method, format!("unknown format {format}")));
+    }
+    let text = doc::export(&doc, format).map_err(operation)?;
+    Ok(json!({ "text": text }))
 }
 
 pub fn detect_sections(method: &str, args: &Value) -> Result<Value, BackendError> {
@@ -99,5 +113,25 @@ mod tests {
             .is_err()
         );
         assert!(parse("parseLyrics", &json!({"raw": "x", "format": "ttml"})).is_err());
+        assert!(parse("parseLyrics", &json!({"raw": "x", "format": "docx"})).is_err());
+    }
+
+    #[test]
+    fn export_round_trips_the_parsed_document() {
+        let raw = "[00:01.00]<00:01.00>你<00:01.50>好<00:02.00>
+";
+        let doc = parse("parseLyrics", &json!({ "raw": raw })).unwrap();
+        assert_eq!(doc["format"], "elrc");
+        assert_eq!(doc["lines"][0]["words"][1]["timeMs"], 1500);
+        let text = export("exportLyrics", &json!({"doc": doc, "format": "elrc"})).unwrap();
+        assert_eq!(text["text"], raw);
+        let lrc = export("exportLyrics", &json!({"doc": doc, "format": "lrc"})).unwrap();
+        assert_eq!(
+            lrc["text"],
+            "[00:01.00]你好
+"
+        );
+        assert!(export("exportLyrics", &json!({"doc": doc, "format": "ttml"})).is_err());
+        assert!(export("exportLyrics", &json!({"doc": 3, "format": "lrc"})).is_err());
     }
 }

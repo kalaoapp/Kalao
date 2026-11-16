@@ -267,3 +267,96 @@ fn probe_reports_wav_details() {
     assert!(probe.decodable);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// The frame of the first sample louder than 0.5 at or after `from`.
+fn click_frame(out: &[f32], from: usize) -> Option<usize> {
+    out.as_chunks::<2>()
+        .0
+        .iter()
+        .skip(from)
+        .position(|frame| frame[0].abs() > 0.5)
+        .map(|index| index + from)
+}
+
+/// M2.6: the position the engine reports is the song time of the audio it
+/// renders, so a lyric line timed at a click lights up within ±30 ms of the
+/// click, through the resampler and at a slowed tempo.
+#[test]
+fn reported_position_tracks_rendered_clicks_within_30_ms() {
+    let dir = temp_dir("clicks");
+    let path = dir.join("clicks.wav");
+    let source_rate = 44_100u32;
+    // A 5 ms click every 500 ms of song time.
+    let clicks_ms: Vec<u64> = (1..=5).map(|index| index * 500).collect();
+    write_wav(&path, source_rate, source_rate * 3, |frame| {
+        let ms = frame as u64 * 1000 / u64::from(source_rate);
+        if ms % 500 < 5 && ms >= 500 { 0.9 } else { 0.0 }
+    });
+    for tempo in [1.0f32, 0.5] {
+        let engine = Engine::new(Output::Manual { sample_rate: RATE });
+        engine
+            .load("clicks", &[(SourceKind::Original, path.clone())], 0)
+            .unwrap();
+        engine.set_tempo(tempo).unwrap();
+        assert_eq!(engine.state()["tempo"], f64::from(tempo));
+        engine.play().unwrap();
+        // Render in callback-sized blocks, noting the position after each.
+        let block = 480;
+        let mut out = Vec::new();
+        let mut positions = Vec::new();
+        while engine.position_ms() < 2700 {
+            assert_eq!(engine.state()["completed"], false, "song ended early");
+            out.extend(render(&engine, block));
+            positions.push(engine.position_ms());
+        }
+        let mut from = 0;
+        for click_ms in &clicks_ms {
+            let frame = click_frame(&out, from).expect("click rendered");
+            from = frame + block * 4;
+            // Song time when that frame was rendered, by the engine clock.
+            let index = frame / block;
+            let start = if index == 0 { 0 } else { positions[index - 1] };
+            let heard = start + (positions[index] - start) * (frame % block) as u64 / block as u64;
+            let error = heard as i64 - *click_ms as i64;
+            assert!(
+                error.abs() <= 30,
+                "click at {click_ms} ms rendered at {heard} ms (tempo {tempo})"
+            );
+        }
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn tempo_slows_song_time_and_keeps_the_position() {
+    let dir = temp_dir("tempo");
+    let path = dir.join("ramp.wav");
+    let frames = RATE as usize * 2;
+    write_wav(&path, RATE, frames as u32, |f| {
+        f as f32 / frames as f32 * 0.7
+    });
+    let engine = Engine::new(Output::Manual { sample_rate: RATE });
+    engine
+        .load("song", &[(SourceKind::Original, path)], 0)
+        .unwrap();
+    engine.play().unwrap();
+    render(&engine, RATE as usize / 2);
+    assert_eq!(engine.position_ms(), 500);
+    // Half speed: one second of output is half a second of song.
+    engine.set_tempo(0.5).unwrap();
+    assert_eq!(engine.position_ms(), 500);
+    let out = render(&engine, RATE as usize);
+    assert_eq!(engine.position_ms(), 1000);
+    let expected = 0.7 * 0.5;
+    let last = out[out.len() - 2];
+    assert!((last - expected).abs() < 0.01, "{last} vs {expected}");
+    // Out-of-range values are clamped; back to normal passes frames through.
+    engine.set_tempo(9.0).unwrap();
+    assert_eq!(engine.state()["tempo"], 1.5);
+    engine.set_tempo(1.0).unwrap();
+    engine.seek(1000).unwrap();
+    let out = render(&engine, 16);
+    assert!((out[0] - expected).abs() < 1e-3);
+    assert!(engine.set_tempo(f32::NAN).is_err());
+    let _ = std::fs::remove_dir_all(dir);
+}

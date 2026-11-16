@@ -93,14 +93,14 @@
   "libraryShowGrid": "Show as grid",
   "libraryShowList": "Show as list",
   "librarySort": "Sort",
-  "lyricsChooseFile": "Choose .lrc or .txt",
+  "lyricsChooseFile": "Choose .lrc, .ttml or .txt",
   "lyricsEmptyError": "Paste lyrics or choose a file first",
   "lyricsImport": "Add lyrics",
-  "lyricsImportHint": "Paste plain lyrics or LRC. Section labels like [Chorus] or 【副歌】 are recognised; Chinese gets pinyin automatically.",
+  "lyricsImportHint": "Paste plain lyrics, LRC or enhanced LRC, or choose a file (.lrc, .ttml, .txt). Section labels like [Chorus] or 【副歌】 are recognised; Chinese gets pinyin automatically.",
   "lyricsImportTitle": "Lyrics",
   "lyricsNextLine": "Next line",
   "lyricsNone": "No lyrics yet",
-  "lyricsNoneBody": "Add lyrics by pasting text or choosing an .lrc or .txt file.",
+  "lyricsNoneBody": "Add lyrics by pasting text or choosing an .lrc, .ttml or .txt file.",
   "lyricsOptions": "Lyrics options",
   "lyricsPasteLabel": "Lyrics",
   "lyricsPreviousLine": "Previous line",
@@ -144,5 +144,48 @@
   "songTitle": "Title",
   "sortArtist": "Artist",
   "sortRecentlyAdded": "Recently added",
-  "sortTitle": "Title"
+  "sortTitle": "Title",
+  "lyricsSweep": "Karaoke sweep",
+  "lyricsSweepSubtitle": "Colour the current line as it is sung (timed lyrics)",
+  "lyricsOffset": "Lyrics timing",
+  "lyricsOffsetEarlier": "Show lyrics earlier",
+  "lyricsOffsetLater": "Show lyrics later",
+  "lyricsOffsetReset": "Reset lyrics timing",
+  "lyricsSync": "Sync lyrics",
+  "lyricsSyncSubtitle": "Tap along with the song to time each line or word",
+  "lyricsExportLrc": "Export LRC",
+  "lyricsExportElrc": "Export enhanced LRC (word timing)",
+  "lyricsExported": "Lyrics exported",
+  "lyricsExportFailed": "Could not export the lyrics",
+  "syncTitle": "Sync lyrics",
+  "syncModeLine": "Lines",
+  "syncModeWord": "Words",
+  "syncTap": "Tap when the line starts",
+  "syncTapWord": "Tap when the word starts",
+  "syncTapHint": "Hold until it ends to mark the end too",
+  "syncDone": "Every line is timed",
+  "syncLinesLeft": "{count} lines left",
+  "@syncLinesLeft": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncTempo": "Speed",
+  "syncTapLatency": "Tap delay",
+  "syncTapLatencyLess": "Less tap delay",
+  "syncTapLatencyMore": "More tap delay",
+  "syncNudge": "Move by {ms} ms",
+  "@syncNudge": {
+    "placeholders": {
+      "ms": {
+        "type": "int"
+      }
+    }
+  },
+  "syncReplay": "Replay line",
+  "syncUndo": "Undo",
+  "syncExport": "Export",
+  "syncSaved": "Timing saved as a new version"
 }

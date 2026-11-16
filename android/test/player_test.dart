@@ -143,10 +143,7 @@ void main() {
   ) async {
     final song = (await tester.runAsync(() async {
       final song = await addSong();
-      await services.importer.importLyrics(
-        song.id,
-        '[Verse]\n月亮\n你好\nlast line',
-      );
+      await services.lyrics.importText(song.id, '[Verse]\n月亮\n你好\nlast line');
       return song;
     }))!;
     final preferences = await SharedPreferences.getInstance();
