@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -7,9 +8,11 @@ import 'package:intl/intl.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/models/settings.dart';
 import 'package:kalao/providers/backup_provider.dart';
+import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
 import 'package:kalao/services/backup_service.dart';
 import 'package:kalao/services/platform_bridge.dart';
+import 'package:kalao/services/poc_import_service.dart';
 import 'package:kalao/theme/app_tokens.dart';
 import 'package:kalao/widgets/settings_group.dart';
 import 'package:kalao/widgets/stepper_tile.dart';
@@ -63,6 +66,56 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
     await FilePicker.clearTemporaryFiles();
   }
 
+  /// M4.7: lyrics, favorites and plays from the old web POC's export.
+  Future<void> _importPoc() async {
+    final l10n = AppLocalizations.of(context);
+    final picked = await FilePicker.pickFiles(dialogTitle: l10n.pocImport);
+    if (picked.isEmpty || !mounted) return;
+    try {
+      final text = utf8.decode(
+        await picked.first.readAsBytes(),
+        allowMalformed: true,
+      );
+      final services = ref.read(libraryServicesProvider);
+      final result = await PocImportService(services).importJson(text);
+      ref.read(libraryRevisionProvider.notifier).bump();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(l10n.pocImportDone),
+          content: SingleChildScrollView(
+            child: Text(
+              [
+                l10n.pocImportSummary(
+                  result.matched,
+                  result.lyrics,
+                  result.favorites,
+                  result.plays,
+                ),
+                if (result.unmatched.isNotEmpty) ...[
+                  '',
+                  l10n.pocImportUnmatched(result.unmatched.length),
+                  ...result.unmatched,
+                ],
+              ].join('\n'),
+            ),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(l10n.actionOk),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      _show(l10n.restoreFailed('$error'));
+    } finally {
+      await FilePicker.clearTemporaryFiles();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -112,6 +165,13 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
                 subtitle: Text(l10n.restoreSubtitle),
                 enabled: !busy,
                 onTap: _restore,
+              ),
+              ListTile(
+                leading: const Icon(Icons.move_down),
+                title: Text(l10n.pocImport),
+                subtitle: Text(l10n.pocImportSubtitle),
+                enabled: !busy,
+                onTap: _importPoc,
               ),
             ],
           ),

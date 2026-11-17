@@ -467,5 +467,34 @@
         "type": "String"
       }
     }
+  },
+  "actionOk": "OK",
+  "pocImport": "Import from the Kalao web app…",
+  "pocImportSubtitle": "A kalao-poc.json export. Import your audio first: its lyrics, favorites and plays attach to songs with the same title and artist.",
+  "pocImportDone": "Import finished",
+  "pocImportSummary": "{songs} songs matched: {lyrics} with lyrics, {favorites} favorites, {plays} plays added.",
+  "@pocImportSummary": {
+    "placeholders": {
+      "songs": {
+        "type": "int"
+      },
+      "lyrics": {
+        "type": "int"
+      },
+      "favorites": {
+        "type": "int"
+      },
+      "plays": {
+        "type": "int"
+      }
+    }
+  },
+  "pocImportUnmatched": "{count, plural, =1{1 song is not in your library:} other{{count} songs are not in your library:}}",
+  "@pocImportUnmatched": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

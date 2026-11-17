@@ -27,19 +27,17 @@ Pin policy (from Mornye): exact versions (`=x.y.z` in Cargo, no caret for packag
 | `path_provider`, `path` | `^2.1.6`, `^1.9.1` | Paths | Mornye |
 | `ffi` | `^2.2.0` | Desktop backend later | Mornye |
 | `sqflite` (+ `sqflite_common_ffi` for tests now, desktop later) | `^2.4.5` | Library, history, app-state databases | Mornye |
-| `http` | `^1.6.0` | Update checker | Mornye |
+| `http` | `^1.6.0` | Update checker (added M4) | Mornye |
 | `connectivity_plus` | `^7.3.1` | Offline detection (stems remote, translation) | Mornye |
-| `crypto` | `^3.0.8` | SHA-256 (cache keys, update checksums) | Mornye |
-| `archive` | `^4.5.2` | Backup bundle reading | Mornye |
+| `crypto` | `^3.0.8` | SHA-256 for cache keys (translation, M6). Update checksums use the Rust `hash_file` job instead | Mornye |
 | `bonsoir` | `^7.1.5` | mDNS discovery of parties | Mornye |
 | `cached_network_image`, `flutter_cache_manager` | `^4.0.6`, `^3.4.6` | Artwork | Mornye |
 | `material_symbols_icons`, `dynamic_color`, `material_ui`, `material_3_expressive`, `material_color_utilities` | `^4.2960.0`, `^2.1.0`, `^1.9.0`, `^1.2.0`, `0.13.0` | Theme | Mornye |
 | `permission_handler` | `^13.0.1` | Mic, camera, notifications | Mornye |
 | `file_picker` | `^13.3.0` | Import audio, lyrics, backups | Mornye |
 | `json_annotation` / `json_serializable` + `build_runner` | `^4.12.0` / `^6.15.2`, `^2.17.1` | Models | Mornye |
-| `url_launcher` | `^6.3.3` | Ko-fi, release page, extension logins | Mornye |
-| `device_info_plus` | `^13.3.0` | Update ABI selection, diagnostics | Mornye |
-| `share_plus`, `receive_sharing_intent` | `^13.3.1`, `^1.9.0` | Share backups/logs; open shared files | Mornye |
+| `url_launcher` | `^6.3.3` | Ko-fi, release page, GitHub issues, extension logins (added M4) | Mornye |
+| `share_plus` | `^13.3.1` | Share logs (added M4), recordings | Mornye |
 | `logger` | `^2.7.0` | `AppLogger` | Mornye |
 | `synchronized` | `^3.5.0` | Locks around DB writes | Mornye |
 | `flutter_local_notifications` | `^22.3.3` | Update and job notifications | Mornye |
@@ -68,10 +66,12 @@ Not taken from Mornye: `audioplayers` and its forks, `media_kit*`, `liquid_glass
 
 No `play-services-*` artifacts.
 
+Not used (M4): `archive` (backups are read and written by `kalao-mobile::native_backup` in Rust), `device_info_plus` (the update checker asks Kotlin for `Build.SUPPORTED_ABIS`), `receive_sharing_intent` (it handles only SEND, not opening a file; `SharedFiles.kt` handles VIEW, SEND and SEND_MULTIPLE in a few lines), `androidx.documentfile` (`DocumentsContract` covers the backup folder).
+
 ## 4. Rust (`rust_backend/Cargo.toml` `[workspace.dependencies]`)
 
 ### Shared with Mornye (exact pins as in Mornye)
-`serde 1.0` (derive), `serde_json 1.0` (float_roundtrip, raw_value), `thiserror 2.0`, `uniffi =0.32.2`, `tokio =1.54.1` (rt-multi-thread, net, time, sync, io-util, macros), `tokio-util 0.7`, `futures-util 0.3`, `bytes 1.11`, `http 1.4`, `http-body-util 0.1`, `hyper-util =0.1.21`, `hyper-rustls =0.27.10` (ring, tls12), `rustls 0.23` (ring), `rustls-native-certs =0.8.5`, `rustls-pemfile 2.2`, `async-compression 0.4`, `tower-service 0.3`, `hickory-proto =0.26.3`, `cookie 0.18`, `url 2.5`, `regex =1.13.1`, `scraper =0.29.0` + `html5ever =0.40.1` (extension `html.parse`), `rquickjs =0.14.0`, `base64 0.23`, `sha2 0.11`, `sha1 0.11`, `md-5 0.11`, `hmac 0.13`, `aes-gcm =0.11.1`, `aes =0.9.3`, `zeroize 1.8`, `getrandom 0.4`, `tempfile 3.27`, `zip =9.1.3` (deflate-flate2-zlib-rs), `unicode-normalization =0.1.22`, `unicode-general-category =0.6.0`, `time =0.3.55`, `chrono =0.4.45`, `httpdate =1.0.3`, `cap-std =4.0.3`, `rustix =1.1.6` (patched), `roxmltree =0.21.2` (TTML), `rusqlite =0.41.1` (bundled, modern_sqlite, hooks), `libc =0.2.191`, `image =0.25.10` (cover thumbnails). For `kalao-party` (from Mornye `link`): Mornye's pinned `mdns-sd`, `tokio-tungstenite`, `rcgen` (self-signed TLS), `axum`/`hyper` server stack as used by `link`.
+`serde 1.0` (derive), `serde_json 1.0` (float_roundtrip, raw_value), `thiserror 2.0`, `uniffi =0.32.2`, `tokio =1.54.1` (rt-multi-thread, net, time, sync, io-util, macros), `tokio-util 0.7`, `futures-util 0.3`, `bytes 1.11`, `http 1.4`, `http-body-util 0.1`, `hyper-util =0.1.21`, `hyper-rustls =0.27.10` (ring, tls12), `rustls 0.23` (ring), `rustls-native-certs =0.8.5`, `rustls-pemfile 2.2`, `async-compression 0.4`, `tower-service 0.3`, `hickory-proto =0.26.3`, `cookie 0.18`, `url 2.5`, `regex =1.13.1`, `scraper =0.29.0` + `html5ever =0.40.1` (extension `html.parse`), `rquickjs =0.14.0`, `base64 0.23`, `sha2 0.11`, `sha1 0.11`, `md-5 0.11`, `hmac 0.13`, `aes-gcm =0.11.1`, `aes =0.9.3`, `zeroize 1.8`, `getrandom 0.4`, `tempfile 3.27`, `zip =9.1.3` (deflate-flate2-zlib-rs; `.kalaobackup` archives since M4), `unicode-normalization =0.1.22`, `unicode-general-category =0.6.0`, `time =0.3.55`, `chrono =0.4.45`, `httpdate =1.0.3`, `cap-std =4.0.3`, `rustix =1.1.6` (patched), `roxmltree =0.21.2` (TTML), `rusqlite =0.41.1` (bundled, modern_sqlite, hooks), `libc =0.2.191`, `image =0.25.10` (cover thumbnails). For `kalao-party` (from Mornye `link`): Mornye's pinned `mdns-sd`, `tokio-tungstenite`, `rcgen` (self-signed TLS), `axum`/`hyper` server stack as used by `link`.
 
 ### New in Kalao
 | Crate | Major | Crate user | Use |

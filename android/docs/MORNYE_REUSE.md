@@ -64,7 +64,7 @@ Kalao is built on Mornye's code wherever Mornye already solves the problem. This
 - **Stats:** `services/listening_statistics.dart`, `providers/listening_statistics_provider.dart`, `screens/listening_statistics_screen.dart`.
 - **Backup:** `services/backup_service.dart`, `collection_restore_codec.dart`, `screens/settings/backup_restore_page.dart`.
 - **Updates and about:** `services/{update_checker,apk_downloader,update_progress_notifications}.dart`, `widgets/update_dialog.dart`, `screens/settings/{about_page,donate_page}.dart` (donate page reduced to the single Ko-fi link), `widgets/donate_icons.dart` (Ko-fi icon only), `assets/licenses/`.
-- **Share intents and file open:** `services/share_intent_service.dart` (open `.kalaoext`, `.kalaobackup`, `.lrc`, audio), `receive_sharing_intent`.
+- **Share intents and file open:** `services/share_intent_service.dart` (open `.kalaoext`, `.kalaobackup`, `.lrc`, audio), `receive_sharing_intent`. As built (M4.12): not copied; `SharedFiles.kt` collects VIEW/SEND URIs and `screens/shared_files.dart` routes them (`.kalaoext` joins in M5).
 
 ### Adapted
 - `services/lyrics_translation.dart`: swap `LyricsAiClient` for a `MyMemoryClient` call through `PlatformBridge.translateLyrics`; keep distinct-line batching, hashing, caching, alignment.

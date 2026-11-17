@@ -31,7 +31,7 @@ class LyricsService {
       await PlatformBridge.parseLyrics(raw, format: format),
     );
     if (doc.isEmpty) throw const LyricsException('No lyric lines found');
-    return save(songId, await _annotated(doc), source: source);
+    return save(songId, await annotate(doc), source: source);
   }
 
   /// Saves [doc] as a new version. Layers already on its lines are kept
@@ -53,9 +53,9 @@ class LyricsService {
     return doc;
   }
 
-  /// Reading layers by language: kana means Japanese (furigana and romaji),
-  /// otherwise Han characters get pinyin.
-  Future<LyricDocument> _annotated(LyricDocument doc) async {
+  /// [doc] with generated reading layers by language: kana means Japanese
+  /// (furigana and romaji), otherwise Han characters get pinyin.
+  Future<LyricDocument> annotate(LyricDocument doc) async {
     final japanese = doc.hasKana;
     if (!japanese && !doc.hasHan) return doc;
     final lines = [...doc.lines];

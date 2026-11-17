@@ -78,7 +78,7 @@ Annotation layers per line:
 
 ## 3. Backup file (`.kalaobackup`)
 
-A ZIP written and read by `kalao-mobile::native_backup::archive` in a native data job, with categories and layout decided by Dart `backup_service.dart` (Mornye's split):
+A ZIP written and read by `kalao-mobile::native_backup` in the `backupWrite` / `backupInspect` data jobs, with categories and layout decided by Dart `backup_service.dart` (Mornye's split):
 
 ```
 kalao-2026-11-15.kalaobackup
@@ -87,8 +87,9 @@ kalao-2026-11-15.kalaobackup
 ├── history.db
 ├── app_state.db
 ├── settings.json        # AppSettings minus secrets and device-specific values (latency, folder URIs)
-├── extensions.json      # ids, versions, enabled, priority, repositories
-├── extensions/*.kalaoext
+├── covers/              # cover art, by file name
+├── extensions.json      # (M5) ids, versions, enabled, priority, repositories
+├── extensions/*.kalaoext # (M5)
 ├── media/               # optional: imported audio, by sha256
 └── stems/               # optional: stems, by sha256
 ```

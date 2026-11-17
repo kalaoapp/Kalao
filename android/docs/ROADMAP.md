@@ -92,22 +92,26 @@ Tests added: Rust `kalao-audio` (tempo keeps pitch, key keeps speed, loop wraps,
 
 **Exit:** Learn and OG Karaoke modes usable end to end in zh/ja/en songs; v0.1.0 APKs on GitHub Releases with checksums.
 
-## M4 Library, backup, about
+## M4 Library, backup, about — implemented (2026-11-18)
 
-| # | Task | Features | Source / § |
-| --- | --- | --- | --- |
-| M4.1 | Favorites (loved songs) | 6.3 | loved-tracks pattern |
-| M4.2 | History rows (`play`) with mode, score, singer; stats screen | 6.7 | `listening_statistics*.dart`, `history_*` |
-| M4.3 | Backup export: categories, optional media, SAF target, archive in `native_backup::archive` data job | 7.1, 7.2 | `backup_service.dart`, `native_backup/archive` |
-| M4.4 | Restore: inspect + preview, merge and replace modes, safety backup, database republish | 7.3 | `backup_restore_page.dart`, `LibraryNativeAdapter` |
-| M4.5 | Scheduled backup (due-check on start/resume, keep last N, `backup_run` log) | 7.4 | `periodic_async_task.dart` |
-| M4.6 | Secrets excluded from backups; restored extensions prompt for secrets | 7.5 | `secure_storage_options.dart` |
-| M4.7 | POC import: export script (private POC repo) + `pocImport` data job | 7.6 | §12 |
-| M4.8 | Diagnostics: log export/share, local crash banner with GitHub issue link | 9.5 | `log_screen.dart`, `app_crash_banner.dart` |
-| M4.9 | About: version, privacy statement, open-source licences (incl. Mornye) | 9.6 | `about_page.dart`, `assets/licenses` |
-| M4.10 | Support Kalao row → `https://ko-fi.com/brinsley` (donate page reduced to one link) | 9.7 | `donate_page.dart` |
-| M4.11 | Update check + user-started APK download, SHA-256 verify, installer hand-off | 9.8 | `update_checker.dart`, `apk_downloader.dart`, `update_dialog.dart` |
-| M4.12 | Share-intent handling for `.kalaobackup`, `.lrc`, audio files | 7.3, 1.7 | `share_intent_service.dart` |
+Status: ✅ built and tested locally (Rust: fmt, clippy, all workspace tests incl. the backup archive round trip and the unsafe-archive checks; Flutter analyze clean, 82 Dart tests; Kotlin `compileDebugKotlin` + `testDebugUnitTest`); ⏳ the on-device exit checks (a backup made on one device restored on another in both modes, a scheduled backup into a real SAF folder, the update flow installing a newer test release, opening files from a file manager) need devices and a published release.
+
+| # | Task | Features | Status | Source / § |
+| --- | --- | --- | --- | --- |
+| M4.1 | Favorites (loved songs): `favorite` table (library v2), heart on Now playing, Library filter and selection action | 6.3 | ✅ | loved-tracks pattern |
+| M4.2 | History rows (`play`) with mode and singer (score arrives with M7); stats screen (totals, last 7 days, most played, most practised, best scores) | 6.7 | ✅ (aggregated in SQLite; no `statsAggregate` job is needed) | `stats_screen.dart`, §7 |
+| M4.3 | Backup export: `VACUUM INTO` snapshots, settings without device keys, covers, optional media; save to a SAF document; `native_backup` archive in the `backupWrite` data job | 7.1, 7.2 | ✅ | `backup_service.dart`, `native_backup.rs`, §12 |
+| M4.4 | Restore: `backupInspect` (checked extraction) + preview, Merge and Replace in Dart over an attached copy, safety backup before Replace | 7.3 | ✅ (no database swap or `backupRestore` job: both modes run in one transaction per database) | `backup_screen.dart`, §12 |
+| M4.5 | Scheduled backup (due-check on start/resume, keep last N, `backup_run` log, hourly retry after a failure) | 7.4 | ✅ | `backup_provider.dart` |
+| M4.6 | Secrets excluded from backups | 7.5 | ✅ (backups never read secure storage; the prompt for restored extensions' secrets moves to M5.3 with extensions) | §12 |
+| M4.7 | POC import: export script in the private POC (`poc-webapp/scripts/export-kalao.ts`) + `PocImportService` | 7.6 | ✅ (Dart, not a data job; attaches to already-imported songs by title and artist, as the POC's audio is not migrated) | §12 |
+| M4.8 | Diagnostics: log export through the share sheet, crash banner with a pre-filled GitHub issue link | 9.5 | ✅ | `log_screen.dart`, `app_crash_banner.dart` |
+| M4.9 | About: version, privacy statement, open-source licences (incl. the GPL-3.0 and Mornye's LGPL-3.0 texts) | 9.6 | ✅ | `privacy_screen.dart`, `assets/licenses` |
+| M4.10 | Support Kalao row → `https://ko-fi.com/brinsley` | 9.7 | ✅ | `settings_tab.dart` |
+| M4.11 | Update check + user-started APK download, SHA-256 verify, installer hand-off | 9.8 | ✅ (needs a published release to try end to end) | `update_service.dart`, `update_dialog.dart`, §14 |
+| M4.12 | Opening and sharing `.kalaobackup`, `.lrc`/`.ttml`/`.txt` and audio files | 7.3, 1.7 | ✅ (native `SharedFiles.kt` instead of `receive_sharing_intent`) | `shared_files.dart` |
+
+Tests added: Rust `native_backup` (round trip, newer format, damaged/unlisted/missing/unsafe entries, cancellation); Dart `stats_test` (favorites, library v1→v2, stats buckets, stats screen), `backup_test` (device keys, Replace to another device, Merge with human layers and play de-duplication, newer lyrics win, backup without media, newer schema refused), `backup_controller_test` (save to document, scheduled due check and pruning, failure retry, Backup screen save and restore), `shared_files_test`, `update_test` (versions, ABI asset, check, verified download, daily check, install), `poc_import_test`.
 
 **Exit:** a backup made on one device restores on another (both modes) with no secrets inside; scheduled backup runs when due; the update flow installs a newer test release.
 
@@ -117,7 +121,7 @@ Tests added: Rust `kalao-audio` (tempo keeps pitch, key keeps speed, loop wraps,
 | --- | --- | --- | --- |
 | M5.1 | `crates/extensions` copied (runtime, host, manifest, package, repository, storage, manager, network_host, crypto, redact, logging, lyrics/metadata/health backends); Kalao capabilities; limits per EXTENSIONS.md §5 | 5.1 | `crates/extensions` |
 | M5.2 | Install from file and repository; signature + SHA-256 checks; update checks; install prompt (hosts, permissions, fingerprint) | 5.2 | `repository`, `repo_provider.dart`, `repo_tab.dart` |
-| M5.3 | Manifest-generated settings UI and button actions | 5.3 | `extension_detail_page*.dart`, `extension_action_forms.dart` |
+| M5.3 | Manifest-generated settings UI and button actions; restored extensions ask for their secrets again (from M4.6) | 5.3, 7.5 | `extension_detail_page*.dart`, `extension_action_forms.dart` |
 | M5.4 | Allowlist enforcement, login callbacks (`kalao://ext/<id>/callback`), health checks, enable/disable, priority ordering | 5.4 | `extension_auth_launcher.dart`, `ExtensionAuthCallbacks.kt`, `extension_health.dart`, `extension_provider_priority.dart` |
 | M5.5 | `kalao-ext` CLI (validate, test with fixtures, pack, sign); public sample extension **LRCLIB** (open API) in `examples/extensions/lrclib/`; EXTENSIONS.md published | 5.5 | Mornye `core/lyrics/lrclib.rs` as reference |
 | M5.6 | Lyric fetch: parallel query, ranking, provider picker, priority page | 2.11 | `lyrics_provider_picker.dart`, `lyrics_provider_priority_page.dart`, `core::lyrics::matching` |
@@ -310,7 +314,7 @@ The first public release, version 0.1.0, is still pending. The code and features
 
 ## **M4 — Library, backup and about**
 
-Planned
+Implemented (2026-11-18); the on-device checks are still to do.
 
 **In simple terms: Make the app's music library safer, easier to manage and maintain.**
 

@@ -315,5 +315,11 @@
   "updateCheckSettingSubtitle": "1 日 1 回、GitHub で最新リリースを確認します。「アップデート」をタップしない限りダウンロードしません。",
   "updateCheckNow": "今すぐ確認",
   "updateUpToDate": "Kalao は最新です",
-  "updateCheckFailed": "アップデートを確認できませんでした：{error}"
+  "updateCheckFailed": "アップデートを確認できませんでした：{error}",
+  "actionOk": "OK",
+  "pocImport": "Kalao Web 版からインポート…",
+  "pocImportSubtitle": "kalao-poc.json のエクスポート。先に音声をインポートしてください。歌詞・お気に入り・再生履歴は、タイトルとアーティストが同じ曲に追加されます。",
+  "pocImportDone": "インポート完了",
+  "pocImportSummary": "{songs} 曲が一致しました：歌詞 {lyrics} 曲、お気に入り {favorites} 曲、再生履歴 {plays} 件を追加しました。",
+  "pocImportUnmatched": "ライブラリにない曲が {count} 曲あります："
 }

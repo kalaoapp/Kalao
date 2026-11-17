@@ -315,5 +315,11 @@
   "updateCheckSettingSubtitle": "Kalao 每天向 GitHub 查詢一次最新版本。只有你點按「更新」才會下載。",
   "updateCheckNow": "立即檢查",
   "updateUpToDate": "Kalao 已是最新版本",
-  "updateCheckFailed": "無法檢查更新：{error}"
+  "updateCheckFailed": "無法檢查更新：{error}",
+  "actionOk": "確定",
+  "pocImport": "從 Kalao 網頁版匯入…",
+  "pocImportSubtitle": "kalao-poc.json 匯出檔。請先匯入音訊：歌詞、收藏和播放記錄會配對到標題和歌手相同的歌曲。",
+  "pocImportDone": "匯入完成",
+  "pocImportSummary": "配對到 {songs} 首歌曲：{lyrics} 首加入了歌詞，{favorites} 首收藏，{plays} 筆播放記錄。",
+  "pocImportUnmatched": "{count} 首歌曲不在你的曲庫中："
 }
