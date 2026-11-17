@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:kalao/screens/queue_tab.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/models/song.dart';
 import 'package:kalao/providers/library_provider.dart';
@@ -121,7 +122,11 @@ class _SearchResults extends ConsumerWidget {
       AsyncData(:final value) => Column(
         children: [
           for (final song in value)
-            SongListTile(song: song, onTap: () => openSong(context, ref, song)),
+            SongListTile(
+              song: song,
+              onTap: () => openSong(context, ref, song),
+              onLongPress: () => showAddToQueueSheet(context, ref, song),
+            ),
         ],
       ),
       AsyncError(:final error) => Padding(
@@ -207,6 +212,7 @@ class _Shelf extends ConsumerWidget {
             itemBuilder: (context, index) => SongCard(
               song: list[index],
               onTap: () => openSong(context, ref, list[index]),
+              onLongPress: () => showAddToQueueSheet(context, ref, list[index]),
             ),
           ),
         ),

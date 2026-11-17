@@ -11,17 +11,22 @@ import 'package:kalao/providers/player_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
 import 'package:kalao/screens/lyrics_import_sheet.dart';
 import 'package:kalao/screens/lyrics_options_sheet.dart';
+import 'package:kalao/screens/queue_tab.dart';
+import 'package:kalao/screens/shortcuts_sheet.dart';
 import 'package:kalao/services/custom_font_service.dart';
+import 'package:kalao/services/platform_bridge.dart';
 import 'package:kalao/theme/app_tokens.dart';
 import 'package:kalao/utils/lyrics_timeline.dart';
 import 'package:kalao/widgets/empty_state.dart';
-import 'package:kalao/widgets/ruby_lyric_line.dart';
+import 'package:kalao/widgets/karaoke_lyrics_view.dart';
+import 'package:kalao/widgets/lyric_line_view.dart';
 import 'package:kalao/widgets/song_widgets.dart';
 
-/// Now playing (M1.13, M2): layered lyrics, transport, seek, original ↔
-/// instrumental and the vocal-guide blend. Timed lyrics follow the engine
-/// clock with a karaoke sweep over the active line; untimed lyrics are
-/// stepped by hand (tap a line, ↑/↓, or the line buttons).
+/// Now playing: Learn mode (scrolling layered lyrics, loop a line, A–B
+/// repeat, slow-down, line stepping) or Karaoke mode (large two-line layout
+/// with the sweep and countdown, screen kept on), with transport, seek,
+/// original ↔ instrumental and the vocal-guide blend. Keyboard and gamepad
+/// shortcuts are listed in the help sheet (`?`).
 class NowPlayingScreen extends ConsumerWidget {
   const NowPlayingScreen({super.key});
 
@@ -41,6 +46,13 @@ class NowPlayingScreen extends ConsumerWidget {
       );
     }
     final controller = ref.read(playerProvider.notifier);
+    final keepOn = ref.watch(settingsProvider.select((s) => s.keepScreenOn));
+    void back5() => controller.seekRelative(const Duration(seconds: -5));
+    void forward5() => controller.seekRelative(const Duration(seconds: 5));
+    void switchTrack() =>
+        controller.setInstrumental(!ref.read(playerProvider).isInstrumental);
+    final lyrics = now.lyrics;
+    final karaokeLayout = now.isKaraoke && lyrics != null && lyrics.timed;
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.space): controller.togglePlay,
@@ -48,10 +60,20 @@ class NowPlayingScreen extends ConsumerWidget {
             controller.stepLine(-1),
         const SingleActivator(LogicalKeyboardKey.arrowDown): () =>
             controller.stepLine(1),
-        const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
-            controller.seekRelative(const Duration(seconds: -5)),
-        const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
-            controller.seekRelative(const Duration(seconds: 5)),
+        const SingleActivator(LogicalKeyboardKey.arrowLeft): back5,
+        const SingleActivator(LogicalKeyboardKey.arrowRight): forward5,
+        const SingleActivator(LogicalKeyboardKey.keyS): switchTrack,
+        const SingleActivator(LogicalKeyboardKey.keyL):
+            controller.toggleLineLoop,
+        const CharacterActivator('?'): () => showShortcutsSheet(context),
+        // Gamepad: the D-pad arrives as arrow keys.
+        const SingleActivator(LogicalKeyboardKey.gameButtonA):
+            controller.togglePlay,
+        const SingleActivator(LogicalKeyboardKey.gameButtonX): switchTrack,
+        const SingleActivator(LogicalKeyboardKey.gameButtonY):
+            controller.toggleLineLoop,
+        const SingleActivator(LogicalKeyboardKey.gameButtonLeft1): back5,
+        const SingleActivator(LogicalKeyboardKey.gameButtonRight1): forward5,
       },
       child: Focus(
         autofocus: true,
@@ -61,9 +83,12 @@ class NowPlayingScreen extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                if (song.artist.isNotEmpty)
+                if (song.artist.isNotEmpty || now.singer.isNotEmpty)
                   Text(
-                    song.artist,
+                    [
+                      if (now.singer.isNotEmpty) now.singer,
+                      if (song.artist.isNotEmpty) song.artist,
+                    ].join(' · '),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall,
@@ -71,6 +96,11 @@ class NowPlayingScreen extends ConsumerWidget {
               ],
             ),
             actions: [
+              IconButton(
+                tooltip: l10n.queueAdd,
+                icon: const Icon(Icons.playlist_add),
+                onPressed: () => showAddToQueueSheet(context, ref, song),
+              ),
               IconButton(
                 tooltip: l10n.lyricsImport,
                 icon: const Icon(Icons.edit_note),
@@ -91,13 +121,18 @@ class NowPlayingScreen extends ConsumerWidget {
           body: SafeArea(
             child: Column(
               children: [
+                ScreenAwake(
+                  enabled: now.isKaraoke && now.engine.playing && keepOn,
+                ),
                 Expanded(
-                  child: now.lyrics == null || now.lyrics!.isEmpty
+                  child: lyrics == null || lyrics.isEmpty
                       ? _NoLyrics(
                           onImport: () =>
                               showLyricsImportSheet(context, ref, song),
                         )
-                      : LyricsView(lyrics: now.lyrics!),
+                      : karaokeLayout
+                      ? KaraokeLyricsView(lyrics: lyrics)
+                      : LyricsView(lyrics: lyrics),
                 ),
                 const PlayerControls(),
               ],
@@ -107,6 +142,49 @@ class NowPlayingScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Keeps the screen on while [enabled] (Mornye's `lyrics_screen_awake`), and
+/// lets it sleep again when disabled or removed.
+class ScreenAwake extends StatefulWidget {
+  const ScreenAwake({super.key, required this.enabled});
+
+  final bool enabled;
+
+  @override
+  State<ScreenAwake> createState() => _ScreenAwakeState();
+}
+
+class _ScreenAwakeState extends State<ScreenAwake> {
+  bool _awake = false;
+
+  void _apply(bool awake) {
+    if (awake == _awake) return;
+    _awake = awake;
+    // Not on Android (tests, desktop): nothing to keep awake.
+    PlatformBridge.setScreenAwake(awake).catchError((Object _) {});
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _apply(widget.enabled);
+  }
+
+  @override
+  void didUpdateWidget(ScreenAwake old) {
+    super.didUpdateWidget(old);
+    _apply(widget.enabled);
+  }
+
+  @override
+  void dispose() {
+    _apply(false);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 class _NoLyrics extends ConsumerWidget {
@@ -140,11 +218,13 @@ class _NoLyrics extends ConsumerWidget {
   }
 }
 
-/// The lyric lines. For timed lyrics a ticker follows the interpolated engine
-/// position: it picks the active line and drives the sweep across it (word
-/// by word with word timing, linearly without). Otherwise the manual line is
-/// highlighted. The active line is kept near the top third, without
-/// animation when the system asks for reduced motion.
+/// The scrolling lyric lines (Learn mode, and any untimed lyrics). For timed
+/// lyrics a ticker follows the interpolated engine position: it picks the
+/// active line and drives the sweep across it (word by word with word
+/// timing, linearly without). Otherwise the manual line is highlighted. The
+/// active line is kept near the top third, without animation when the system
+/// asks for reduced motion. Tap a line to play from it (or highlight it);
+/// long-press two lines to repeat everything between them.
 class LyricsView extends ConsumerStatefulWidget {
   const LyricsView({super.key, required this.lyrics});
 
@@ -186,7 +266,7 @@ class _LyricsViewState extends ConsumerState<LyricsView>
 
   void _tick(Duration _) {
     final lyrics = widget.lyrics;
-    final position = ref.read(playerProvider.notifier).position;
+    final position = ref.read(playerProvider.notifier).position();
     final active = lyrics.activeLineAt(position);
     if (active != null) {
       _swept.value = sweptChars(
@@ -221,6 +301,7 @@ class _LyricsViewState extends ConsumerState<LyricsView>
     final l10n = AppLocalizations.of(context);
     final settings = ref.watch(settingsProvider);
     final manual = ref.watch(playerProvider.select((now) => now.manualLine));
+    final abStart = ref.watch(playerProvider.select((now) => now.abStart));
     final font = ref.watch(customFontFamilyProvider).asData?.value;
     final active = widget.lyrics.timed ? _active : manual;
     ref.listen(playerProvider.select((now) => now.manualLine), (_, next) {
@@ -232,7 +313,6 @@ class _LyricsViewState extends ConsumerState<LyricsView>
       fontFamily: font,
       height: 1.3,
     );
-    final layer = settings.showPinyin ? LyricLayerKind.pinyin : null;
     final lines = widget.lyrics.lines;
     final controller = ref.read(playerProvider.notifier);
     return ListView.builder(
@@ -299,39 +379,42 @@ class _LyricsViewState extends ConsumerState<LyricsView>
                 onTapHint: widget.lyrics.timed
                     ? l10n.lyricsSeekHere
                     : l10n.lyricsSelectLine,
-                child: InkWell(
+                onLongPressHint: widget.lyrics.timed ? l10n.learnAbHint : null,
+                child: Material(
+                  // The first end of an A–B repeat stays marked.
+                  color: index == abStart
+                      ? theme.colorScheme.tertiaryContainer
+                      : Colors.transparent,
                   borderRadius: BorderRadius.circular(AppTokens.radiusSmall),
-                  onTap: () {
-                    if (widget.lyrics.timed) {
-                      controller.seek(
-                        line.time -
-                            Duration(milliseconds: widget.lyrics.offsetMs),
-                      );
-                    } else {
-                      controller.setManualLine(index);
-                    }
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppTokens.space4),
-                    child: RubyLyricLine(
-                      line: line,
-                      style: style,
-                      layer: layer,
-                      textAlign: align,
-                      swept: sweeping ? _swept : null,
-                      sweepColor: theme.colorScheme.primary,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(AppTokens.radiusSmall),
+                    onTap: () {
+                      if (widget.lyrics.timed) {
+                        controller.seek(
+                          line.time -
+                              Duration(milliseconds: widget.lyrics.offsetMs),
+                        );
+                      } else {
+                        controller.setManualLine(index);
+                      }
+                    },
+                    onLongPress: widget.lyrics.timed
+                        ? () => controller.markAb(index)
+                        : null,
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppTokens.space4),
+                      child: LyricLineView(
+                        line: line,
+                        style: style,
+                        settings: settings,
+                        textAlign: align,
+                        swept: sweeping ? _swept : null,
+                        sweepColor: theme.colorScheme.primary,
+                      ),
                     ),
                   ),
                 ),
               ),
-              if (line.translation != null)
-                Text(
-                  line.translation!,
-                  textAlign: align,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
             ],
           ),
         );
@@ -352,7 +435,8 @@ String sectionLabel(AppLocalizations l10n, String section) => switch (section) {
   _ => l10n.sectionOther,
 };
 
-/// Seek bar, transport, track switch and vocal-guide blend.
+/// Mode, seek bar, transport, Learn tools, track switch and vocal-guide
+/// blend.
 class PlayerControls extends ConsumerStatefulWidget {
   const PlayerControls({super.key});
 
@@ -361,6 +445,9 @@ class PlayerControls extends ConsumerStatefulWidget {
 }
 
 class _PlayerControlsState extends ConsumerState<PlayerControls> {
+  /// Slow-down presets of Learn mode (IMPLEMENTATION.md §5).
+  static const _tempos = [0.5, 0.75, 0.9, 1.0];
+
   double? _dragging;
   double? _vocalDrag;
 
@@ -374,8 +461,10 @@ class _PlayerControlsState extends ConsumerState<PlayerControls> {
     final total = duration.inMilliseconds.toDouble();
     final position = _dragging ?? engine.positionMs.clamp(0, total).toDouble();
     final theme = Theme.of(context);
-    final untimed =
-        now.lyrics != null && !now.lyrics!.timed && !now.lyrics!.isEmpty;
+    final lyrics = now.lyrics;
+    final hasLyrics = lyrics != null && !lyrics.isEmpty;
+    final learn = !now.isKaraoke;
+    final repeating = engine.looping || now.abStart != null;
     return Material(
       color: theme.colorScheme.surfaceContainer,
       child: Padding(
@@ -388,6 +477,7 @@ class _PlayerControlsState extends ConsumerState<PlayerControls> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            PlayModeButton(mode: now.mode, onChanged: controller.setMode),
             Slider(
               value: total <= 0 ? 0 : position.clamp(0, total),
               max: total <= 0 ? 1 : total,
@@ -418,7 +508,7 @@ class _PlayerControlsState extends ConsumerState<PlayerControls> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (untimed)
+                if (hasLyrics && learn)
                   IconButton(
                     tooltip: l10n.lyricsPreviousLine,
                     icon: const Icon(Icons.keyboard_arrow_up),
@@ -444,7 +534,7 @@ class _PlayerControlsState extends ConsumerState<PlayerControls> {
                   onPressed: () =>
                       controller.seekRelative(const Duration(seconds: 10)),
                 ),
-                if (untimed)
+                if (hasLyrics && learn)
                   IconButton(
                     tooltip: l10n.lyricsNextLine,
                     icon: const Icon(Icons.keyboard_arrow_down),
@@ -452,6 +542,38 @@ class _PlayerControlsState extends ConsumerState<PlayerControls> {
                   ),
               ],
             ),
+            if (learn && hasLyrics && lyrics.timed)
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    IconButton(
+                      tooltip: repeating ? l10n.learnLoopOff : l10n.learnLoop,
+                      isSelected: repeating,
+                      icon: const Icon(Icons.repeat_one),
+                      selectedIcon: const Icon(Icons.repeat_one_on),
+                      onPressed: controller.toggleLineLoop,
+                    ),
+                    for (final tempo in _tempos)
+                      Padding(
+                        padding: const EdgeInsets.only(left: AppTokens.space8),
+                        child: ChoiceChip(
+                          label: Text('${(tempo * 100).round()}%'),
+                          tooltip: l10n.learnSpeed((tempo * 100).round()),
+                          selected: engine.tempo == tempo,
+                          onSelected: (_) => controller.setTempo(tempo),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            if (now.abStart != null)
+              Text(
+                l10n.learnAbPick,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.tertiary,
+                ),
+              ),
             if (engine.canSwitch) ...[
               const SizedBox(height: AppTokens.space8),
               SegmentedButton<bool>(
@@ -463,7 +585,7 @@ class _PlayerControlsState extends ConsumerState<PlayerControls> {
                   ),
                   ButtonSegment(
                     value: true,
-                    icon: const Icon(Icons.mic_external_on_outlined),
+                    icon: const Icon(Icons.music_note_outlined),
                     label: Text(l10n.playerInstrumental),
                   ),
                 ],

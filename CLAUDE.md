@@ -16,7 +16,7 @@ Hard product constraints (do not design around them): no accounts or sign-in, no
 | --- | --- |
 | Flutter | 3.47.8, pinned in `android/.fvmrc` (use `fvm flutter …` locally; CI uses plain `flutter`). Dart SDK `^3.10.0` |
 | Dart packages | `flutter_riverpod` ^3.4.2, `go_router` ^18.1.2, `sqflite` ^2.4.5, `shared_preferences` ^2.5.6, `flutter_secure_storage` 10.3.4 (pinned), `audio_service` ^0.18.19, `audio_session` ^0.2.4, `ffmpeg_kit_flutter_new_audio` 2.5.7, `file_picker` ^13.3.0, `dynamic_color` ^2.1.0, `material_ui` ^1.9.0, `intl` ^0.20.3. Dev: `flutter_lints` ^6.0.0, `riverpod_lint` ^3.1.9, `sqflite_common_ffi` ^2.4.5 |
-| Rust | Toolchain 1.99.1 (`rust_backend/rust-toolchain.toml`), edition 2024, resolver 3, `rust-version` 1.99.0. `uniffi` =0.32.2, `tokio` =1.54.1, `symphonia` 0.5.5, `cpal` 0.16, `rubato` 0.16, `serde`/`serde_json` 1.0, `thiserror` 2.0, `pinyin_pro` =3.29.4 |
+| Rust | Toolchain 1.99.1 (`rust_backend/rust-toolchain.toml`), edition 2024, resolver 3, `rust-version` 1.99.0. `uniffi` =0.32.2, `tokio` =1.54.1, `symphonia` 0.5.5, `cpal` 0.16, `rubato` 0.16, `signalsmith-stretch` =0.1.3, `lindera` =6.2.0 (IPADIC embedded), `ferrous-opencc` =0.4.0, `serde`/`serde_json` 1.0, `thiserror` 2.0, `pinyin_pro` =3.29.4 |
 | Android | AGP 9.5.0, Kotlin 2.4.21, Gradle 9.8.2, JDK 25 (Temurin), `compileSdk`/`targetSdk` 37, `minSdk` 26, NDK 30.0.16248370, `kotlinx-coroutines-android` 1.11.0, JNA for the UniFFI bindings |
 | Tooling | Git Bash for `scripts/*.sh`, Python 3 for `scripts/check_backend_apk.py`, `git-cliff` (changelog), Renovate, gitleaks |
 
@@ -63,6 +63,8 @@ Crate dependencies point downward: `core`, `network` and `audio` depend on no ot
 
 **Lyrics.** `LyricsService` (`services/lyrics_service.dart`) imports, saves and exports lyric documents; `utils/lyrics_timeline.dart` holds the timing maths; the sync editor's logic is `controllers/lyrics_sync_editor_controller.dart`.
 
+**Queue.** `QueueStore` (`services/library_queue_store.dart`) persists the singing queue; `queueProvider`/`QueueActions` expose it; `PlayerController.playNextInQueue` advances it when a song ends.
+
 **Playback.** `KaraokeDeck` (`services/karaoke_deck.dart`) drives `kalao-audio` through `PlatformBridge`; `PlayerController` (`providers/player_provider.dart`) owns player state; `KalaoAudioHandler` (`services/playback_handler.dart`) is the `audio_service` media session. The engine clock is the single source of truth for lyric sync.
 
 ## Commands
@@ -95,7 +97,7 @@ bash scripts/build_android.sh
 - `KALAO_RUST_ANDROID_ABIS` selects ABIs (default `arm64-v8a,armeabi-v7a,x86_64`); do not pass `--target-platform` / `--split-per-abi` to `build_android.sh`. `ANDROID_NDK_HOME` must point to NDK 30.0.16248370.
 - Localizations (`lib/l10n/app_localizations*.dart`) are generated from `lib/l10n/arb/` and git-ignored; `flutter pub get` regenerates them.
 - Windows: Gradle's `buildRustBackend` must find Git Bash before WSL's `bash.exe`. Otherwise run `bash scripts/build_rust_backend.sh android` first and pass `-x buildRustBackend` to Gradle. Without Developer Mode, link the FVM SDK with a junction (see `android/docs/DEV_SETUP.md`).
-- Linux hosts need `libasound2-dev pkg-config` for the `cpal` host build.
+- Linux hosts need `libasound2-dev pkg-config` for the `cpal` host build and `libclang-dev` for `signalsmith-stretch` (bindgen). On Windows `scripts/rust_env.sh` points bindgen at the NDK's libclang; `source` it before running cargo by hand.
 
 **Before a pull request:** `bash scripts/check_rust_backend.sh`, then `fvm flutter analyze && fvm flutter test` in `android/`.
 

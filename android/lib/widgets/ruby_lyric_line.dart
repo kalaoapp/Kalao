@@ -88,7 +88,8 @@ class RubyLyricLine extends StatelessWidget {
     final segments = layer == null
         ? const <RubySegment>[]
         : line.layers[layer]?.segments ?? const <RubySegment>[];
-    if (segments.isEmpty) return _text(line.text, 0);
+    final text = line.display;
+    if (segments.isEmpty) return _text(text, 0);
     final readingStyle = style.copyWith(
       fontSize: (style.fontSize ?? 20) * 0.5,
       fontWeight: FontWeight.w500,
@@ -100,7 +101,7 @@ class RubyLyricLine extends StatelessWidget {
     ].join(' ');
     final children = <Widget>[];
     var offset = 0;
-    for (final (base, reading) in units(line.text, segments)) {
+    for (final (base, reading) in units(text, segments)) {
       children.add(
         Column(
           mainAxisSize: MainAxisSize.min,
@@ -118,7 +119,7 @@ class RubyLyricLine extends StatelessWidget {
       offset += base.length;
     }
     return Semantics(
-      label: '${line.text}, $readings',
+      label: '$text, $readings',
       excludeSemantics: true,
       child: Wrap(
         alignment: switch (textAlign) {

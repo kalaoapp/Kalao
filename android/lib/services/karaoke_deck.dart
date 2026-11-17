@@ -100,7 +100,15 @@ class KaraokeDeck {
   Future<EnginePlayerState> setVolume(double volume) =>
       _run(PlatformBridge.playerSetVolume(volume));
 
-  /// Playback speed 0.5–1.5 (the sync editor slows down while timing).
+  /// Transposition in semitones, ±6.
+  Future<EnginePlayerState> setKey(double semitones) =>
+      _run(PlatformBridge.playerSetKey(semitones));
+
+  /// Repeats [start]..[end]; both null clears the loop.
+  Future<EnginePlayerState> setLoop({Duration? start, Duration? end}) =>
+      _run(PlatformBridge.playerSetLoop(start: start, end: end));
+
+  /// Playback speed 0.5–1.5 at the same pitch.
   Future<EnginePlayerState> setTempo(double rate) =>
       _run(PlatformBridge.playerSetTempo(rate));
 

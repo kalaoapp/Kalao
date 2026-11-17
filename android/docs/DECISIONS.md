@@ -33,7 +33,7 @@ None at the moment.
 
 **ADR-004 (revised) Audio engine in Rust behind Mornye's `PlaybackDeck`.** `KaraokeDeck` implements Mornye's `QueuedPlaybackDeck` over `kalao-audio` (cpal/AAudio), so Mornye's player service, queue, session restore and `audio_service` fork are reused. Mornye's `audioplayers` deck is not used: separate players drift between stems and have no key shift or mic path. *Accepted.*
 
-**ADR-005 Time-stretch: Signalsmith Stretch (MIT) preferred over Rubber Band.** Both are GPL-3.0-compatible; Signalsmith is lighter and keeps licensing simple. *Confirm at M3.*
+**ADR-005 Time-stretch: Signalsmith Stretch (MIT) preferred over Rubber Band.** Both are GPL-3.0-compatible; Signalsmith is lighter and keeps licensing simple. *Confirmed at M3.1 (`signalsmith-stretch` 0.1.3).*
 
 **ADR-006 (revised) Mornye's data split.** Dart owns the database schemas (sqflite: library, history, app state); Rust runs heavy native data jobs on detached copies (`rusqlite`) that Dart republishes; settings in `shared_preferences`, secrets in `flutter_secure_storage`. *Accepted.*
 

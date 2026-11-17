@@ -72,19 +72,23 @@ Tests added: Rust `core::lyrics::doc` (eLRC styles, round trip, LRC export, TTML
 
 **Exit:** LRC import auto-follows within ±30 ms; the editor produces enhanced LRC that round-trips.
 
-## M3 Modes, first release
+## M3 Modes, first release — implemented except the release (2026-11-17)
 
-| # | Task | Features | Source / § |
-| --- | --- | --- | --- |
-| M3.1 | Signalsmith Stretch in the engine bus; key ±6 semitones, tempo 50–150%, bypass when neutral; UI controls | 1.4 | §2 |
-| M3.2 | Learn mode: loop current line, A–B repeat, slow-down presets, line stepping, translation slot | 3.1 | §5 |
-| M3.3 | OG Karaoke mode: large two-line layout, word sweep, countdown dots, keep-awake, next-singer banner | 3.2 | `lyric_gap_indicator.dart`, `lyrics_screen_awake.dart` |
-| M3.4 | Queue: add/reorder/remove, singer names, mode per entry, persistence | 6.5 | `library_queue_store.dart`, `queue_tab*`, `app_state_database.dart` |
-| M3.5 | Hardware keyboard and gamepad shortcuts (Space, ←/→ 5 s, ↑/↓ line, S switch track, L loop, ? help) and the help sheet | 9.3 | `keyboard_shortcuts_page.dart` |
-| M3.6 | `core::annotate::japanese` (lindera readings → furigana, wana_kana romaji, `romanizationWords`) | 2.4 | §4 |
-| M3.7 | `core::annotate::chinese_variant` (OpenCC s2t/t2s/s2tw/s2hk); Trad/Simp layers and setting | 2.5 | §4 |
-| M3.8 | Tutorial and What's New screens with Kalao content | — | `tutorial_screen.dart`, `whats_new_screen.dart` |
-| M3.9 | **First GitHub Release** (`v0.1.0`) via `release.yml` | — | `release.yml` |
+Status: ✅ built and tested locally (Rust: fmt, clippy, all workspace tests incl. key, tempo and loop on rendered buffers; `libkalao_mobile.so` cross-compiles for the three ABIs; Flutter analyze clean, 56 Dart tests); ⏳ M3.9 (the `v0.1.0` tag) waits for the owner and the signing secrets; ⏳ the modes need a pass on a device (sound of the stretcher, the loop seam, gamepad keys).
+
+| # | Task | Features | Status | Source / § |
+| --- | --- | --- | --- | --- |
+| M3.1 | Signalsmith Stretch (`signalsmith-stretch` 0.1.3) on the mix bus: `playerSetKey` ±6 semitones, `playerSetTempo` 50–150% at the same pitch, bypassed when both are neutral; the reported position allows for the stretcher's delay; key and speed steppers in the lyrics options sheet | 1.4 | ✅ (replaces M2's resampler speed change; the build needs libclang and a C++ compiler, see DEV_SETUP) | §2 |
+| M3.2 | Learn mode: loop the current line (`playerSetLoop`), A–B repeat (long-press two lines), slow-down presets 50/75/90/100%, line stepping for timed lyrics, translation under a line when the lyrics carry one | 3.1 | ✅ (the loop seam is a short gap while the decoders refill, not the planned 20 ms crossfade) | §5 |
+| M3.3 | OG Karaoke mode: large two-line layout with the sweep, countdown dots before a line that follows a gap ≥ 4 s (intro included), screen kept on while playing, next singer from the queue after the last line | 3.2 | ✅ (Mornye's `lyric_gap_indicator.dart` and `lyrics_screen_awake.dart` are not copied: Kalao-sized versions) | `karaoke_lyrics_view.dart` |
+| M3.4 | Queue: `queue_item` table (app state v2), add (Home long-press, Library selection, Now playing), reorder, remove, clear, singer name and mode per entry; the next entry starts when a song ends | 6.5 | ✅ | `library_queue_store.dart`, `queue_provider.dart`, `queue_tab.dart` |
+| M3.5 | Keyboard and gamepad shortcuts (Space/A, ←/→ and L1/R1 5 s, ↑/↓ line, S/X switch track, L/Y loop, ? help) and the help sheet | 9.3 | ✅ | `shortcuts_sheet.dart` |
+| M3.6 | `core::annotate::japanese` (lindera 6.2 with embedded IPADIC): furigana over kanji runs, romaji per word with spoken particles, romaji search keys for kanji titles; furigana above and romaji below the line, each with a toggle | 2.4 | ✅ (the embedded dictionary adds about 50 MB to `libkalao_mobile.so` per ABI) | §4 |
+| M3.7 | `core::annotate::chinese_variant` (`ferrous-opencc` 0.4: s2t, s2tw, s2hk, t2s); the Chinese-characters setting converts lyrics for display through `convertChinese` | 2.5 | ✅ (the variant is applied when lyrics are shown, not stored as a layer, so changing the setting needs no regeneration) | §4 |
+| M3.8 | Tutorial (after setup, four pages) and What's New (once per version after an update) screens with Kalao content | — | ✅ | `tutorial_screen.dart`, `whats_new_screen.dart` |
+| M3.9 | **First GitHub Release** (`v0.1.0`) via `release.yml` | — | ⏳ not tagged: needs the `KEYSTORE_BASE64`, `KEY_ALIAS`, `KEYSTORE_PASSWORD` secrets and the owner's go-ahead | `release.yml` |
+
+Tests added: Rust `kalao-audio` (tempo keeps pitch, key keeps speed, loop wraps, click timing through the stretcher), `core::annotate::{japanese, chinese_variant}`, `mobile` (layers, `convertChinese`); Dart `modes_test` (karaoke frames, queue store, modes/key/tempo/loop/stepping, queue advance, Japanese layers and Chinese variant, Karaoke screen, queue tab, What's New and help).
 
 **Exit:** Learn and OG Karaoke modes usable end to end in zh/ja/en songs; v0.1.0 APKs on GitHub Releases with checksums.
 

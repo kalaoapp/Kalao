@@ -15,6 +15,9 @@ class EnginePlayerState {
     this.vocalLevel = 1,
     this.volume = 1,
     this.tempo = 1,
+    this.key = 0,
+    this.loopStartMs,
+    this.loopEndMs,
     this.error,
   });
 
@@ -34,6 +37,9 @@ class EnginePlayerState {
         vocalLevel: (json['vocalLevel'] as num?)?.toDouble() ?? 1,
         volume: (json['volume'] as num?)?.toDouble() ?? 1,
         tempo: (json['tempo'] as num?)?.toDouble() ?? 1,
+        key: (json['key'] as num?)?.toDouble() ?? 0,
+        loopStartMs: (json['loopStartMs'] as num?)?.toInt(),
+        loopEndMs: (json['loopEndMs'] as num?)?.toInt(),
         error: json['error'] as String?,
       );
 
@@ -56,11 +62,20 @@ class EnginePlayerState {
 
   /// Playback speed (1 = normal); positions are always song time.
   final double tempo;
+
+  /// Transposition in semitones (0 = original key).
+  final double key;
+
+  /// The repeating range in song time, or null when nothing loops.
+  final int? loopStartMs;
+  final int? loopEndMs;
   final String? error;
 
   Duration get position => Duration(milliseconds: positionMs);
   Duration? get duration =>
       durationMs == null ? null : Duration(milliseconds: durationMs!);
+
+  bool get looping => loopStartMs != null && loopEndMs != null;
 
   bool get canSwitch => layout == 'pair' || layout == 'stems';
 
@@ -75,6 +90,9 @@ class EnginePlayerState {
       other.vocalLevel == vocalLevel &&
       other.volume == volume &&
       other.tempo == tempo &&
+      other.key == key &&
+      other.loopStartMs == loopStartMs &&
+      other.loopEndMs == loopEndMs &&
       other.layout == layout &&
       other.durationMs == durationMs &&
       other.error == error;
@@ -89,6 +107,9 @@ class EnginePlayerState {
     vocalLevel,
     volume,
     tempo,
+    key,
+    loopStartMs,
+    loopEndMs,
     layout,
     durationMs,
     error,

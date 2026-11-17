@@ -382,7 +382,11 @@ void main() {
       backend = FakeBackend()..install();
       services = await openTestServices();
       SharedPreferences.setMockInitialValues({
-        'app_settings': jsonEncode({'setupCompleted': true}),
+        'app_settings': jsonEncode({
+          'setupCompleted': true,
+          'tutorialSeen': true,
+          'whatsNewVersion': '0.1.0',
+        }),
       });
     });
     tearDown(() async {
@@ -543,8 +547,6 @@ void main() {
       final sweep = tester.widget<SweepText>(find.byType(SweepText));
       expect(sweep.text, 'second words');
       expect(sweep.swept.value, closeTo(3, 1e-9));
-      // No backing track: the manual line buttons are for untimed lyrics.
-      expect(find.byTooltip('Next line'), findsNothing);
 
       // A linear sweep on a line without word timing.
       await report(tester, events, 2000);
@@ -556,6 +558,8 @@ void main() {
       await tester.tap(find.byTooltip('Lyrics options'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
+      await tester.ensureVisible(find.byTooltip('Show lyrics earlier'));
+      await tester.pump();
       expect(find.text('0.00 s'), findsOneWidget);
       for (var i = 0; i < 2; i++) {
         await tester.tap(find.byTooltip('Show lyrics earlier'));

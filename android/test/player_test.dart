@@ -10,6 +10,7 @@ import 'package:kalao/models/song.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/player_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
+import 'package:kalao/services/history_database.dart';
 import 'package:kalao/services/karaoke_deck.dart';
 import 'package:kalao/services/library_database.dart';
 import 'package:kalao/widgets/ruby_lyric_line.dart';
@@ -27,7 +28,11 @@ void main() {
     backend = FakeBackend()..install();
     services = await openTestServices();
     SharedPreferences.setMockInitialValues({
-      'app_settings': jsonEncode({'setupCompleted': true}),
+      'app_settings': jsonEncode({
+        'setupCompleted': true,
+        'tutorialSeen': true,
+        'whatsNewVersion': '0.1.0',
+      }),
     });
   });
   tearDown(() async {
@@ -102,7 +107,15 @@ void main() {
       ], unorderedEquals(['original', 'instrumental']));
       expect(backend.player['playing'], isTrue);
 
+      // A song opens in Learn mode with the original vocals.
+      expect(container.read(playerProvider).mode, PlayMode.learn);
+      expect(backend.player['vocalLevel'], 1.0);
       await controller.setInstrumental(true);
+      await Future<void>.delayed(Duration.zero);
+      expect(container.read(playerProvider).isInstrumental, isTrue);
+      // Karaoke mode is remembered for the song and plays the backing track.
+      await controller.setInstrumental(false);
+      await controller.setMode(PlayMode.karaoke);
       await Future<void>.delayed(Duration.zero);
       expect(container.read(playerProvider).isInstrumental, isTrue);
       expect((await services.library.song(song.id))!.lastMode, 'karaoke');
@@ -175,6 +188,8 @@ void main() {
     await tester.tap(find.byTooltip('Next line'));
     await tester.pump();
     expect(container.read(playerProvider).manualLine, 1);
+    await tester.ensureVisible(find.text('last line'));
+    await tester.pump();
     await tester.tap(find.text('last line'));
     await tester.pump();
     expect(container.read(playerProvider).manualLine, 2);

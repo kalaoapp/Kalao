@@ -16,6 +16,21 @@ enum LyricsSize {
   final double scale;
 }
 
+/// How Chinese lyrics are shown (FEATURES 2.5). The lyrics are stored as
+/// imported; the variant is applied for display.
+enum ChineseVariant {
+  asWritten(null),
+  simplified('t2s'),
+  traditional('s2t'),
+  taiwan('s2tw'),
+  hongKong('s2hk');
+
+  const ChineseVariant(this.conversion);
+
+  /// The OpenCC conversion, or null to show the lyrics as written.
+  final String? conversion;
+}
+
 /// App preferences, stored as one JSON object in shared_preferences.
 /// Unknown or missing keys fall back to defaults, so adding a field never
 /// breaks an existing install. Secrets never go here (secure storage).
@@ -32,6 +47,14 @@ class AppSettings {
     this.showPinyin = true,
     this.wordSweep = true,
     this.tapLatencyMs = 40,
+    this.showFurigana = true,
+    this.showRomaji = false,
+    this.showTranslation = true,
+    this.chineseVariant = ChineseVariant.asWritten,
+    this.countdown = true,
+    this.keepScreenOn = true,
+    this.tutorialSeen = false,
+    this.whatsNewVersion,
   });
 
   factory AppSettings.fromJson(Map<String, dynamic> json) => AppSettings(
@@ -47,6 +70,16 @@ class AppSettings {
     showPinyin: json['showPinyin'] as bool? ?? true,
     wordSweep: json['wordSweep'] as bool? ?? true,
     tapLatencyMs: (json['tapLatencyMs'] as num?)?.toInt() ?? 40,
+    showFurigana: json['showFurigana'] as bool? ?? true,
+    showRomaji: json['showRomaji'] as bool? ?? false,
+    showTranslation: json['showTranslation'] as bool? ?? true,
+    chineseVariant:
+        ChineseVariant.values.asNameMap()[json['chineseVariant']] ??
+        ChineseVariant.asWritten,
+    countdown: json['countdown'] as bool? ?? true,
+    keepScreenOn: json['keepScreenOn'] as bool? ?? true,
+    tutorialSeen: json['tutorialSeen'] as bool? ?? false,
+    whatsNewVersion: json['whatsNewVersion'] as String?,
   );
 
   /// The user finished the first-run setup.
@@ -78,6 +111,28 @@ class AppSettings {
   /// editor (0–200 ms).
   final int tapLatencyMs;
 
+  /// Show furigana above kanji in Japanese lyrics.
+  final bool showFurigana;
+
+  /// Show romaji under Japanese lyrics.
+  final bool showRomaji;
+
+  /// Show a line's translation under it when the lyrics have one.
+  final bool showTranslation;
+  final ChineseVariant chineseVariant;
+
+  /// Count down to the next line after a long gap in Karaoke mode.
+  final bool countdown;
+
+  /// Keep the screen on while singing in Karaoke mode.
+  final bool keepScreenOn;
+
+  /// The tutorial was shown (or skipped) after setup.
+  final bool tutorialSeen;
+
+  /// The app version whose What's New page was last shown.
+  final String? whatsNewVersion;
+
   Map<String, dynamic> toJson() => {
     'setupCompleted': setupCompleted,
     'themeMode': themeMode.name,
@@ -89,6 +144,14 @@ class AppSettings {
     'showPinyin': showPinyin,
     'wordSweep': wordSweep,
     'tapLatencyMs': tapLatencyMs,
+    'showFurigana': showFurigana,
+    'showRomaji': showRomaji,
+    'showTranslation': showTranslation,
+    'chineseVariant': chineseVariant.name,
+    'countdown': countdown,
+    'keepScreenOn': keepScreenOn,
+    'tutorialSeen': tutorialSeen,
+    'whatsNewVersion': whatsNewVersion,
   };
 
   AppSettings copyWith({
@@ -102,6 +165,14 @@ class AppSettings {
     bool? showPinyin,
     bool? wordSweep,
     int? tapLatencyMs,
+    bool? showFurigana,
+    bool? showRomaji,
+    bool? showTranslation,
+    ChineseVariant? chineseVariant,
+    bool? countdown,
+    bool? keepScreenOn,
+    bool? tutorialSeen,
+    String? Function()? whatsNewVersion,
   }) => AppSettings(
     setupCompleted: setupCompleted ?? this.setupCompleted,
     themeMode: themeMode ?? this.themeMode,
@@ -115,6 +186,16 @@ class AppSettings {
     showPinyin: showPinyin ?? this.showPinyin,
     wordSweep: wordSweep ?? this.wordSweep,
     tapLatencyMs: tapLatencyMs ?? this.tapLatencyMs,
+    showFurigana: showFurigana ?? this.showFurigana,
+    showRomaji: showRomaji ?? this.showRomaji,
+    showTranslation: showTranslation ?? this.showTranslation,
+    chineseVariant: chineseVariant ?? this.chineseVariant,
+    countdown: countdown ?? this.countdown,
+    keepScreenOn: keepScreenOn ?? this.keepScreenOn,
+    tutorialSeen: tutorialSeen ?? this.tutorialSeen,
+    whatsNewVersion: whatsNewVersion != null
+        ? whatsNewVersion()
+        : this.whatsNewVersion,
   );
 
   @override
@@ -129,7 +210,15 @@ class AppSettings {
       other.customFontPath == customFontPath &&
       other.showPinyin == showPinyin &&
       other.wordSweep == wordSweep &&
-      other.tapLatencyMs == tapLatencyMs;
+      other.tapLatencyMs == tapLatencyMs &&
+      other.showFurigana == showFurigana &&
+      other.showRomaji == showRomaji &&
+      other.showTranslation == showTranslation &&
+      other.chineseVariant == chineseVariant &&
+      other.countdown == countdown &&
+      other.keepScreenOn == keepScreenOn &&
+      other.tutorialSeen == tutorialSeen &&
+      other.whatsNewVersion == whatsNewVersion;
 
   @override
   int get hashCode => Object.hash(
@@ -143,5 +232,13 @@ class AppSettings {
     showPinyin,
     wordSweep,
     tapLatencyMs,
+    showFurigana,
+    showRomaji,
+    showTranslation,
+    chineseVariant,
+    countdown,
+    keepScreenOn,
+    tutorialSeen,
+    whatsNewVersion,
   );
 }

@@ -69,6 +69,29 @@ class SettingsNotifier extends Notifier<AppSettings> {
   Future<void> setTapLatencyMs(int value) =>
       _save(state.copyWith(tapLatencyMs: value.clamp(0, 200)));
 
+  Future<void> setShowFurigana(bool value) =>
+      _save(state.copyWith(showFurigana: value));
+
+  Future<void> setShowRomaji(bool value) =>
+      _save(state.copyWith(showRomaji: value));
+
+  Future<void> setShowTranslation(bool value) =>
+      _save(state.copyWith(showTranslation: value));
+
+  Future<void> setChineseVariant(ChineseVariant value) =>
+      _save(state.copyWith(chineseVariant: value));
+
+  Future<void> setCountdown(bool value) =>
+      _save(state.copyWith(countdown: value));
+
+  Future<void> setKeepScreenOn(bool value) =>
+      _save(state.copyWith(keepScreenOn: value));
+
+  Future<void> completeTutorial() => _save(state.copyWith(tutorialSeen: true));
+
+  Future<void> setWhatsNewVersion(String version) =>
+      _save(state.copyWith(whatsNewVersion: () => version));
+
   Future<void> setVerboseLogging(bool value) async {
     await _save(state.copyWith(verboseLogging: value));
     LogBuffer().verbose = value;

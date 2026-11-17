@@ -29,8 +29,10 @@ class HistoryDatabase {
     required int songId,
     required String songKey,
     required PlayMode mode,
+    String singer = '',
     DateTime? now,
   }) => db.insert('play', {
+    if (singer.isNotEmpty) 'singer': singer,
     'song_id': songId,
     'song_key': songKey,
     'started_at': (now ?? DateTime.now()).millisecondsSinceEpoch,

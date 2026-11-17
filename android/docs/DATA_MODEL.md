@@ -31,7 +31,7 @@ Annotation layers per line:
   "segments": [ { "start": 0, "end": 1, "reading": "yuè" }, { "start": 1, "end": 2, "reading": "liang" } ] }
 ```
 
-`kind` ∈ `pinyin`, `furigana`, `romaji`, `traditional`, `simplified`, `translation:<lang>`; `origin` ∈ `auto`, `human`, `translator`. `human` layers are never overwritten by regeneration. Enhanced LRC round-trips through `core::lyrics::doc` without loss of line or word timing, sections, breaks or voices; plain LRC keeps line starts.
+`kind` ∈ `pinyin`, `furigana`, `romaji`, `translation:<lang>` (`traditional`/`simplified` are not stored: the Chinese variant is applied for display, IMPLEMENTATION.md §4); `origin` ∈ `auto`, `human`, `translator`. `human` layers are never overwritten by regeneration. Enhanced LRC round-trips through `core::lyrics::doc` without loss of line or word timing, sections, breaks or voices; plain LRC keeps line starts.
 
 ## 2. Local databases (Dart-owned, sqflite)
 

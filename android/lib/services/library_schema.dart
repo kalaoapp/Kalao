@@ -93,7 +93,7 @@ CREATE TABLE play (
 };
 
 /// `kalao_app_state.db`.
-const appStateVersion = 1;
+const appStateVersion = 2;
 
 const appStateMigrations = <int, List<String>>{
   1: [
@@ -105,5 +105,18 @@ CREATE TABLE recent_access (
   accessed_at INTEGER NOT NULL,
   PRIMARY KEY(kind, ref)
 )''',
+  ],
+  // M3.4: the singing queue.
+  2: [
+    '''
+CREATE TABLE queue_item (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  song_id INTEGER NOT NULL,
+  position INTEGER NOT NULL,
+  singer TEXT NOT NULL DEFAULT '',
+  mode TEXT NOT NULL DEFAULT 'karaoke',
+  added_by TEXT NOT NULL DEFAULT 'host'
+)''',
+    'CREATE INDEX queue_position_idx ON queue_item(position)',
   ],
 };

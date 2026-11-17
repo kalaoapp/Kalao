@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/screens/home_tab.dart';
 import 'package:kalao/screens/library_screen.dart';
+import 'package:kalao/screens/queue_tab.dart';
 import 'package:kalao/screens/settings/settings_tab.dart';
 import 'package:kalao/services/app_crash_service.dart';
 import 'package:kalao/widgets/app_crash_banner.dart';
@@ -36,12 +37,7 @@ class _MainShellState extends State<MainShell> {
     final tabs = <Widget>[
       const HomeTab(),
       const LibraryScreen(),
-      _PlaceholderTab(
-        title: l10n.navQueue,
-        icon: Icons.queue_music,
-        emptyTitle: l10n.queueEmptyTitle,
-        emptyBody: l10n.queueEmptyBody,
-      ),
+      const QueueTab(),
       _PlaceholderTab(
         title: l10n.navExtensions,
         icon: Icons.extension_outlined,

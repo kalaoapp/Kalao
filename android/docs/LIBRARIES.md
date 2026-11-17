@@ -79,15 +79,15 @@ No `play-services-*` artifacts.
 | `symphonia` | 0.5.5 (features mp3, aac, isomp4, alac, flac, vorbis, ogg, wav, pcm) | audio, stems | Decode MP3, AAC/M4A, ALAC, FLAC, Vorbis, WAV; also reads tags and covers for `probeAudio` |
 | `cpal` | 0.16 | audio | AAudio output and low-latency input on Android; WASAPI/CoreAudio/ALSA on desktop later |
 | `rubato` | 0.16 | audio, stems | Resampling to the device rate / model rate |
-| `signalsmith-stretch` (Rust bindings to Signalsmith Stretch, MIT) | latest | audio | Key change and tempo without pitch change (ADR-005) |
+| `signalsmith-stretch` (Rust bindings to Signalsmith Stretch, MIT) | =0.1.3 | audio | Key change and tempo without pitch change (ADR-005). Compiles C++ (`cc`) and generates bindings (`bindgen`), so builds need a C++ compiler and libclang; Android links libc++ statically |
 | `ringbuf` | 0.4 | audio | Lock-free decoder → callback buffers |
 | `flacenc` | latest | stems, audio | Encode stems and recordings to FLAC (pure Rust; decoded back by Symphonia) |
 | `ort` | 2.x (`load-dynamic`) | stems | ONNX Runtime; XNNPACK execution provider, CPU fallback (QNN optional) |
 | `ndarray` | 0.16 | stems | Tensors for inference |
 | `realfft` | 3.x | stems, audio | STFT/iSTFT (models that need spectrograms), pitch analysis |
 | `pinyin_pro` | =3.29.4 (MIT) | core::annotate, search keys | Rust port of `pinyin-pro`, the library the POC used: segmentation, polyphones in context, tone marks; the POC's fixtures pass unchanged. Replaces the planned `pinyin` + `jieba-rs` (M1.12) |
-| a pure-Rust OpenCC port (e.g. `ferrous-opencc`) with OpenCC data (Apache-2.0) | latest | core::annotate | Traditional ↔ Simplified (verify licence and data coverage at M3) |
-| `lindera` with IPADIC | latest | core::annotate | Japanese morphology → kana readings for furigana |
+| `ferrous-opencc` with OpenCC data (Apache-2.0) | =0.4.0 | core::annotate | Traditional ↔ Simplified (`s2t`, `s2tw`, `s2hk`, `t2s`); dictionaries embedded (about 2 MB) |
+| `lindera` with IPADIC (MIT; IPADIC under its own permissive licence) | =6.2.0, `embed-ipadic` | core::annotate | Japanese morphology → kana readings for furigana. The dictionary is downloaded at build time and embedded (about 50 MB per ABI) |
 | `wana_kana` | 4.x | core::search_keys (M1), core::annotate (M3.6) | Kana → romaji |
 | `ed25519-dalek` | 2.x | extensions | Repository signature verification (if Mornye's repository module lacks it) |
 | `freeverb`-style reverb (in-house, ~150 lines) | — | audio | Monitoring reverb; no dependency |

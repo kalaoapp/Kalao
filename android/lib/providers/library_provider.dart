@@ -5,6 +5,7 @@ import 'package:kalao/services/app_storage.dart';
 import 'package:kalao/services/history_database.dart';
 import 'package:kalao/services/import_service.dart';
 import 'package:kalao/services/library_database.dart';
+import 'package:kalao/services/library_queue_store.dart';
 import 'package:kalao/services/lyrics_service.dart';
 
 /// The opened databases and storage. Opened once in `main` (tests open
@@ -25,6 +26,8 @@ class LibraryServices {
   final ImportService importer;
 
   LyricsService get lyrics => importer.lyrics;
+
+  late final QueueStore queue = QueueStore(appState.db);
 }
 
 final libraryServicesProvider = Provider<LibraryServices>(

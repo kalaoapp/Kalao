@@ -11,7 +11,7 @@
   "libraryEmptyTitle": "Your library is empty",
   "libraryEmptyBody": "Import an original and, if you have one, its instrumental. Kalao pairs them for you.",
   "queueEmptyTitle": "The queue is empty",
-  "queueEmptyBody": "Songs you queue for singing will appear here.",
+  "queueEmptyBody": "Long-press a song on Home, or select songs in Library, to add them here. The next song starts when the current one ends.",
   "extensionsEmptyTitle": "No extensions installed",
   "extensionsEmptyBody": "Extensions add lyrics, metadata and audio sources. Installing them arrives in a later update.",
   "setupWelcomeTitle": "Welcome to Kalao",
@@ -187,5 +187,110 @@
   "syncReplay": "Replay line",
   "syncUndo": "Undo",
   "syncExport": "Export",
-  "syncSaved": "Timing saved as a new version"
+  "syncSaved": "Timing saved as a new version",
+  "modeLearn": "Learn",
+  "modeKaraoke": "Karaoke",
+  "learnLoop": "Repeat this line",
+  "learnLoopOff": "Stop repeating",
+  "learnSpeed": "Speed {percent}%",
+  "@learnSpeed": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "learnAbHint": "repeat from this line to another",
+  "learnAbPick": "Long-press another line to repeat between the two",
+  "karaokeCountdown": "{count} seconds until the next line",
+  "@karaokeCountdown": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "karaokeInterlude": "Instrumental break",
+  "karaokeNextUp": "Next up",
+  "karaokeCountdownSetting": "Countdown before lines",
+  "karaokeCountdownSettingSubtitle": "Dots count down after a break of 4 seconds or more (Karaoke mode)",
+  "karaokeKeepScreenOn": "Keep the screen on in Karaoke mode",
+  "soundKey": "Key",
+  "soundKeyOriginal": "Original key",
+  "soundKeySemitones": "{semitones} semitones",
+  "@soundKeySemitones": {
+    "placeholders": {
+      "semitones": {
+        "type": "String"
+      }
+    }
+  },
+  "soundKeyUp": "Key up",
+  "soundKeyDown": "Key down",
+  "soundKeyReset": "Original key",
+  "soundTempo": "Speed",
+  "soundTempoFaster": "Faster",
+  "soundTempoSlower": "Slower",
+  "soundTempoReset": "Normal speed",
+  "lyricsShowFurigana": "Show furigana",
+  "lyricsShowRomaji": "Show romaji",
+  "lyricsShowTranslation": "Show translation",
+  "chineseVariant": "Chinese characters",
+  "chineseAsWritten": "As written",
+  "chineseSimplified": "Simplified",
+  "chineseTraditional": "Traditional",
+  "chineseTaiwan": "Traditional (Taiwan)",
+  "chineseHongKong": "Traditional (Hong Kong)",
+  "queueAdd": "Add to queue",
+  "queueAdded": "Added to the queue",
+  "queueSinger": "Singer",
+  "queueSingerHint": "Who is singing? (optional)",
+  "queueEdit": "Singer and mode",
+  "queueRemove": "Remove from queue",
+  "queueClear": "Clear queue",
+  "shortcutsTitle": "Keyboard shortcuts",
+  "shortcutsKeyboard": "Keyboard",
+  "shortcutsGamepad": "Gamepad",
+  "shortcutPlayPause": "Play or pause",
+  "shortcutSeek": "Back or forward 5 seconds",
+  "shortcutLine": "Previous or next line",
+  "shortcutSwitchTrack": "Original or instrumental",
+  "shortcutLoop": "Repeat the current line",
+  "shortcutHelp": "Show this help",
+  "tutorialSkip": "Skip",
+  "tutorialNext": "Next",
+  "tutorialDone": "Start singing",
+  "tutorialPage": "Page {page} of {count}",
+  "@tutorialPage": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "tutorialImportTitle": "Bring your own songs",
+  "tutorialImportBody": "Import audio files from your device. Add an instrumental next to the original and Kalao pairs them, so you can switch between the two without losing your place.",
+  "tutorialLyricsTitle": "Lyrics you can read",
+  "tutorialLyricsBody": "Paste lyrics or open an LRC or TTML file. Chinese gets pinyin and Japanese gets furigana and romaji automatically. Lyrics without timing can be synced by tapping along.",
+  "tutorialModesTitle": "Learn, then sing",
+  "tutorialModesBody": "Learn mode keeps the original vocals and lets you repeat a line, slow the song down and step through it. Karaoke mode plays the instrumental with big lyrics that light up as you sing.",
+  "tutorialQueueTitle": "Take turns",
+  "tutorialQueueBody": "Queue songs with the singer's name. When a song ends the next one starts, and Karaoke mode shows who is up.",
+  "whatsNewTitle": "What's new in {version}",
+  "@whatsNewTitle": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "whatsNewContinue": "Continue",
+  "whatsNewModes": "Learn and Karaoke modes: repeat a line or a passage, or sing along to large lyrics with a countdown.",
+  "whatsNewKeyTempo": "Change the key by up to 6 semitones and the speed from 50% to 150% without changing the pitch.",
+  "whatsNewTimedLyrics": "Timed lyrics with a word-by-word sweep, and an editor to sync lyrics by tapping.",
+  "whatsNewQueue": "A singing queue with singer names.",
+  "whatsNewLanguages": "Furigana and romaji for Japanese, and Traditional or Simplified display for Chinese."
 }

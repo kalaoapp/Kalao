@@ -135,7 +135,20 @@ class PlatformBridge {
     'instrumental': ?instrumental,
   });
 
-  /// Playback speed 0.5–1.5 (1 = normal; the pitch follows until M3.1).
+  /// Transposes by [semitones] (±6) without changing the tempo.
+  static Future<EnginePlayerState> playerSetKey(double semitones) =>
+      _player('playerSetKey', {'semitones': semitones});
+
+  /// Repeats [start]..[end] of the song; both null clears the loop.
+  static Future<EnginePlayerState> playerSetLoop({
+    Duration? start,
+    Duration? end,
+  }) => _player('playerSetLoop', {
+    'startMs': ?start?.inMilliseconds,
+    'endMs': ?end?.inMilliseconds,
+  });
+
+  /// Playback speed 0.5–1.5 (1 = normal) at the same pitch.
   static Future<EnginePlayerState> playerSetTempo(double rate) =>
       _player('playerSetTempo', {'rate': rate});
 
@@ -184,7 +197,27 @@ class PlatformBridge {
           as String? ??
       '';
 
-  /// Layers `{lineIndex, kind, origin, segments}` for [lines].
+  /// [texts] in the Chinese variant [to] (`s2t`, `s2tw`, `s2hk`, `t2s`).
+  static Future<List<String>> convertChinese(
+    List<String> texts,
+    String to,
+  ) async {
+    final decoded = await decodeJsonResult(
+      await backendChannel.invokeMethod<Object?>('convertChinese', {
+        'texts': texts,
+        'to': to,
+      }),
+    );
+    if (decoded is! List) {
+      throw FormatException(
+        'Expected list result from convertChinese, got ${decoded.runtimeType}',
+      );
+    }
+    return [for (final text in decoded) text as String];
+  }
+
+  /// Layers `{lineIndex, kind, origin, segments}` for [lines] ([layers] from
+  /// `pinyin`, `furigana`, `romaji`).
   static Future<List<Map<String, dynamic>>> annotateLyrics(
     List<String> lines, {
     List<String> layers = const ['pinyin'],

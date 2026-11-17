@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/models/song.dart';
+import 'package:kalao/providers/queue_provider.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/player_provider.dart';
 import 'package:kalao/screens/home_tab.dart';
@@ -59,6 +60,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     final services = ref.read(libraryServicesProvider);
     await services.importer.deleteSongs(chosen);
     await services.history.forgetSongs([for (final song in chosen) song.id]);
+    await services.queue.removeSongs([for (final song in chosen) song.id]);
     final session = await services.appState.session();
     if (chosen.any((song) => '${song.id}' == session['songId'])) {
       await services.appState.clearSession();
@@ -92,6 +94,11 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     icon: const Icon(Icons.select_all),
                     onPressed: () =>
                         setState(() => _selected.addAll(list.map((s) => s.id))),
+                  ),
+                  IconButton(
+                    tooltip: l10n.queueAdd,
+                    icon: const Icon(Icons.playlist_add),
+                    onPressed: () => _queueSelected(list),
                   ),
                   IconButton(
                     tooltip: l10n.actionDelete,
@@ -153,6 +160,22 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         },
       ),
     );
+  }
+
+  /// Queues the selected songs in list order, for Karaoke, no singer named.
+  Future<void> _queueSelected(List<Song> songs) async {
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final actions = ref.read(queueActionsProvider);
+    final chosen = [
+      for (final song in songs)
+        if (_selected.contains(song.id)) song,
+    ];
+    setState(_selected.clear);
+    for (final song in chosen) {
+      await actions.add(song);
+    }
+    messenger.showSnackBar(SnackBar(content: Text(l10n.queueAdded)));
   }
 
   void _open(Song song) {

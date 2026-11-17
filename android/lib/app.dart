@@ -13,21 +13,45 @@ import 'package:kalao/screens/main_shell.dart';
 import 'package:kalao/screens/now_playing_screen.dart';
 import 'package:kalao/screens/settings/log_screen.dart';
 import 'package:kalao/screens/setup_screen.dart';
+import 'package:kalao/screens/tutorial_screen.dart';
+import 'package:kalao/screens/whats_new_screen.dart';
 import 'package:kalao/theme/app_theme.dart';
 
 /// First screen for the current app state, as in Mornye's
-/// `initialLocationForAppState`. Later milestones add the tutorial and
-/// What's New steps between setup and the shell.
-String initialLocationForAppState({required bool setupCompleted}) =>
-    setupCompleted ? '/' : '/setup';
+/// `initialLocationForAppState`: setup, then the tutorial (once), then
+/// What's New (once per version after an update), then the shell.
+String initialLocationForAppState({
+  required bool setupCompleted,
+  bool tutorialSeen = true,
+  String? whatsNewVersion = AppInfo.version,
+}) {
+  if (!setupCompleted) return '/setup';
+  if (!tutorialSeen) return '/tutorial';
+  if (whatsNewVersion != AppInfo.version) return '/whats-new';
+  return '/';
+}
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final setupCompleted = ref.watch(
-    settingsProvider.select((settings) => settings.setupCompleted),
+  final location = ref.watch(
+    settingsProvider.select(
+      (settings) => initialLocationForAppState(
+        setupCompleted: settings.setupCompleted,
+        tutorialSeen: settings.tutorialSeen,
+        whatsNewVersion: settings.whatsNewVersion,
+      ),
+    ),
   );
   final router = GoRouter(
-    initialLocation: initialLocationForAppState(setupCompleted: setupCompleted),
+    initialLocation: location,
     routes: [
+      GoRoute(
+        path: '/tutorial',
+        builder: (context, state) => const TutorialScreen(),
+      ),
+      GoRoute(
+        path: '/whats-new',
+        builder: (context, state) => const WhatsNewScreen(),
+      ),
       GoRoute(path: '/', builder: (context, state) => const MainShell()),
       GoRoute(path: '/setup', builder: (context, state) => const SetupScreen()),
       GoRoute(

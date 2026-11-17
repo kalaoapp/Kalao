@@ -45,13 +45,24 @@ void main() {
 
     await tester.tap(find.text('Get started'));
     await tester.pumpAndSettle();
+    // A new install sees the tutorial once, and no What's New page.
+    expect(find.text('Bring your own songs'), findsOneWidget);
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+    expect(find.text('Lyrics you can read'), findsOneWidget);
+    await tester.tap(find.text('Skip'));
+    await tester.pumpAndSettle();
     expect(find.text('Nothing to sing yet'), findsOneWidget);
     expect(find.byType(NavigationBar), findsOneWidget);
   });
 
   testWidgets('settings tab shows engine info and opens logs', (tester) async {
     await pumpApp(tester, {
-      'app_settings': jsonEncode({'setupCompleted': true}),
+      'app_settings': jsonEncode({
+        'setupCompleted': true,
+        'tutorialSeen': true,
+        'whatsNewVersion': '0.1.0',
+      }),
     });
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
@@ -76,7 +87,11 @@ void main() {
   testWidgets('a stored crash report shows the banner once', (tester) async {
     backend.crashReport = jsonEncode({'time': 0, 'error': 'boom'});
     await pumpApp(tester, {
-      'app_settings': jsonEncode({'setupCompleted': true}),
+      'app_settings': jsonEncode({
+        'setupCompleted': true,
+        'tutorialSeen': true,
+        'whatsNewVersion': '0.1.0',
+      }),
     });
     expect(find.byType(MaterialBanner), findsOneWidget);
     await tester.tap(find.text('Dismiss'));
@@ -90,7 +105,12 @@ void main() {
 
   testWidgets('the chosen language is applied', (tester) async {
     await pumpApp(tester, {
-      'app_settings': jsonEncode({'setupCompleted': true, 'localeTag': 'ja'}),
+      'app_settings': jsonEncode({
+        'setupCompleted': true,
+        'tutorialSeen': true,
+        'whatsNewVersion': '0.1.0',
+        'localeTag': 'ja',
+      }),
     });
     expect(find.text('ホーム'), findsWidgets);
   });

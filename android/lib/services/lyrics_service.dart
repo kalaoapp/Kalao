@@ -1,4 +1,5 @@
 import 'package:kalao/models/lyrics.dart';
+import 'package:kalao/models/settings.dart';
 import 'package:kalao/services/library_database.dart';
 import 'package:kalao/services/platform_bridge.dart';
 
@@ -52,12 +53,15 @@ class LyricsService {
     return doc;
   }
 
+  /// Reading layers by language: kana means Japanese (furigana and romaji),
+  /// otherwise Han characters get pinyin.
   Future<LyricDocument> _annotated(LyricDocument doc) async {
-    if (!doc.hasHan) return doc;
+    final japanese = doc.hasKana;
+    if (!japanese && !doc.hasHan) return doc;
     final lines = [...doc.lines];
     final annotated = await PlatformBridge.annotateLyrics([
       for (final line in lines) line.text,
-    ]);
+    ], layers: japanese ? const ['furigana', 'romaji'] : const ['pinyin']);
     for (final entry in annotated) {
       final kind = LyricLayerKind.values.asNameMap()[entry['kind']];
       final index = (entry['lineIndex'] as num).toInt();
@@ -72,7 +76,39 @@ class LyricsService {
         ),
       );
     }
-    return doc.copyWith(lines: lines, sourceLang: () => 'zh');
+    return doc.copyWith(lines: lines, sourceLang: () => japanese ? 'ja' : 'zh');
+  }
+
+  /// [doc] with each Chinese line's text in [variant] for display. Lines
+  /// whose conversion changes the length keep their own text, so readings
+  /// stay aligned. Japanese and other lyrics are returned unchanged.
+  Future<LyricDocument> withVariant(
+    LyricDocument doc,
+    ChineseVariant variant,
+  ) async {
+    final to = variant.conversion;
+    if (to == null || doc.sourceLang != 'zh') {
+      return doc.lines.any((line) => line.variantText != null)
+          ? doc.withLines([
+              for (final line in doc.lines)
+                line.copyWith(variantText: () => null),
+            ])
+          : doc;
+    }
+    final converted = await PlatformBridge.convertChinese([
+      for (final line in doc.lines) line.text,
+    ], to);
+    return doc.withLines([
+      for (final (index, line) in doc.lines.indexed)
+        line.copyWith(
+          variantText: () =>
+              index < converted.length &&
+                  converted[index] != line.text &&
+                  converted[index].length == line.text.length
+              ? converted[index]
+              : null,
+        ),
+    ]);
   }
 
   /// The per-song offset of the current version, clamped to ±5 s.

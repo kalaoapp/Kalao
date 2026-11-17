@@ -96,6 +96,7 @@ class LyricLine {
     this.section,
     this.sectionBreakBefore = false,
     this.layers = const {},
+    this.variantText,
   });
 
   factory LyricLine.fromJson(Map<String, dynamic> json) {
@@ -150,6 +151,14 @@ class LyricLine {
   final bool sectionBreakBefore;
   final Map<LyricLayerKind, LyricLayer> layers;
 
+  /// [text] in the Chinese variant chosen in settings (same length, so
+  /// readings and word ranges still apply), or null. Display only: it is
+  /// never stored.
+  final String? variantText;
+
+  /// What to show for this line.
+  String get display => variantText ?? text;
+
   bool get isBacking => voice == backingVoice;
 
   LyricLine copyWith({
@@ -157,6 +166,7 @@ class LyricLine {
     Duration? Function()? end,
     List<LyricWord>? words,
     Map<LyricLayerKind, LyricLayer>? layers,
+    String? Function()? variantText,
   }) => LyricLine(
     text: text,
     time: time ?? this.time,
@@ -167,6 +177,7 @@ class LyricLine {
     section: section,
     sectionBreakBefore: sectionBreakBefore,
     layers: layers ?? this.layers,
+    variantText: variantText != null ? variantText() : this.variantText,
   );
 
   LyricLine withLayer(LyricLayerKind kind, LyricLayer layer) =>
@@ -227,6 +238,10 @@ class LyricDocument {
   /// Whether any line contains Han characters (pinyin applies).
   bool get hasHan => lines.any((line) => containsHan(line.text));
 
+  /// Whether any line has kana, which makes the lyrics Japanese (furigana
+  /// and romaji apply, not pinyin).
+  bool get hasKana => lines.any((line) => containsKana(line.text));
+
   bool get hasWordTiming => lines.any((line) => line.words.isNotEmpty);
 
   Map<String, dynamic> toJson() => {
@@ -282,3 +297,7 @@ class LyricDocument {
 final _han = RegExp(r'[㐀-䶿一-鿿豈-﫿]');
 
 bool containsHan(String text) => _han.hasMatch(text);
+
+final _kana = RegExp(r'[\u3041-\u309f\u30a1-\u30fa]');
+
+bool containsKana(String text) => _kana.hasMatch(text);

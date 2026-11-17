@@ -30,6 +30,9 @@ class FakeBackend {
     'vocalLevel': 1.0,
     'volume': 1.0,
     'tempo': 1.0,
+    'key': 0.0,
+    'loopStartMs': null,
+    'loopEndMs': null,
   };
 
   /// Readings for the few characters tests use.
@@ -103,6 +106,7 @@ class FakeBackend {
           'positionMs': args['startMs'] ?? 0,
           'vocalLevel': player['vocalLevel'],
           'tempo': player['tempo'],
+          'key': player['key'],
         };
         return jsonEncode(player);
       case 'playerPlay':
@@ -125,6 +129,13 @@ class FakeBackend {
         return jsonEncode(player);
       case 'playerSetVolume':
         player['volume'] = args['volume'];
+        return jsonEncode(player);
+      case 'playerSetKey':
+        player['key'] = args['semitones'];
+        return jsonEncode(player);
+      case 'playerSetLoop':
+        player['loopStartMs'] = args['startMs'];
+        player['loopEndMs'] = args['endMs'];
         return jsonEncode(player);
       case 'playerSetTempo':
         player['tempo'] = args['rate'];
@@ -155,7 +166,21 @@ class FakeBackend {
           ),
         });
       case 'annotateLyrics':
-        return jsonEncode(_annotate((args['lines'] as List).cast<String>()));
+        return jsonEncode(
+          _annotate(
+            (args['lines'] as List).cast<String>(),
+            (args['layers'] as List?)?.cast<String>() ?? const ['pinyin'],
+          ),
+        );
+      case 'convertChinese':
+        return jsonEncode([
+          for (final text in (args['texts'] as List).cast<String>())
+            args['to'] == 't2s'
+                ? text.replaceAll('愛', '爱')
+                : text.replaceAll('爱', '愛'),
+        ]);
+      case 'setScreenAwake':
+        return null;
       case 'runNativeDataJob':
         final request = jsonDecode(args['request_json'] as String) as Map;
         return jsonEncode(_job(request.cast<String, Object?>()));
@@ -298,20 +323,34 @@ class FakeBackend {
     return '${rows.join('\n')}\n';
   }
 
-  static List<Map<String, Object?>> _annotate(List<String> lines) => [
-    for (var i = 0; i < lines.length; i++)
-      if (lines[i].split('').any(pinyin.containsKey))
-        {
-          'lineIndex': i,
-          'kind': 'pinyin',
-          'origin': 'auto',
-          'segments': [
-            for (var c = 0; c < lines[i].length; c++)
-              if (pinyin[lines[i][c]] case final reading?)
-                {'start': c, 'end': c + 1, 'reading': reading},
-          ],
-        },
+  /// Kana readings and romaji for the few kanji tests use.
+  static const furigana = {'桜': 'さくら', '咲': 'さ'};
+  static const romaji = {'桜': 'sakura', '咲': 'sa', 'く': 'ku', 'が': 'ga'};
+
+  static List<Map<String, Object?>> _annotate(
+    List<String> lines,
+    List<String> layers,
+  ) => [
+    for (final layer in layers)
+      for (var i = 0; i < lines.length; i++)
+        if (lines[i].split('').any(_readings(layer).containsKey))
+          {
+            'lineIndex': i,
+            'kind': layer,
+            'origin': 'auto',
+            'segments': [
+              for (var c = 0; c < lines[i].length; c++)
+                if (_readings(layer)[lines[i][c]] case final reading?)
+                  {'start': c, 'end': c + 1, 'reading': reading},
+            ],
+          },
   ];
+
+  static Map<String, String> _readings(String layer) => switch (layer) {
+    'furigana' => furigana,
+    'romaji' => romaji,
+    _ => pinyin,
+  };
 
   static Map<String, Object?> _job(Map<String, Object?> request) {
     switch (request['operation']) {

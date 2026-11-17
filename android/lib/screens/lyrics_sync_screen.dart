@@ -84,7 +84,7 @@ class _LyricsSyncScreenState extends ConsumerState<LyricsSyncScreen> {
   int _tapPosition() {
     final latency = ref.read(settingsProvider).tapLatencyMs;
     final tempo = ref.read(playerProvider).engine.tempo;
-    return _player.position.inMilliseconds - (latency * tempo).round();
+    return _player.position().inMilliseconds - (latency * tempo).round();
   }
 
   void _down() {

@@ -6,11 +6,13 @@ import 'package:kalao/models/lyrics.dart';
 import 'package:kalao/models/player_state.dart';
 import 'package:kalao/models/song.dart';
 import 'package:kalao/providers/library_provider.dart';
+import 'package:kalao/providers/settings_provider.dart';
 import 'package:kalao/services/history_database.dart';
 import 'package:kalao/services/karaoke_deck.dart';
 import 'package:kalao/services/library_database.dart';
 import 'package:kalao/services/playback_handler.dart';
 import 'package:kalao/utils/logger.dart';
+import 'package:kalao/utils/lyrics_timeline.dart';
 
 const _log = AppLogger('Player');
 
@@ -30,6 +32,9 @@ class NowPlaying {
     this.lyrics,
     this.engine = EnginePlayerState.idle,
     this.manualLine = 0,
+    this.mode = PlayMode.learn,
+    this.singer = '',
+    this.abStart,
   });
 
   final Song? song;
@@ -39,18 +44,34 @@ class NowPlaying {
   /// The highlighted line when stepping manually through untimed lyrics.
   final int manualLine;
 
+  /// Learn (original vocals, study tools) or Karaoke (backing track, big
+  /// lyrics). `listen` only appears in history from before modes existed.
+  final PlayMode mode;
+
+  /// Who is singing (from the queue); empty when nobody was named.
+  final String singer;
+
+  /// The first line picked for an A–B repeat, waiting for the second.
+  final int? abStart;
+
   bool get isInstrumental => engine.canSwitch && engine.vocalLevel < 0.5;
+  bool get isKaraoke => mode == PlayMode.karaoke;
 
   NowPlaying copyWith({
     Song? song,
     LyricDocument? Function()? lyrics,
     EnginePlayerState? engine,
     int? manualLine,
+    PlayMode? mode,
+    int? Function()? abStart,
   }) => NowPlaying(
     song: song ?? this.song,
     lyrics: lyrics != null ? lyrics() : this.lyrics,
     engine: engine ?? this.engine,
     manualLine: manualLine ?? this.manualLine,
+    mode: mode ?? this.mode,
+    singer: singer,
+    abStart: abStart != null ? abStart() : this.abStart,
   );
 }
 
@@ -59,9 +80,9 @@ final playerProvider = NotifierProvider<PlayerController, NowPlaying>(
 );
 
 /// Plays library songs on the engine, keeps history and the session for
-/// "Continue singing", and drives the media session (Mornye's
-/// music_player_service + playback_session_restore roles, sized for one deck
-/// and no queue until M3.4).
+/// "Continue singing", drives the media session and moves through the queue
+/// (Mornye's music_player_service + playback_session_restore roles, sized
+/// for one deck).
 class PlayerController extends Notifier<NowPlaying>
     implements PlaybackCommands {
   late KaraokeDeck _deck;
@@ -88,6 +109,10 @@ class PlayerController extends Notifier<NowPlaying>
           );
     _focus = focus;
     unawaited(focus?.start());
+    ref.listen(
+      settingsProvider.select((settings) => settings.chineseVariant),
+      (_, _) => unawaited(_applyVariant()),
+    );
     ref.onDispose(() {
       _states?.cancel();
       _sessionTimer?.cancel();
@@ -99,16 +124,17 @@ class PlayerController extends Notifier<NowPlaying>
   LibraryServices get _services => ref.read(libraryServicesProvider);
 
   void _onEngine(EnginePlayerState engine) {
-    final wasPlaying = state.engine.playing;
+    final before = state.engine;
     state = state.copyWith(engine: engine);
     if (engine.playing && !_listened.isRunning) _listened.start();
     if (!engine.playing && _listened.isRunning) _listened.stop();
-    if (wasPlaying && !engine.playing) unawaited(_saveSession());
+    if (before.playing && !engine.playing) unawaited(_saveSession());
     _handler?.publish(state.song, engine);
+    if (engine.completed && !before.completed) unawaited(playNextInQueue());
   }
 
   /// Interpolated engine position for lyric display.
-  Duration get position => _deck.position;
+  Duration position() => _deck.position;
 
   /// The files to load for [song]: original + instrumental when both exist,
   /// otherwise whichever exists.
@@ -116,23 +142,38 @@ class PlayerController extends Notifier<NowPlaying>
     for (final file in song.media) file.kind.name: file.path,
   };
 
-  /// Loads [song] (at [start]) and starts playing. [instrumental] picks the
-  /// backing track when the song has one.
+  /// The mode a song opens in: the one last used for it, else Learn.
+  static PlayMode modeFor(Song song) => song.lastMode == PlayMode.karaoke.name
+      ? PlayMode.karaoke
+      : PlayMode.learn;
+
+  /// Loads [song] (at [start]) and starts playing in [mode] (default: the
+  /// mode last used for the song). Karaoke plays the backing track when the
+  /// song has one.
   Future<void> playSong(
     Song song, {
     Duration start = Duration.zero,
-    bool? instrumental,
+    PlayMode? mode,
+    String singer = '',
   }) async {
     await _finishPlay();
     final sources = sourcesFor(song);
     if (sources.isEmpty) return;
-    final lyrics = await _services.library.lyrics(song.id);
-    state = NowPlaying(song: song, lyrics: lyrics, engine: state.engine);
+    final playMode = mode ?? modeFor(song);
+    final lyrics = await _loadLyrics(song.id);
+    state = NowPlaying(
+      song: song,
+      lyrics: lyrics,
+      engine: state.engine,
+      mode: playMode,
+      singer: singer,
+    );
     await _deck.load(songId: '${song.id}', sources: sources, start: start);
+    // Speed, key and loops belong to one play of one song.
     if (_deck.state.tempo != 1) await _deck.setTempo(1);
-    final useBacking = instrumental ?? song.lastMode == PlayMode.karaoke.name;
+    if (_deck.state.key != 0) await _deck.setKey(0);
     if (song.hasBacking) {
-      await _deck.switchTrack(instrumental: useBacking);
+      await _deck.switchTrack(instrumental: playMode == PlayMode.karaoke);
     } else {
       await _deck.setVocalLevel(1);
     }
@@ -145,7 +186,8 @@ class PlayerController extends Notifier<NowPlaying>
         song.durationMs,
         null,
       ),
-      mode: _mode,
+      mode: playMode,
+      singer: singer,
     );
     _listened.reset();
     ref.read(libraryRevisionProvider.notifier).bump();
@@ -155,9 +197,29 @@ class PlayerController extends Notifier<NowPlaying>
     });
   }
 
-  PlayMode get _mode => _deck.state.canSwitch && _deck.state.vocalLevel < 0.5
-      ? PlayMode.karaoke
-      : PlayMode.listen;
+  /// The song's current lyrics in the Chinese variant from settings.
+  Future<LyricDocument?> _loadLyrics(int songId) async {
+    final lyrics = await _services.library.lyrics(songId);
+    if (lyrics == null) return null;
+    try {
+      return await _services.lyrics.withVariant(
+        lyrics,
+        ref.read(settingsProvider).chineseVariant,
+      );
+    } catch (error) {
+      _log.w('Chinese variant conversion failed', error);
+      return lyrics;
+    }
+  }
+
+  Future<void> _applyVariant() async {
+    final song = state.song;
+    if (song == null) return;
+    final lyrics = await _loadLyrics(song.id);
+    if (state.song?.id == song.id) {
+      state = state.copyWith(lyrics: () => lyrics);
+    }
+  }
 
   Future<void> _finishPlay() async {
     final id = _playId;
@@ -166,7 +228,7 @@ class PlayerController extends Notifier<NowPlaying>
     await _services.history.finishPlay(
       id,
       listened: _listened.elapsed,
-      mode: _mode,
+      mode: state.mode,
     );
   }
 
@@ -217,13 +279,35 @@ class PlayerController extends Notifier<NowPlaying>
     _handler?.publish(null, EnginePlayerState.idle);
   }
 
+  /// Plays the first song in the queue (when a song ends, or on request).
+  /// Returns false when the queue is empty.
+  Future<bool> playNextInQueue() async {
+    while (true) {
+      final item = await _services.queue.takeFirst();
+      if (item == null) return false;
+      final song = await _services.library.song(item.songId);
+      // The song may have been deleted since it was queued.
+      if (song == null) continue;
+      await playSong(song, mode: item.mode, singer: item.singer);
+      return true;
+    }
+  }
+
+  /// Learn ↔ Karaoke for this play; remembered for the song.
+  Future<void> setMode(PlayMode mode) async {
+    final song = state.song;
+    if (song == null || mode == state.mode) return;
+    state = state.copyWith(mode: mode);
+    if (state.engine.canSwitch) {
+      await _deck.switchTrack(instrumental: mode == PlayMode.karaoke);
+    }
+    await _services.library.setLastMode(song.id, mode.name);
+  }
+
   /// Original ↔ instrumental, keeping the position (150 ms crossfade).
   Future<void> setInstrumental(bool instrumental) async {
-    final song = state.song;
-    if (song == null || !state.engine.canSwitch) return;
+    if (state.song == null || !state.engine.canSwitch) return;
     await _deck.switchTrack(instrumental: instrumental);
-    final mode = instrumental ? PlayMode.karaoke : PlayMode.listen;
-    await _services.library.setLastMode(song.id, mode.name);
   }
 
   /// Vocal-guide blend (0 = instrumental only, 1 = original vocals).
@@ -237,8 +321,85 @@ class PlayerController extends Notifier<NowPlaying>
     await _deck.setVolume(_volume);
   }
 
-  /// Manual line stepping for untimed lyrics (tap, ↑/↓).
-  void stepLine(int delta) => setManualLine(state.manualLine + delta);
+  /// Playback speed 0.5–1.5 at the same pitch.
+  Future<void> setTempo(double rate) async {
+    if (state.song == null) return;
+    await _deck.setTempo(rate);
+  }
+
+  /// Transposition in semitones, ±6.
+  Future<void> setKey(double semitones) async {
+    if (state.song == null) return;
+    await _deck.setKey(semitones);
+  }
+
+  /// The song-time range of lines [first]..[last] of the timed lyrics.
+  (Duration, Duration)? _lineRange(int first, int last) {
+    final lyrics = state.lyrics;
+    if (lyrics == null || !lyrics.timed) return null;
+    if (first < 0 || last >= lyrics.lines.length || first > last) return null;
+    final start = lyrics.lines[first].time.inMilliseconds - lyrics.offsetMs;
+    final end =
+        lineEndMs(
+          lyrics.lines[last],
+          nextStartMs: nextLeadStartMs(lyrics.lines, last),
+        ) -
+        lyrics.offsetMs;
+    final from = start < 0 ? 0 : start;
+    // The engine refuses loops shorter than a quarter of a second.
+    final to = end < from + 300 ? from + 300 : end;
+    return (Duration(milliseconds: from), Duration(milliseconds: to));
+  }
+
+  /// Repeats the line being sung, or stops repeating (Learn mode).
+  Future<void> toggleLineLoop() async {
+    if (state.engine.looping || state.abStart != null) return clearLoop();
+    final active = state.lyrics?.activeLineAt(_deck.position);
+    final range = active == null ? null : _lineRange(active, active);
+    if (range == null) return;
+    await _deck.setLoop(start: range.$1, end: range.$2);
+    await _deck.seek(range.$1);
+  }
+
+  /// A–B repeat: the first call marks line [index] as one end, the second
+  /// repeats everything between the two lines.
+  Future<void> markAb(int index) async {
+    final first = state.abStart;
+    if (first == null) {
+      if (state.engine.looping) await _deck.setLoop();
+      state = state.copyWith(abStart: () => index);
+      return;
+    }
+    state = state.copyWith(abStart: () => null);
+    final range = first <= index
+        ? _lineRange(first, index)
+        : _lineRange(index, first);
+    if (range == null) return;
+    await _deck.setLoop(start: range.$1, end: range.$2);
+    await _deck.seek(range.$1);
+  }
+
+  Future<void> clearLoop() async {
+    state = state.copyWith(abStart: () => null);
+    if (state.engine.looping) await _deck.setLoop();
+  }
+
+  /// Line stepping (↑/↓, buttons): timed lyrics jump to the previous or next
+  /// line; untimed lyrics move the highlighted line.
+  Future<void> stepLine(int delta) async {
+    final lyrics = state.lyrics;
+    if (lyrics == null || lyrics.isEmpty) return;
+    if (!lyrics.timed) return setManualLine(state.manualLine + delta);
+    var index = (lyrics.activeLineAt(_deck.position) ?? -1) + delta;
+    while (index >= 0 &&
+        index < lyrics.lines.length &&
+        lyrics.lines[index].isBacking) {
+      index += delta.sign;
+    }
+    if (index < 0 || index >= lyrics.lines.length) return;
+    final ms = lyrics.lines[index].time.inMilliseconds - lyrics.offsetMs;
+    await seek(Duration(milliseconds: ms < 0 ? 0 : ms));
+  }
 
   void setManualLine(int index) {
     final count = state.lyrics?.lines.length ?? 0;
@@ -256,17 +417,11 @@ class PlayerController extends Notifier<NowPlaying>
     state = state.copyWith(lyrics: () => lyrics.copyWith(offsetMs: saved));
   }
 
-  /// Playback speed (the sync editor slows the song while timing).
-  Future<void> setTempo(double rate) async {
-    if (state.song == null) return;
-    await _deck.setTempo(rate);
-  }
-
   /// Reloads the current song's lyrics after an import or edit.
   Future<void> reloadLyrics() async {
     final song = state.song;
     if (song == null) return;
-    final lyrics = await _services.library.lyrics(song.id);
+    final lyrics = await _loadLyrics(song.id);
     state = state.copyWith(lyrics: () => lyrics, manualLine: 0);
   }
 }
