@@ -103,10 +103,13 @@ jobs:
 
       - name: Activate pinned Rust toolchain
         working-directory: rust_backend
-        run: rustup show
+        run: rustup toolchain install
 
-      - name: Cache Cargo registry and build output
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Restore everywhere, save only from main (the Save step below), so pull
+      # requests do not push the repository past its cache quota.
+      - name: Restore Cargo registry and build output
+        id: cargo-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry/index
@@ -119,12 +122,26 @@ jobs:
       - name: Rust formatting, Clippy and unit tests
         run: bash scripts/check_rust_backend.sh
 
+      - name: Save Cargo registry and build output
+        if: github.ref == 'refs/heads/main' && steps.cargo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            rust_backend/target
+          key: ${{ steps.cargo-cache.outputs.cache-primary-key }}
+
       - name: Script tests
         run: python3 -m unittest discover -s scripts -p 'test_*.py'
 
   android:
     name: Android build & native tests
     runs-on: ubuntu-latest
+    env:
+      # JDK 25 warns when Gradle's launcher loads its native library.
+      GRADLE_OPTS: --enable-native-access=ALL-UNNAMED
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -161,10 +178,13 @@ jobs:
 
       - name: Activate pinned Rust toolchain
         working-directory: rust_backend
-        run: rustup show
+        run: rustup toolchain install
 
-      - name: Cache Cargo registry and build output
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Restore everywhere, save only from main (the Save step below), so pull
+      # requests do not push the repository past its cache quota.
+      - name: Restore Cargo registry and build output
+        id: cargo-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry/index
@@ -187,10 +207,21 @@ jobs:
       - name: Build and audit release APKs
         run: bash scripts/build_android.sh
 
+      - name: Save Cargo registry and build output
+        if: github.ref == 'refs/heads/main' && steps.cargo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            rust_backend/target
+          key: ${{ steps.cargo-cache.outputs.cache-primary-key }}
+
       - name: Verify APK signatures
         run: |
           for apk in android/build/app/outputs/flutter-apk/app-*release.apk; do
-            "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify "$apk"
+            "$ANDROID_HOME/build-tools/37.0.0/apksigner" -J-enable-native-access=ALL-UNNAMED verify "$apk"
             "$ANDROID_HOME/build-tools/37.0.0/zipalign" -c -P 16 4 "$apk"
           done
 

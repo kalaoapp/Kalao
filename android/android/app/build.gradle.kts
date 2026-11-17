@@ -5,8 +5,8 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
-    id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    // Built-in Kotlin compiles the Kotlin sources; no kotlin-android plugin.
+    // The Flutter Gradle Plugin must be applied after the Android Gradle plugin.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
@@ -41,8 +41,9 @@ android {
     }
 
     sourceSets.getByName("main") {
-        java.srcDir("src/rust/kotlin")
-        java.srcDir(rustBackendDir.resolve("target/bindings/kotlin"))
+        // Built-in Kotlin compiles only kotlin source directories.
+        kotlin.directories += "src/rust/kotlin"
+        kotlin.directories += rustBackendDir.resolve("target/bindings/kotlin").path
         jniLibs.srcDir(rustBackendDir.resolve("target/android/jniLibs"))
     }
 
@@ -50,12 +51,6 @@ android {
         isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_25
         targetCompatibility = JavaVersion.VERSION_25
-    }
-
-    kotlin {
-        compilerOptions {
-            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_25)
-        }
     }
 
     signingConfigs {
@@ -80,7 +75,6 @@ android {
         targetSdk = 37
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        multiDexEnabled = true
         ndk {
             abiFilters.clear()
             abiFilters += rustAndroidAbis
@@ -119,6 +113,12 @@ android {
             include(*rustAndroidAbis.toTypedArray())
             isUniversalApk = true
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_25)
     }
 }
 

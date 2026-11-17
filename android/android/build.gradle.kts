@@ -15,6 +15,8 @@ subprojects {
                     targetCompatibility = JavaVersion.VERSION_25
                 }
 
+                // Plugins declare minSdk < 21, where AGP needs multidex for
+                // core library desugaring.
                 defaultConfig {
                     multiDexEnabled = true
                 }
