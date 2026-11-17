@@ -52,7 +52,7 @@ Each feature lists its milestone (see ROADMAP.md). **Source:** P = in the POC, R
 | # | Feature | Src | M |
 | --- | --- | --- | --- |
 | 4.1 | **On-device AI stem separation** (vocals / instrumental) for any song, run as a resumable foreground job with a progress notification; results cached | R | M6 |
-| 4.2 | Model download on first use (not bundled), checksum-verified; choice of fast vs. high-quality model | N | M6 |
+| 4.2 | In-app model manager: install and delete stem models from a built-in catalogue (not bundled), checksum-verified; choice of default model (fast, balanced or quality) | N | M6 |
 | 4.3 | **Optional remote stem processing** on the separate Kalao stem server, using a personal API key (keys are given to donors). The user enters the key in Settings; there is no other app-side donation logic | R | M6 |
 | 4.4 | Automatic fallback to on-device if the remote server is unreachable or the key is rejected | N | M6 |
 

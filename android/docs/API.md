@@ -8,7 +8,7 @@ Kalao has no account server. The app makes network calls only to the services be
 | MyMemory `api.mymemory.translated.net/get` | `kalao-providers` | Lyric translation (IMPLEMENTATION.md §11) |
 | Kalao stem server (below) | `kalao-stems` | Remote stem processing, if the user entered a stem API key |
 | GitHub Releases `api.github.com/repos/kalaoapp/Kalao/releases/latest` and its APK assets | `update_checker.dart` / `apk_downloader.dart` | Update check (9.8), at most once a day if enabled; APK download only when the user taps Update |
-| Model host (GitHub Releases assets) | `kalao-stems` | Stem model download on first use |
+| Model host (GitHub Releases assets) | `kalao-stems` | Stem model download when the user installs a model |
 
 No request carries a user identifier. The only device-related value sent anywhere is the salted install hash, and only to the stem server. The optional MyMemory contact email is sent only to MyMemory.
 

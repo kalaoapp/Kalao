@@ -70,7 +70,7 @@ Annotation layers per line:
 | `shared_preferences` | `settings_provider` | `AppSettings` JSON (IMPLEMENTATION.md §16), daily MyMemory character counter |
 | `flutter_secure_storage` | `secure_storage_options.dart` | Stem API key, install ID, MyMemory contact email, extension `secret` settings |
 | `extensions/` | `kalao-extensions` | Installed packages, per-extension key-value storage and cookies |
-| `models/` | `kalao-stems` | Downloaded ONNX models (verified by SHA-256) |
+| `models/` | `kalao-stems` | User-installed ONNX models (verified by SHA-256), plus partial downloads; deleted from the Models screen |
 | `stems/<sha256>/` | `kalao-stems` | `vocals.flac`, `instrumental.flac`, `job.json` checkpoints |
 | `melody/<sha256>.bin` | `kalao-audio` | Pitch frames (u16 cents per 10 ms) |
 | `translations/` | `lyrics_translation.dart` | Mornye's translation cache files, keyed by line-list hash + language pair |

@@ -64,7 +64,7 @@ Not taken from Mornye: `audioplayers` and its forks, `media_kit*`, `liquid_glass
 | `androidx.lifecycle:lifecycle-runtime-ktx` | 2.11.0 | Lifecycle | Mornye |
 | `androidx.documentfile:documentfile` | 1.1.0 | SAF | Mornye |
 | `androidx.activity:activity-ktx` | 1.13.0 | Result APIs | Mornye |
-| `com.microsoft.onnxruntime:onnxruntime-android` | latest 1.x | Provides `libonnxruntime.so` (with NNAPI EP) loaded by `ort` | new |
+| `com.microsoft.onnxruntime:onnxruntime-android` | latest 1.x | Provides `libonnxruntime.so` (with XNNPACK EP) loaded by `ort` | new |
 
 No `play-services-*` artifacts.
 
@@ -82,7 +82,7 @@ No `play-services-*` artifacts.
 | `signalsmith-stretch` (Rust bindings to Signalsmith Stretch, MIT) | latest | audio | Key change and tempo without pitch change (ADR-005) |
 | `ringbuf` | 0.4 | audio | Lock-free decoder → callback buffers |
 | `flacenc` | latest | stems, audio | Encode stems and recordings to FLAC (pure Rust; decoded back by Symphonia) |
-| `ort` | 2.x (`load-dynamic`) | stems | ONNX Runtime; NNAPI/XNNPACK execution providers |
+| `ort` | 2.x (`load-dynamic`) | stems | ONNX Runtime; XNNPACK execution provider, CPU fallback (QNN optional) |
 | `ndarray` | 0.16 | stems | Tensors for inference |
 | `realfft` | 3.x | stems, audio | STFT/iSTFT (models that need spectrograms), pitch analysis |
 | `pinyin_pro` | =3.29.4 (MIT) | core::annotate, search keys | Rust port of `pinyin-pro`, the library the POC used: segmentation, polyphones in context, tone marks; the POC's fixtures pass unchanged. Replaces the planned `pinyin` + `jieba-rs` (M1.12) |

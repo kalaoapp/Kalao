@@ -130,10 +130,10 @@ Tests added: Rust `core::lyrics::doc` (eLRC styles, round trip, LRC export, TTML
 
 | # | Task | Features | Source / § |
 | --- | --- | --- | --- |
-| M6.1 | Copy `core::progress` (download progress); `crates/stems`: model manager (download from GitHub Releases assets, SHA-256 list in app), ONNX Runtime via `ort` + `onnxruntime-android`, NNAPI/XNNPACK/CPU, chunked inference with overlap-add, checkpoints, FLAC output | 4.1, 4.2 | STEM_SEPARATION §1 |
-| M6.2 | Benchmark and choose Fast and Quality models on 3 reference devices; confirm licences | 4.2 | — |
+| M6.1 | Copy `core::progress` (download progress); `crates/stems`: model manager (built-in catalogue, install with resumable download from GitHub Releases assets and SHA-256 check, delete, list with sizes), ONNX Runtime via `ort` + `onnxruntime-android`, XNNPACK/CPU (QNN optional), chunked inference with overlap-add, checkpoints, FLAC output | 4.1, 4.2 | STEM_SEPARATION §1 |
+| M6.2 | Benchmark and choose Fast, Balanced and Quality models on 3 reference devices; confirm licences | 4.2 | — |
 | M6.3 | Stem job service: `BackgroundWorkService` kind `stems`, progress notification with cancel, resume after process death, battery/thermal pause, queue | 4.1 | `BackgroundWorkService.kt` |
-| M6.4 | Stems UI: per-song "Separate", model choice, job list, storage usage (Mornye cache management page) | 4.1, 4.2 | `cache_management_page.dart` |
+| M6.4 | Stems UI: per-song "Separate", Models screen (install, delete, default model; STEM_SEPARATION §1.2), per-song model override, job list, storage usage (Mornye cache management page) | 4.1, 4.2 | `cache_management_page.dart` |
 | M6.5 | Remote client: key field, Test key, salted install hash, upload/progress/download, checksum, fallback on any failure | 4.3, 4.4 | STEM_SEPARATION §2 |
 | M6.6 | `stem-server/`: gateway (axum, sqlx, Redis, limits), Python Demucs worker, `stem-admin` CLI, Prometheus metrics, `compose.yaml`, retention sweeper | 4.3 | — |
 | M6.7 | `crates/providers` MyMemory client; `lyrics_translation.dart` adapted; quota handling; optional contact email; language table | 2.12 | `lyrics_translation*.dart` |
