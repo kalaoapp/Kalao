@@ -2,7 +2,11 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:kalao/providers/library_provider.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:kalao/providers/player_provider.dart';
+import 'package:kalao/providers/update_provider.dart';
+import 'package:kalao/services/update_service.dart';
 import 'package:kalao/services/app_storage.dart';
 import 'package:kalao/services/history_database.dart';
 import 'package:kalao/services/import_service.dart';
@@ -57,6 +61,13 @@ List<Override> testOverrides(
   Stream<Object?>? events,
 }) => [
   libraryServicesProvider.overrideWithValue(services),
+  // GitHub has no release yet: the startup update check finds nothing.
+  updateServiceProvider.overrideWithValue(
+    UpdateService(
+      client: MockClient((request) async => http.Response('', 404)),
+      cacheDir: Directory(p.join(services.storage.root.path, 'updates')),
+    ),
+  ),
   karaokeDeckProvider.overrideWith((ref) {
     final deck = KaraokeDeck(events: events ?? const Stream.empty())..start();
     ref.onDispose(deck.dispose);

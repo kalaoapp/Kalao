@@ -302,5 +302,18 @@
   "restoreApply": "還原",
   "sharedUnsupported": "Kalao 可以開啟備份、歌詞（.lrc、.ttml、.txt）和音訊檔案",
   "sharedLyricsChooseSong": "把歌詞加入到",
-  "sharedLyricsNoSongs": "請先匯入歌曲，再為它加入歌詞"
+  "sharedLyricsNoSongs": "請先匯入歌曲，再為它加入歌詞",
+  "updateTitle": "Kalao {version} 已發布",
+  "updateCurrent": "目前版本 {version}。",
+  "updateNoNotes": "沒有更新說明。",
+  "updateDownloading": "正在下載並校驗…",
+  "updateFailed": "更新失敗：{error}",
+  "updateOpenPage": "發布頁面",
+  "updateLater": "稍後",
+  "updateInstall": "更新",
+  "updateCheckSetting": "檢查更新",
+  "updateCheckSettingSubtitle": "Kalao 每天向 GitHub 查詢一次最新版本。只有你點按「更新」才會下載。",
+  "updateCheckNow": "立即檢查",
+  "updateUpToDate": "Kalao 已是最新版本",
+  "updateCheckFailed": "無法檢查更新：{error}"
 }

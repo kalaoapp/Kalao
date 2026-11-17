@@ -302,5 +302,18 @@
   "restoreApply": "復元",
   "sharedUnsupported": "Kalao で開けるのはバックアップ、歌詞（.lrc、.ttml、.txt）、音声ファイルです",
   "sharedLyricsChooseSong": "この歌詞を追加する曲",
-  "sharedLyricsNoSongs": "先に曲をインポートしてから歌詞を追加してください"
+  "sharedLyricsNoSongs": "先に曲をインポートしてから歌詞を追加してください",
+  "updateTitle": "Kalao {version} が利用できます",
+  "updateCurrent": "現在のバージョンは {version} です。",
+  "updateNoNotes": "リリースノートはありません。",
+  "updateDownloading": "ダウンロードして確認中…",
+  "updateFailed": "アップデートに失敗しました：{error}",
+  "updateOpenPage": "リリースページ",
+  "updateLater": "後で",
+  "updateInstall": "アップデート",
+  "updateCheckSetting": "アップデートを確認",
+  "updateCheckSettingSubtitle": "1 日 1 回、GitHub で最新リリースを確認します。「アップデート」をタップしない限りダウンロードしません。",
+  "updateCheckNow": "今すぐ確認",
+  "updateUpToDate": "Kalao は最新です",
+  "updateCheckFailed": "アップデートを確認できませんでした：{error}"
 }

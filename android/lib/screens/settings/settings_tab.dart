@@ -9,12 +9,14 @@ import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/l10n/supported_locales.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
+import 'package:kalao/providers/update_provider.dart';
 import 'package:kalao/screens/lyrics_options_sheet.dart';
 import 'package:kalao/services/custom_font_service.dart';
 import 'package:kalao/services/external_links.dart';
 import 'package:kalao/services/platform_bridge.dart';
 import 'package:kalao/theme/app_tokens.dart';
 import 'package:kalao/widgets/settings_group.dart';
+import 'package:kalao/widgets/update_dialog.dart';
 
 /// Engine details for About; null when the Rust library is unavailable.
 final backendInfoProvider = FutureProvider<BackendInfo?>((ref) async {
@@ -103,6 +105,14 @@ class SettingsTab extends ConsumerWidget {
                 title: Text(l10n.aboutVersion),
                 subtitle: const Text(AppInfo.version),
               ),
+              SwitchListTile(
+                secondary: const Icon(Icons.update),
+                title: Text(l10n.updateCheckSetting),
+                subtitle: Text(l10n.updateCheckSettingSubtitle),
+                value: settings.checkUpdates,
+                onChanged: notifier.setCheckUpdates,
+              ),
+              const _CheckUpdateTile(),
               const _EngineTile(),
               ListTile(
                 leading: const Icon(Icons.code),
@@ -178,6 +188,56 @@ class _CustomFontTile extends ConsumerWidget {
         );
         await notifier.setCustomFontPath(stored);
       },
+    );
+  }
+}
+
+class _CheckUpdateTile extends ConsumerStatefulWidget {
+  const _CheckUpdateTile();
+
+  @override
+  ConsumerState<_CheckUpdateTile> createState() => _CheckUpdateTileState();
+}
+
+class _CheckUpdateTileState extends ConsumerState<_CheckUpdateTile> {
+  bool _checking = false;
+
+  Future<void> _check() async {
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _checking = true);
+    try {
+      final release = await ref
+          .read(updateControllerProvider.notifier)
+          .checkNow();
+      if (!mounted) return;
+      if (release == null) {
+        messenger.showSnackBar(SnackBar(content: Text(l10n.updateUpToDate)));
+      } else {
+        await showUpdateDialog(context, release);
+      }
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.updateCheckFailed('$error'))),
+      );
+    } finally {
+      if (mounted) setState(() => _checking = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return ListTile(
+      leading: const Icon(Icons.system_update_outlined),
+      title: Text(l10n.updateCheckNow),
+      trailing: _checking
+          ? const SizedBox.square(
+              dimension: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : null,
+      onTap: _checking ? null : _check,
     );
   }
 }

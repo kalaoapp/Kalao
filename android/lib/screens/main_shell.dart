@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/providers/backup_provider.dart';
+import 'package:kalao/providers/update_provider.dart';
 import 'package:kalao/screens/home_tab.dart';
 import 'package:kalao/screens/library_screen.dart';
 import 'package:kalao/screens/queue_tab.dart';
@@ -15,6 +16,7 @@ import 'package:kalao/services/app_crash_service.dart';
 import 'package:kalao/widgets/app_crash_banner.dart';
 import 'package:kalao/widgets/empty_state.dart';
 import 'package:kalao/widgets/mini_player.dart';
+import 'package:kalao/widgets/update_dialog.dart';
 
 /// The tabbed home of the app. Tabs keep their state while hidden.
 class MainShell extends ConsumerStatefulWidget {
@@ -38,7 +40,18 @@ class _MainShellState extends ConsumerState<MainShell> {
     // On start and resume: files opened with Kalao (M4.12), then a due
     // scheduled backup (ADR-016).
     _lifecycle = AppLifecycleListener(onResume: _onForeground);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _onForeground());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _onForeground();
+      unawaited(_offerUpdate());
+    });
+  }
+
+  /// The daily update check (FEATURES 9.8), on start only.
+  Future<void> _offerUpdate() async {
+    final release = await ref
+        .read(updateControllerProvider.notifier)
+        .checkIfDue();
+    if (release != null && mounted) await showUpdateDialog(context, release);
   }
 
   void _onForeground() {

@@ -426,5 +426,46 @@
   "restoreApply": "Restore",
   "sharedUnsupported": "Kalao can open backups, lyrics (.lrc, .ttml, .txt) and audio files",
   "sharedLyricsChooseSong": "Add these lyrics to",
-  "sharedLyricsNoSongs": "Import a song first, then add lyrics to it"
+  "sharedLyricsNoSongs": "Import a song first, then add lyrics to it",
+  "updateTitle": "Kalao {version} is available",
+  "@updateTitle": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "updateCurrent": "You have {version}.",
+  "@updateCurrent": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "updateNoNotes": "No release notes.",
+  "updateDownloading": "Downloading and checking…",
+  "updateFailed": "Update failed: {error}",
+  "@updateFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "updateOpenPage": "Release page",
+  "updateLater": "Later",
+  "updateInstall": "Update",
+  "updateCheckSetting": "Check for updates",
+  "updateCheckSettingSubtitle": "Once a day, Kalao asks GitHub for the latest release. Nothing downloads unless you tap Update.",
+  "updateCheckNow": "Check now",
+  "updateUpToDate": "Kalao is up to date",
+  "updateCheckFailed": "Could not check for updates: {error}",
+  "@updateCheckFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
 }

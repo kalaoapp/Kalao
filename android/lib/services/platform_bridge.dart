@@ -417,6 +417,22 @@ class PlatformBridge {
     ];
   }
 
+  /// The device's ABIs, preferred first (`arm64-v8a`, …).
+  static Future<List<String>> getSupportedAbis() async => [
+    for (final abi
+        in await backendChannel.invokeMethod<List<Object?>>(
+              'getSupportedAbis',
+            ) ??
+            const <Object?>[])
+      abi! as String,
+  ];
+
+  /// Opens the system installer for a verified update APK. False when the
+  /// user first has to allow Kalao to install apps (Settings was opened).
+  static Future<bool> installApk(String path) async =>
+      await backendChannel.invokeMethod<bool>('installApk', {'path': path}) ??
+      false;
+
   /// The last native crash report as JSON text, or null.
   static Future<String?> readLastCrashReport() =>
       backendChannel.invokeMethod<String>('readLastCrashReport');

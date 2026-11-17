@@ -200,6 +200,10 @@ class FakeBackend {
         ]);
       case 'setScreenAwake':
         return null;
+      case 'getSupportedAbis':
+        return ['arm64-v8a', 'armeabi-v7a'];
+      case 'installApk':
+        return true;
       case 'takeSharedFiles':
         final taken = [...shared];
         shared.clear();

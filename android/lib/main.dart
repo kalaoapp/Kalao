@@ -15,6 +15,7 @@ import 'package:kalao/app.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/player_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
+import 'package:kalao/providers/update_provider.dart';
 import 'package:kalao/services/app_crash_service.dart';
 import 'package:kalao/services/app_storage.dart';
 import 'package:kalao/services/external_links.dart';
@@ -52,6 +53,7 @@ Future<void> main() async {
       sharedPreferencesProvider.overrideWithValue(preferences),
       libraryServicesProvider.overrideWithValue(services),
       audioHandlerProvider.overrideWithValue(handler),
+      updateServiceProvider.overrideWithValue(await openUpdateService()),
     ],
   );
   final verbose = container.read(settingsProvider).verboseLogging;

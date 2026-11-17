@@ -51,6 +51,8 @@ class MainActivity : AudioServiceFragmentActivity() {
         "listDocumentTree",
         "deleteDocument",
         "takeSharedFiles",
+        "getSupportedAbis",
+        "installApk",
     )
 
     /**
@@ -138,6 +140,8 @@ class MainActivity : AudioServiceFragmentActivity() {
                         "writeFileToTree" -> handleWriteFileToTree(call, result)
                         "listDocumentTree" -> handleListDocumentTree(call, result)
                         "deleteDocument" -> handleDeleteDocument(call, result)
+                        "getSupportedAbis" -> handleGetSupportedAbis(result)
+                        "installApk" -> handleInstallApk(call, result)
                         "takeSharedFiles" -> result.success(
                             withContext(Dispatchers.IO) { SharedFiles.take(applicationContext) },
                         )

@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalao/app.dart';
 import 'package:kalao/models/song.dart';
-import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
 import 'package:kalao/screens/lyrics_import_sheet.dart';
 import 'package:kalao/screens/shared_files.dart';
