@@ -195,3 +195,283 @@ Tests added: Rust `kalao-audio` (tempo keeps pitch, key keeps speed, loop wraps,
 | — | — | 5.5 | M5.5 | 9.8 | M4.11 |
 
 **Distribution:** GitHub Releases only, from M3 (v0.1.0). Each release: per-ABI and universal signed APKs, SHA-256 checksums, changelog. No store builds.
+
+
+---
+
+
+# TL;DR version that's more readable - (just a summary of above)
+
+
+## **M0 — Foundations**
+
+Implemented
+
+**In simple terms: Build the basic app and its technical infrastructure.**
+
+This milestone creates the foundations that everything else will run on.
+
+What it achieves:
+
+- Creates the Android app and its basic screens.
+- Establishes the connection between Flutter (the app interface) and Rust (the audio and processing engine).
+- Creates the settings, language selection and appearance options.
+- Sets up error reporting, logging and crash detection.
+- Establishes automated testing and the process for building and releasing the app.
+- Prepares the app to support different Android devices.
+
+**What the user gets:** A functioning app shell with settings, navigation and the underlying technology ready for the music features.
+
+Think of this as building the house's foundations, plumbing and electrical systems before installing the furniture.
+
+## **M1 — Local player**
+
+Implemented
+
+**In simple terms: Make Kalao a working karaoke music player.**
+
+This is where the app becomes useful for actually playing music.
+
+What it achieves:
+
+- Imports songs from the device.
+- Recognises original and instrumental versions of the same song and pairs them together.
+- Supports common audio formats such as MP3, FLAC, WAV and AAC.
+- Plays music with the ability to pause, resume, seek and adjust volume.
+- Switches between original vocals and instrumental versions without restarting the song.
+- Allows the user to blend the original vocals with the instrumental track.
+- Imports lyrics from text files, LRC files or embedded song information.
+- Displays lyrics while the song plays.
+- Adds Chinese pinyin above the lyrics.
+- Provides song search, library management and recently played songs.
+- Supports background playback, lock-screen controls and headset buttons.
+
+**What the user gets:** A working local karaoke player with a music library, lyrics, instrumental switching and Chinese pinyin support.
+
+This is the milestone that delivers the core reason for using Kalao.
+
+## **M2 — Timed lyrics**
+
+Implemented
+
+**In simple terms: Make the lyrics follow the music accurately, including individual words.**
+
+M1 can display lyrics, but M2 makes them synchronise with the actual singing.
+
+What it achieves:
+
+- Supports lyrics with individual line start and end times.
+- Supports word-by-word timing.
+- Highlights the lyrics progressively as the singer sings.
+- Supports multiple singers (duets), backing vocals and translations.
+- Imports and exports enhanced LRC and TTML lyric formats.
+- Provides an editor where users tap along with the music to create lyric timings.
+- Allows users to adjust lyrics when they are slightly early or late.
+- Saves edited lyrics as new versions without losing the original.
+- Supports a karaoke-style highlighting animation, including pinyin.
+
+**What the user gets:** Proper synchronised karaoke lyrics, where the words light up as they are sung, rather than simply displaying a block of text.
+
+An important addition is the timing editor: users can create or correct synchronised lyrics themselves instead of relying on existing lyric files.
+
+## **M3 — Modes and first release**
+
+
+
+Features implemented
+
+Release pending
+
+
+
+**In simple terms: Turn the player into a complete karaoke and singing-practice experience.**
+
+This milestone adds different ways to use Kalao, depending on whether someone wants to practise or sing for fun.
+
+What it achieves:
+
+- **Pitch adjustment:** Change a song's musical key without changing its speed.
+- **Tempo adjustment:** Slow down or speed up a song without changing its pitch.
+- **Learn mode:** Repeat individual lyric lines or selected sections of a song. Useful for practising difficult parts.
+- **OG Karaoke mode:** A dedicated karaoke screen with large lyrics, animated highlighting and countdown indicators before singing begins.
+- **Song queue:** Build a playlist, rearrange songs and assign singers and modes to individual songs.
+- **Keyboard and gamepad support:** Control playback and karaoke features using physical buttons.
+- **Japanese lyrics support:** Automatically display furigana (readings above kanji) and romaji.
+- **Chinese character conversion:** Switch between Simplified and Traditional Chinese lyrics.
+- **Tutorial:** Introduces new users to the app.
+- **What's New:** Explains new features after updates.
+
+**What the user gets:** Two distinct experiences:
+
+1. A practice environment for learning songs, adjusting pitch and speed, and repeating difficult sections.
+2. A proper karaoke environment for singing along with large, synchronised lyrics.
+
+The first public release, version 0.1.0, is still pending. The code and features are implemented, but the release requires signing credentials and the owner's approval.
+
+## **M4 — Library, backup and about**
+
+Planned
+
+**In simple terms: Make the app's music library safer, easier to manage and maintain.**
+
+This milestone focuses on protecting users' music collections and making the app easier to maintain.
+
+What it achieves:
+
+- Mark songs as favourites.
+- Keep a detailed history of songs played, including singer, mode and score.
+- View personal singing and listening statistics.
+- Back up the music library, lyrics, settings and optionally audio files.
+- Restore a backup on another device.
+- Choose whether to merge a backup with existing content or replace it.
+- Automatically create scheduled backups.
+- Keep passwords and private access keys out of backups.
+- Import data from an earlier proof-of-concept version of Kalao.
+- Export diagnostic logs to help report problems.
+- Provide an About page with version, privacy information and licences.
+- Check for updates and download new APK versions directly.
+- Open shared audio and lyrics files directly in Kalao.
+
+**What the user gets:** Peace of mind that their music library, lyrics and settings can be backed up and recovered if they change phones or lose data.
+
+## **M5 — Extensions**
+
+Planned
+
+**In simple terms: Allow Kalao to gain new features through installable add-ons.**
+
+This is a major step towards making Kalao expandable rather than having every feature built directly into the main app.
+
+What it achieves:
+
+- Allows users to install extensions from files or repositories.
+- Checks extension signatures to make sure they are genuine.
+- Allows extensions to have their own settings and actions.
+- Provides permission controls for extensions.
+- Allows extensions to be updated, enabled or disabled.
+- Provides tools for developers to create their own extensions.
+- Fetches lyrics from online providers.
+- Searches for song information and album artwork.
+- Adds streaming playback with caching.
+- Allows users to download songs, lyrics and other content for offline use.
+
+**What the user gets:** An app that can be customised and expanded. For example, users could install different online lyric providers rather than being restricted to one built-in service.
+
+This also introduces the possibility of streaming music rather than relying entirely on locally stored files.
+
+## **M6 — Stems and translation**
+
+Planned
+
+**In simple terms: Separate songs into individual audio components and translate lyrics.**
+
+This milestone introduces one of the more powerful features of Kalao.
+
+What it achieves:
+
+- Separates a song into different audio components (called stems).
+- Allows users to isolate vocals, instruments and other parts of a song.
+- Provides different separation quality and speed options.
+- Allows separation to happen in the background.
+- Supports remote audio separation when local processing isn't suitable.
+- Adds automatic lyric translation.
+- Adds Korean, Spanish and French as app interface languages.
+
+**What the user gets:** The ability to turn an ordinary music file into something much more flexible.
+
+For example, a user could:
+
+- Remove the original singer's voice to create an instrumental.
+- Isolate the vocals to study the singer's technique.
+- Separate instruments for practice.
+- Translate lyrics into another language to understand their meaning.
+
+An important distinction: M1 switches between two existing audio files (original and instrumental). M6 aims to create those separate audio components from a single recording.
+
+## **M7 — Scoring**
+
+Planned
+
+**In simple terms: Let users measure how accurately they sing.**
+
+This milestone introduces singing assessment.
+
+What it achieves:
+
+- Analyses the melody of the original song.
+- Listens to the user's voice through the microphone.
+- Detects the pitch of the user's singing in real time.
+- Compares the user's pitch against the original melody.
+- Calculates scores for individual lines and the overall performance.
+- Displays a visual guide showing the correct notes and the user's actual pitch.
+- Provides monitoring with gain and reverb options.
+
+**What the user gets:** A karaoke scoring system that shows whether they're singing the right notes.
+
+Think of the scoring systems found in games such as SingStar: the app listens to your voice and measures how closely you follow the melody.
+
+## **M8 — Parties**
+
+Planned
+
+**In simple terms: Turn Kalao into a multiplayer karaoke experience.**
+
+This milestone expands Kalao beyond a single person's device.
+
+What it achieves:
+
+- Allows someone to host a karaoke party over a local network.
+- Allows guests to join by scanning a QR code or entering a PIN.
+- Lets guests browse the host's music library.
+- Allows guests to add songs to a shared queue.
+- Allows the host to approve songs and manage the queue.
+- Synchronises lyrics and scores across connected devices.
+- Allows users to record their performances.
+- Adds a lyrics display that can be shown on a television.
+- Begins development of desktop and web versions.
+
+**What the user gets:** A shared karaoke experience where multiple people can join, choose songs, take turns singing and follow the lyrics on their own devices or a TV.
+
+The roadmap's exit target is a party with up to five guests connected over a local network.
+
+# **The bigger picture**
+
+Here's how the milestones fit together as a product development journey:
+
+## **Kalao's evolution**
+
+1. **M0 — Build the foundation**
+
+   Get the app running and establish its technical infrastructure.
+2. **M1 — Play music**
+
+   Import songs, play them and display lyrics.
+3. **M2 — Synchronise lyrics**
+
+   Make lyrics follow the singer, word by word.
+4. **M3 — Sing and practise**
+
+   Add karaoke mode, practice tools, pitch and tempo controls.
+5. **M4 — Protect the library**
+
+   Add favourites, statistics, backups and updates.
+6. **M5 — Expand functionality**
+
+   Introduce extensions, online lyrics and streaming.
+7. **M6 — Enhance the music**
+
+   Separate vocals and instruments, and translate lyrics.
+8. **M7 — Measure performance**
+
+   Introduce real-time singing analysis and scoring.
+9. **M8 — Sing together**
+
+   Add multiplayer karaoke, shared queues and TV support.
+
+## **My interpretation of the roadmap**
+
+There are three particularly important stages in Kalao's development:
+
+1. **M0–M3: Establish the core product.** These milestones turn Kalao into a usable karaoke and singing-practice application.
+2. **M4–M6: Make it a platform.** Backups, extensions, online services, audio separation and translation make it considerably more powerful.
+3. **M7–M8: Make it an experience.** Scoring and multiplayer transform Kalao from a personal music tool into something closer to a karaoke game and social platform.
