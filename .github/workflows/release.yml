@@ -143,6 +143,9 @@ jobs:
               --out "$apk" "$source"
             test -s "$apk.idsig"
             report="$("$apksigner" verify --verbose --print-certs --v4-signature-file "$apk.idsig" "$apk")"
+            # apksigner only checks the V1 (JAR) signature for SDK levels below
+            # 24, and our minSdk is 26, so verify V1 separately at SDK 23.
+            report+=$'\n'"$("$apksigner" verify --verbose --min-sdk-version 23 "$apk" | grep 'v1 scheme')"
             for scheme in 1 2 3 4; do
               grep -Eq "Verified using v${scheme} scheme.*: true" <<< "$report" || {
                 echo "ERROR: APK signature V${scheme} did not verify: $apk" >&2
