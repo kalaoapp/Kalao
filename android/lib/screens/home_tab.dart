@@ -48,7 +48,16 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     final l10n = AppLocalizations.of(context);
     final added = ref.watch(recentlyAddedProvider);
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.navHome)),
+      appBar: AppBar(
+        title: Text(l10n.navHome),
+        actions: [
+          IconButton(
+            tooltip: l10n.statsTitle,
+            icon: const Icon(Icons.insights_outlined),
+            onPressed: () => context.push('/stats'),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'import-home',
         onPressed: () => pickAndImport(context, ref),

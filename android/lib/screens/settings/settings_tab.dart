@@ -11,6 +11,7 @@ import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
 import 'package:kalao/screens/lyrics_options_sheet.dart';
 import 'package:kalao/services/custom_font_service.dart';
+import 'package:kalao/services/external_links.dart';
 import 'package:kalao/services/platform_bridge.dart';
 import 'package:kalao/theme/app_tokens.dart';
 import 'package:kalao/widgets/settings_group.dart';
@@ -95,6 +96,14 @@ class SettingsTab extends ConsumerWidget {
                 leading: const Icon(Icons.code),
                 title: Text(l10n.aboutSource),
                 subtitle: const Text(AppInfo.githubUrl),
+                trailing: const Icon(Icons.open_in_new),
+                onTap: () => openExternalUrl(Uri.parse(AppInfo.githubUrl)),
+              ),
+              ListTile(
+                leading: const Icon(Icons.privacy_tip_outlined),
+                title: Text(l10n.privacyTitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/settings/privacy'),
               ),
               ListTile(
                 leading: const Icon(Icons.gavel_outlined),

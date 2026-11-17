@@ -3,7 +3,7 @@
 
 /// `kalao_library.db`. Bump [libraryVersion] and add a step to
 /// [libraryMigrations] for every change; never edit a released step.
-const libraryVersion = 1;
+const libraryVersion = 2;
 
 const libraryMigrations = <int, List<String>>{
   1: [
@@ -66,6 +66,24 @@ CREATE TABLE song_search (
   key TEXT NOT NULL
 )''',
     'CREATE INDEX song_search_song_idx ON song_search(song_id)',
+  ],
+  // M4.1 favorites, M4.5 the scheduled-backup log.
+  2: [
+    '''
+CREATE TABLE favorite (
+  song_id INTEGER PRIMARY KEY REFERENCES song(id) ON DELETE CASCADE,
+  created_at INTEGER NOT NULL
+)''',
+    '''
+CREATE TABLE backup_run (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  started_at INTEGER NOT NULL,
+  finished_at INTEGER,
+  target TEXT NOT NULL DEFAULT '',
+  bytes INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL,
+  error TEXT
+)''',
   ],
 };
 

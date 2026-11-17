@@ -180,12 +180,14 @@ class PlayerController extends Notifier<NowPlaying>
     await play();
     _playId = await _services.history.startPlay(
       songId: song.id,
-      songKey: LibraryDatabase.songKey(
-        song.title,
-        song.artist,
-        song.durationMs,
-        null,
-      ),
+      songKey: song.songKey.isNotEmpty
+          ? song.songKey
+          : LibraryDatabase.songKey(
+              song.title,
+              song.artist,
+              song.durationMs,
+              null,
+            ),
       mode: playMode,
       singer: singer,
     );

@@ -152,15 +152,37 @@ class LibraryDatabase {
   Future<List<Song>> songs({
     SongSort sort = SongSort.recentlyAdded,
     int? limit,
+    bool favoritesOnly = false,
   }) async {
     final order = switch (sort) {
       SongSort.recentlyAdded => 'added_at DESC, id DESC',
       SongSort.title => 'title COLLATE NOCASE, id',
       SongSort.artist => 'artist COLLATE NOCASE, title COLLATE NOCASE, id',
     };
-    final rows = await db.query('song', orderBy: order, limit: limit);
+    final rows = await db.query(
+      'song',
+      where: favoritesOnly ? 'id IN (SELECT song_id FROM favorite)' : null,
+      orderBy: order,
+      limit: limit,
+    );
     return _withMedia(rows);
   }
+
+  // Favorites (M4.1, Mornye's loved-tracks pattern on `song.id`)
+
+  Future<void> setFavorite(int songId, bool favorite, {DateTime? now}) =>
+      favorite
+      ? db.insert('favorite', {
+          'song_id': songId,
+          'created_at': (now ?? DateTime.now()).millisecondsSinceEpoch,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore)
+      : db.delete('favorite', where: 'song_id = ?', whereArgs: [songId]);
+
+  Future<bool> isFavorite(int songId) async => (await db.query(
+    'favorite',
+    where: 'song_id = ?',
+    whereArgs: [songId],
+  )).isNotEmpty;
 
   Future<List<Song>> songsByIds(List<int> ids) async {
     if (ids.isEmpty) return const [];
@@ -221,6 +243,13 @@ class LibraryDatabase {
       ids,
     );
     final withLyrics = {for (final row in lyrics) row['song_id'] as int};
+    final favorites = {
+      for (final row in await db.rawQuery(
+        'SELECT song_id FROM favorite WHERE song_id IN ($marks)',
+        ids,
+      ))
+        row['song_id'] as int,
+    };
     final files = <int, List<MediaFile>>{};
     for (final row in media) {
       final kind = MediaKind.values.asNameMap()[row['kind']];
@@ -247,6 +276,8 @@ class LibraryDatabase {
           lastMode: row['last_mode'] as String?,
           media: files[row['id']] ?? const [],
           hasLyrics: withLyrics.contains(row['id']),
+          favorite: favorites.contains(row['id']),
+          songKey: row['song_key'] as String? ?? '',
         ),
     ];
   }

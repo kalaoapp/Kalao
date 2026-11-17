@@ -24,6 +24,7 @@ class LibraryScreen extends ConsumerStatefulWidget {
 class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   SongSort _sort = SongSort.recentlyAdded;
   bool _grid = false;
+  bool _favoritesOnly = false;
   final _selected = <int>{};
 
   bool get _selecting => _selected.isNotEmpty;
@@ -72,7 +73,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final songs = ref.watch(librarySongsProvider(_sort));
+    final songs = ref.watch(
+      librarySongsProvider((sort: _sort, favoritesOnly: _favoritesOnly)),
+    );
     final list = songs.asData?.value ?? const <Song>[];
     return PopScope(
       canPop: !_selecting,
@@ -101,6 +104,11 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     onPressed: () => _queueSelected(list),
                   ),
                   IconButton(
+                    tooltip: l10n.favoriteAdd,
+                    icon: const Icon(Icons.favorite_border),
+                    onPressed: () => _favoriteSelected(),
+                  ),
+                  IconButton(
                     tooltip: l10n.actionDelete,
                     icon: const Icon(Icons.delete_outline),
                     onPressed: () => _deleteSelected(list),
@@ -110,6 +118,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             : AppBar(
                 title: Text(l10n.navLibrary),
                 actions: [
+                  IconButton(
+                    tooltip: l10n.libraryFavoritesOnly,
+                    isSelected: _favoritesOnly,
+                    icon: const Icon(Icons.favorite_border),
+                    selectedIcon: const Icon(Icons.favorite),
+                    onPressed: () =>
+                        setState(() => _favoritesOnly = !_favoritesOnly),
+                  ),
                   PopupMenuButton<SongSort>(
                     tooltip: l10n.librarySort,
                     icon: const Icon(Icons.sort),
@@ -148,6 +164,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 label: Text(l10n.importAction),
               ),
         body: switch (songs) {
+          AsyncData(:final value) when value.isEmpty && _favoritesOnly =>
+            EmptyState(
+              icon: Icons.favorite_border,
+              title: l10n.favoritesEmptyTitle,
+              body: l10n.favoritesEmptyBody,
+            ),
           AsyncData(:final value) when value.isEmpty => EmptyState(
             icon: Icons.library_music_outlined,
             title: l10n.libraryEmptyTitle,
@@ -176,6 +198,16 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       await actions.add(song);
     }
     messenger.showSnackBar(SnackBar(content: Text(l10n.queueAdded)));
+  }
+
+  Future<void> _favoriteSelected() async {
+    final library = ref.read(libraryServicesProvider).library;
+    final chosen = [..._selected];
+    setState(_selected.clear);
+    for (final id in chosen) {
+      await library.setFavorite(id, true);
+    }
+    ref.read(libraryRevisionProvider.notifier).bump();
   }
 
   void _open(Song song) {

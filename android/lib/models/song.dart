@@ -17,6 +17,8 @@ class Song {
     this.lastMode,
     this.media = const [],
     this.hasLyrics = false,
+    this.favorite = false,
+    this.songKey = '',
   });
 
   final int id;
@@ -29,6 +31,12 @@ class Song {
   final String? lastMode;
   final List<MediaFile> media;
   final bool hasLyrics;
+
+  /// In `favorite` (M4.1).
+  final bool favorite;
+
+  /// `song.song_key`: matches the song across backups and devices.
+  final String songKey;
 
   MediaFile? file(MediaKind kind) {
     for (final file in media) {
@@ -45,19 +53,25 @@ class Song {
   Duration? get duration =>
       durationMs == null ? null : Duration(milliseconds: durationMs!);
 
-  Song copyWith({List<MediaFile>? media, bool? hasLyrics, String? lastMode}) =>
-      Song(
-        id: id,
-        title: title,
-        artist: artist,
-        album: album,
-        durationMs: durationMs,
-        coverPath: coverPath,
-        addedAt: addedAt,
-        lastMode: lastMode ?? this.lastMode,
-        media: media ?? this.media,
-        hasLyrics: hasLyrics ?? this.hasLyrics,
-      );
+  Song copyWith({
+    List<MediaFile>? media,
+    bool? hasLyrics,
+    String? lastMode,
+    bool? favorite,
+  }) => Song(
+    id: id,
+    title: title,
+    artist: artist,
+    album: album,
+    durationMs: durationMs,
+    coverPath: coverPath,
+    addedAt: addedAt,
+    lastMode: lastMode ?? this.lastMode,
+    media: media ?? this.media,
+    hasLyrics: hasLyrics ?? this.hasLyrics,
+    favorite: favorite ?? this.favorite,
+    songKey: songKey,
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -67,11 +81,19 @@ class Song {
       other.artist == artist &&
       other.coverPath == coverPath &&
       other.hasLyrics == hasLyrics &&
+      other.favorite == favorite &&
       listEquals(other.media, media);
 
   @override
-  int get hashCode =>
-      Object.hash(id, title, artist, coverPath, hasLyrics, media.length);
+  int get hashCode => Object.hash(
+    id,
+    title,
+    artist,
+    coverPath,
+    hasLyrics,
+    favorite,
+    media.length,
+  );
 }
 
 @immutable

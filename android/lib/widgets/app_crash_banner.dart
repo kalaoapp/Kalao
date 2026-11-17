@@ -4,9 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/services/app_crash_service.dart';
+import 'package:kalao/services/external_links.dart';
 
 /// Shown once after a native crash. The report never leaves the device unless
-/// the user copies it.
+/// the user copies it or opens a pre-filled GitHub issue and submits it.
 class AppCrashBanner extends StatelessWidget {
   const AppCrashBanner({
     super.key,
@@ -31,6 +32,15 @@ class AppCrashBanner extends StatelessWidget {
             messenger.showSnackBar(SnackBar(content: Text(l10n.crashCopied)));
           },
           child: Text(l10n.crashBannerCopy),
+        ),
+        TextButton(
+          onPressed: () => openExternalUrl(
+            githubIssueUrl(
+              title: l10n.crashIssueTitle,
+              body: '```\n${report.shareText}\n```',
+            ),
+          ),
+          child: Text(l10n.crashBannerReport),
         ),
         TextButton(
           onPressed: () async {

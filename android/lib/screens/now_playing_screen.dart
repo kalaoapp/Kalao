@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/models/lyrics.dart';
+import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/player_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
 import 'package:kalao/screens/lyrics_import_sheet.dart';
@@ -96,6 +97,7 @@ class NowPlayingScreen extends ConsumerWidget {
               ],
             ),
             actions: [
+              _FavoriteButton(songId: song.id),
               IconButton(
                 tooltip: l10n.queueAdd,
                 icon: const Icon(Icons.playlist_add),
@@ -646,3 +648,23 @@ class _PlayerControlsState extends ConsumerState<PlayerControls> {
 
 /// Whether a custom font file still exists (used by settings).
 bool customFontExists(String? path) => path != null && File(path).existsSync();
+
+/// Heart toggle for the current song (M4.1).
+class _FavoriteButton extends ConsumerWidget {
+  const _FavoriteButton({required this.songId});
+
+  final int songId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final favorite = ref.watch(favoriteProvider(songId)).asData?.value ?? false;
+    return IconButton(
+      tooltip: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
+      isSelected: favorite,
+      icon: const Icon(Icons.favorite_border),
+      selectedIcon: const Icon(Icons.favorite),
+      onPressed: () => setFavorite(ref, songId, !favorite),
+    );
+  }
+}

@@ -46,13 +46,30 @@ class LibraryRevision extends Notifier<int> {
   void bump() => state++;
 }
 
-final librarySongsProvider = FutureProvider.family<List<Song>, SongSort>((
+/// The Library list; [LibraryView.favoritesOnly] shows favorites (M4.1).
+typedef LibraryView = ({SongSort sort, bool favoritesOnly});
+
+final librarySongsProvider = FutureProvider.family<List<Song>, LibraryView>((
   ref,
-  sort,
+  view,
 ) {
   ref.watch(libraryRevisionProvider);
-  return ref.watch(libraryServicesProvider).library.songs(sort: sort);
+  return ref
+      .watch(libraryServicesProvider)
+      .library
+      .songs(sort: view.sort, favoritesOnly: view.favoritesOnly);
 });
+
+final favoriteProvider = FutureProvider.family<bool, int>((ref, songId) {
+  ref.watch(libraryRevisionProvider);
+  return ref.watch(libraryServicesProvider).library.isFavorite(songId);
+});
+
+/// Marks or unmarks [songId] as a favorite and refreshes the lists.
+Future<void> setFavorite(WidgetRef ref, int songId, bool favorite) async {
+  await ref.read(libraryServicesProvider).library.setFavorite(songId, favorite);
+  ref.read(libraryRevisionProvider.notifier).bump();
+}
 
 final recentlyAddedProvider = FutureProvider<List<Song>>((ref) {
   ref.watch(libraryRevisionProvider);

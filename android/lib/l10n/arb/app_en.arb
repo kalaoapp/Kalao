@@ -292,5 +292,43 @@
   "whatsNewKeyTempo": "Change the key by up to 6 semitones and the speed from 50% to 150% without changing the pitch.",
   "whatsNewTimedLyrics": "Timed lyrics with a word-by-word sweep, and an editor to sync lyrics by tapping.",
   "whatsNewQueue": "A singing queue with singer names.",
-  "whatsNewLanguages": "Furigana and romaji for Japanese, and Traditional or Simplified display for Chinese."
+  "whatsNewLanguages": "Furigana and romaji for Japanese, and Traditional or Simplified display for Chinese.",
+  "favoriteAdd": "Add to favorites",
+  "favoriteRemove": "Remove from favorites",
+  "libraryFavoritesOnly": "Show favorites only",
+  "favoritesEmptyTitle": "No favorites yet",
+  "favoritesEmptyBody": "Tap the heart on Now playing to keep a song here.",
+  "statsTitle": "Stats",
+  "statsEmptyTitle": "Nothing sung yet",
+  "statsEmptyBody": "Play a song and your activity shows up here. Stats stay on this device.",
+  "statsPlays": "Plays",
+  "statsTimeSung": "Time",
+  "statsSongs": "Songs",
+  "statsLastWeek": "Last 7 days",
+  "statsTopSongs": "Most played",
+  "statsMostPractised": "Most practised",
+  "statsBestScores": "Best scores",
+  "statsPlayCount": "{count, plural, =1{1 play} other{{count} plays}}",
+  "@statsPlayCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "logsShare": "Share log",
+  "crashBannerReport": "Report",
+  "crashIssueTitle": "Crash report",
+  "aboutSupport": "Support Kalao",
+  "aboutSupportSubtitle": "Opens ko-fi.com/brinsley in your browser",
+  "privacyTitle": "Privacy",
+  "privacyIntro": "Kalao has no accounts and no servers that know who you are. Everything you add stays on this device unless you choose to move it.",
+  "privacyLocalTitle": "Your library",
+  "privacyLocalBody": "Songs, lyrics, timing edits, favorites, history and settings are stored only in Kalao's private storage on this device.",
+  "privacyNetworkTitle": "Network requests",
+  "privacyNetworkBody": "Kalao goes online only for things you turn on: the update check reads the latest release from GitHub, and extensions you install contact the sites they list when you install them. Kalao sends no analytics or telemetry.",
+  "privacyBackupTitle": "Backups",
+  "privacyBackupBody": "A backup file holds your library and settings but no passwords, keys or other secrets. Backups are not encrypted, so keep them somewhere you trust.",
+  "privacyDiagnosticsTitle": "Logs and crash reports",
+  "privacyDiagnosticsBody": "The debug log and crash reports stay on this device. They leave it only if you share them or open a GitHub issue yourself."
 }

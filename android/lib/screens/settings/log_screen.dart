@@ -1,11 +1,15 @@
 // Derived from Mornye (https://github.com/mornyeapp/Mornye), Copyright 2026 zarzet,
 // LGPL-3.0-only. Modified for Kalao.
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/services/platform_bridge.dart';
 import 'package:kalao/theme/app_tokens.dart';
 import 'package:kalao/utils/logger.dart';
+import 'package:path/path.dart' as p;
+import 'package:share_plus/share_plus.dart';
 
 /// Dart log entries merged with the Rust log buffer, newest last. Nothing is
 /// sent anywhere; the user can copy the text into a bug report.
@@ -87,6 +91,21 @@ class _LogScreenState extends State<LogScreen> {
     messenger.showSnackBar(SnackBar(content: Text(l10n.logsCopied)));
   }
 
+  /// Writes the log to a text file and opens the share sheet (M4.8).
+  Future<void> _share() async {
+    final stamp = DateTime.now()
+        .toIso8601String()
+        .replaceAll(RegExp('[:.]'), '-')
+        .substring(0, 19);
+    final file = File(
+      p.join(Directory.systemTemp.path, 'kalao-log-$stamp.txt'),
+    );
+    await file.writeAsString(formatLogEntries(_entries));
+    await SharePlus.instance.share(
+      ShareParams(files: [XFile(file.path, mimeType: 'text/plain')]),
+    );
+  }
+
   Future<void> _clear() async {
     LogBuffer().clear();
     try {
@@ -108,6 +127,11 @@ class _LogScreenState extends State<LogScreen> {
             tooltip: l10n.logsCopy,
             icon: const Icon(Icons.copy_all_outlined),
             onPressed: entries.isEmpty ? null : _copy,
+          ),
+          IconButton(
+            tooltip: l10n.logsShare,
+            icon: const Icon(Icons.share_outlined),
+            onPressed: entries.isEmpty ? null : _share,
           ),
           IconButton(
             tooltip: l10n.logsClear,
