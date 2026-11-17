@@ -86,7 +86,7 @@ Status: ✅ built and tested locally (Rust: fmt, clippy, all workspace tests inc
 | M3.6 | `core::annotate::japanese` (lindera 6.2 with embedded IPADIC): furigana over kanji runs, romaji per word with spoken particles, romaji search keys for kanji titles; furigana above and romaji below the line, each with a toggle | 2.4 | ✅ (the embedded dictionary adds about 50 MB to `libkalao_mobile.so` per ABI) | §4 |
 | M3.7 | `core::annotate::chinese_variant` (`ferrous-opencc` 0.4: s2t, s2tw, s2hk, t2s); the Chinese-characters setting converts lyrics for display through `convertChinese` | 2.5 | ✅ (the variant is applied when lyrics are shown, not stored as a layer, so changing the setting needs no regeneration) | §4 |
 | M3.8 | Tutorial (after setup, four pages) and What's New (once per version after an update) screens with Kalao content | — | ✅ | `tutorial_screen.dart`, `whats_new_screen.dart` |
-| M3.9 | **First GitHub Release** (`v0.1.0`) via `release.yml` | — | ⏳ not tagged: needs the `KEYSTORE_BASE64`, `KEY_ALIAS`, `KEYSTORE_PASSWORD` secrets and the owner's go-ahead | `release.yml` |
+| M3.9 | **First GitHub Release** (`v0.1.0`) via `release.yml` | — | ⏳ `v0.1.0-alpha` published, but it crashed on launch: `libkalao_mobile.so` left the C++ ABI runtime (`libc++abi`) unlinked, so `dlopen` failed. Fixed in the build script; needs a new tag | `release.yml` |
 
 Tests added: Rust `kalao-audio` (tempo keeps pitch, key keeps speed, loop wraps, click timing through the stretcher), `core::annotate::{japanese, chinese_variant}`, `mobile` (layers, `convertChinese`); Dart `modes_test` (karaoke frames, queue store, modes/key/tempo/loop/stepping, queue advance, Japanese layers and Chinese variant, Karaoke screen, queue tab, What's New and help).
 
@@ -306,7 +306,7 @@ What it achieves:
 1. A practice environment for learning songs, adjusting pitch and speed, and repeating difficult sections.
 2. A proper karaoke environment for singing along with large, synchronised lyrics.
 
-The first public release, version 0.1.0, is still pending. The code and features are implemented, but the release requires signing credentials and the owner's approval.
+The first pre-release, `v0.1.0-alpha`, crashed on launch because the native library was missing part of the C++ runtime. The build is fixed and now fails at link time on any unresolved native symbol; the release needs a new tag.
 
 ## **M4 — Library, backup and about**
 

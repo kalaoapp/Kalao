@@ -79,7 +79,7 @@ No `play-services-*` artifacts.
 | `symphonia` | 0.5.5 (features mp3, aac, isomp4, alac, flac, vorbis, ogg, wav, pcm) | audio, stems | Decode MP3, AAC/M4A, ALAC, FLAC, Vorbis, WAV; also reads tags and covers for `probeAudio` |
 | `cpal` | 0.16 | audio | AAudio output and low-latency input on Android; WASAPI/CoreAudio/ALSA on desktop later |
 | `rubato` | 0.16 | audio, stems | Resampling to the device rate / model rate |
-| `signalsmith-stretch` (Rust bindings to Signalsmith Stretch, MIT) | =0.1.3 | audio | Key change and tempo without pitch change (ADR-005). Compiles C++ (`cc`) and generates bindings (`bindgen`), so builds need a C++ compiler and libclang; Android links libc++ statically |
+| `signalsmith-stretch` (Rust bindings to Signalsmith Stretch, MIT) | =0.1.3 | audio | Key change and tempo without pitch change (ADR-005). Compiles C++ (`cc`) and generates bindings (`bindgen`), so builds need a C++ compiler and libclang; Android links libc++ and libc++abi statically |
 | `ringbuf` | 0.4 | audio | Lock-free decoder → callback buffers |
 | `flacenc` | latest | stems, audio | Encode stems and recordings to FLAC (pure Rust; decoded back by Symphonia) |
 | `ort` | 2.x (`load-dynamic`) | stems | ONNX Runtime; XNNPACK execution provider, CPU fallback (QNN optional) |

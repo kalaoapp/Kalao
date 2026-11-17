@@ -23,7 +23,7 @@ Toolchain versions match Mornye (LIBRARIES.md §1).
    cargo install cargo-ndk
    ```
    On Linux hosts the host build of `kalao-audio` (cpal) needs ALSA headers: `sudo apt-get install libasound2-dev pkg-config`. On Windows, Gradle's `buildRustBackend` must find Git Bash before WSL's `bash.exe` with `~/.cargo/bin` on PATH; otherwise build the Rust library first with `bash scripts/build_rust_backend.sh android` and run Gradle with `-x buildRustBackend`.
-5. **libclang and a C++ compiler** for `signalsmith-stretch` (bindgen + cc). Linux: `sudo apt-get install libclang-dev` (g++ is usually present). Windows: MSVC Build Tools for the host build; `scripts/rust_env.sh` (sourced by the Rust scripts) points bindgen at the NDK's `libclang.dll` when `LIBCLANG_PATH` is unset. To run cargo by hand on Windows, `source scripts/rust_env.sh` first. The Android build uses the NDK's clang++ and links libc++ statically.
+5. **libclang and a C++ compiler** for `signalsmith-stretch` (bindgen + cc). Linux: `sudo apt-get install libclang-dev` (g++ is usually present). Windows: MSVC Build Tools for the host build; `scripts/rust_env.sh` (sourced by the Rust scripts) points bindgen at the NDK's `libclang.dll` when `LIBCLANG_PATH` is unset. To run cargo by hand on Windows, `source scripts/rust_env.sh` first. The Android build uses the NDK's clang++, links libc++ statically (`libc++_static.a` plus `libc++abi.a`, which holds the C++ ABI runtime), and links with `--no-undefined`, so an unresolved native symbol fails the build instead of the app's launch.
 6. **Git Bash** for `scripts/*.sh` and **Python 3** for `scripts/check_backend_apk.py` (as in Mornye).
 7. **Docker Desktop** for the stem server (from M6).
 
