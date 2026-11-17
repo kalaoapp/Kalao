@@ -2,9 +2,8 @@
 //! normalises the query with the same rule as [`normalize`] and matches keys
 //! by substring, so "yueliang", "yl", "月亮" and "moon" all find a song.
 
-use crate::annotate::pinyin;
+use crate::annotate::{japanese, pinyin};
 use serde::Serialize;
-use wana_kana::{ConvertJapanese, IsJapaneseChar};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -41,9 +40,9 @@ pub fn keys(title: &str, artist: &str) -> Vec<SearchKey> {
             push("pinyin", full);
             push("initials", initials);
         }
-        // Kana readings; kanji readings arrive with the Japanese analyser (M3.6).
-        if text.chars().any(|ch| ch.is_kana()) {
-            push("romaji", normalize(&text.to_romaji()));
+        // Text with kana is Japanese: its kanji are read as Japanese too.
+        if let Some(romaji) = japanese::search_key(text) {
+            push("romaji", normalize(&romaji));
         }
     }
     keys

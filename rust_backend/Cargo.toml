@@ -53,6 +53,9 @@ signalsmith-stretch = "=0.1.3"
 # Annotation: Rust port of pinyin-pro, the library the POC used.
 pinyin_pro = "=3.29.4"
 wana_kana = "4"
+# Japanese readings (IPADIC embedded) and Traditional/Simplified conversion.
+lindera = { version = "=6.2.0", default-features = false, features = ["embed-ipadic"] }
+ferrous-opencc = "=0.4.0"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

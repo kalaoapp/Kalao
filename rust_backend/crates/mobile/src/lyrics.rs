@@ -1,6 +1,7 @@
 //! Lyrics methods: `parseLyrics` (LRC, enhanced LRC, TTML or plain text →
 //! lyric document), `exportLyrics` (document → LRC or enhanced LRC),
-//! `detectSections` and `annotateLyrics` (reading layers).
+//! `detectSections`, `annotateLyrics` (pinyin, furigana, romaji) and
+//! `convertChinese` (Traditional ↔ Simplified).
 
 use crate::backend::{BackendError, invalid, operation, str_arg};
 use kalao_core::{annotate, lyrics::doc, sections};
@@ -69,6 +70,8 @@ pub fn annotate(method: &str, args: &Value) -> Result<Value, BackendError> {
     for layer in layers {
         let annotate: fn(&str) -> Vec<annotate::RubySegment> = match layer {
             "pinyin" => annotate::pinyin::annotate,
+            "furigana" => annotate::japanese::furigana,
+            "romaji" => annotate::japanese::romaji,
             other => return Err(invalid(method, format!("unsupported layer {other}"))),
         };
         for (index, line) in lines.iter().enumerate() {
@@ -84,6 +87,25 @@ pub fn annotate(method: &str, args: &Value) -> Result<Value, BackendError> {
         }
     }
     Ok(Value::Array(out))
+}
+
+/// `{texts, to}` -> the texts in the Chinese variant `to` (`s2t`, `s2tw`,
+/// `s2hk`, `t2s`), in order.
+pub fn convert_chinese(method: &str, args: &Value) -> Result<Value, BackendError> {
+    let to = str_arg(method, args, "to")?;
+    let variant = annotate::chinese_variant::Variant::parse(to)
+        .ok_or_else(|| invalid(method, format!("unknown variant {to}")))?;
+    let texts = args["texts"]
+        .as_array()
+        .ok_or_else(|| invalid(method, "missing array field texts"))?
+        .iter()
+        .map(|text| {
+            text.as_str()
+                .map(|text| Value::String(annotate::chinese_variant::convert(text, variant)))
+                .ok_or_else(|| invalid(method, "texts must be strings"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Value::Array(texts))
 }
 
 #[cfg(test)]
@@ -114,6 +136,27 @@ mod tests {
         );
         assert!(parse("parseLyrics", &json!({"raw": "x", "format": "ttml"})).is_err());
         assert!(parse("parseLyrics", &json!({"raw": "x", "format": "docx"})).is_err());
+    }
+
+    #[test]
+    fn japanese_layers_and_chinese_variants() {
+        let layers = annotate(
+            "annotateLyrics",
+            &json!({"lines": ["桜が咲く"], "layers": ["furigana", "romaji"]}),
+        )
+        .unwrap();
+        assert_eq!(layers[0]["kind"], "furigana");
+        assert_eq!(layers[0]["segments"][0]["reading"], "さくら");
+        assert_eq!(layers[1]["kind"], "romaji");
+        assert_eq!(layers[1]["segments"][0]["reading"], "sakura");
+        let converted = convert_chinese(
+            "convertChinese",
+            &json!({"texts": ["爱", "hello"], "to": "s2t"}),
+        )
+        .unwrap();
+        assert_eq!(converted, json!(["愛", "hello"]));
+        assert!(convert_chinese("convertChinese", &json!({"texts": [], "to": "x"})).is_err());
+        assert!(convert_chinese("convertChinese", &json!({"to": "t2s"})).is_err());
     }
 
     #[test]

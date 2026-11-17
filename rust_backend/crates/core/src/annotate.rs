@@ -2,6 +2,8 @@
 //! ruby segments, each a UTF-16 range of the line (Dart string indices) with
 //! the reading shown above it.
 
+pub mod chinese_variant;
+pub mod japanese;
 pub mod pinyin;
 
 use serde::Serialize;
