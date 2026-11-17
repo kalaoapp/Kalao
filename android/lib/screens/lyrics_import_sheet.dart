@@ -14,25 +14,33 @@ import 'package:kalao/theme/app_tokens.dart';
 Future<void> showLyricsImportSheet(
   BuildContext context,
   WidgetRef ref,
-  Song song,
-) => showModalBottomSheet<void>(
+  Song song, {
+  String initialText = '',
+}) => showModalBottomSheet<void>(
   context: context,
   isScrollControlled: true,
   showDragHandle: true,
-  builder: (_) => LyricsImportSheet(song: song),
+  builder: (_) => LyricsImportSheet(song: song, initialText: initialText),
 );
 
 class LyricsImportSheet extends ConsumerStatefulWidget {
-  const LyricsImportSheet({super.key, required this.song});
+  const LyricsImportSheet({
+    super.key,
+    required this.song,
+    this.initialText = '',
+  });
 
   final Song song;
+
+  /// Text to start with, e.g. a shared `.lrc` file.
+  final String initialText;
 
   @override
   ConsumerState<LyricsImportSheet> createState() => _LyricsImportSheetState();
 }
 
 class _LyricsImportSheetState extends ConsumerState<LyricsImportSheet> {
-  final _text = TextEditingController();
+  late final _text = TextEditingController(text: widget.initialText);
   String? _error;
   bool _busy = false;
 

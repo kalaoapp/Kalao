@@ -2,7 +2,9 @@
 // LGPL-3.0-only. Modified for Kalao.
 package com.brinsley.kalao
 
+import android.content.Intent
 import android.os.Build
+import android.os.Bundle
 import com.ryanheise.audioservice.AudioServiceFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -11,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
@@ -30,6 +33,7 @@ class MainActivity : AudioServiceFragmentActivity() {
     internal val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     internal var backendChannel: MethodChannel? = null
     internal val coreBackend: CoreBackend by lazy { createCoreBackend(applicationContext) }
+    internal lateinit var documentPickers: DocumentPickers
 
     private val nativeBackendMethods = setOf(
         "getAndroidSdkVersion",
@@ -40,6 +44,13 @@ class MainActivity : AudioServiceFragmentActivity() {
         "readLastCrashReport",
         "clearLastCrashReport",
         "recordAppRuntimeError",
+        "createDocument",
+        "pickDocumentTree",
+        "copyFileToDocument",
+        "writeFileToTree",
+        "listDocumentTree",
+        "deleteDocument",
+        "takeSharedFiles",
     )
 
     /**
@@ -83,6 +94,20 @@ class MainActivity : AudioServiceFragmentActivity() {
         }
     }
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        // Activity-result launchers must exist before the activity starts.
+        documentPickers = DocumentPickers(this)
+        super.onCreate(savedInstanceState)
+        SharedFiles.collect(intent)
+    }
+
+    // singleTask: a file opened while Kalao runs arrives here, before
+    // onResume, where Dart takes it.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        SharedFiles.collect(intent)
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         // Select and initialize the runtime before Flutter can dispatch a call.
@@ -107,6 +132,15 @@ class MainActivity : AudioServiceFragmentActivity() {
                         "readLastCrashReport" -> handleReadLastCrashReport(result)
                         "clearLastCrashReport" -> handleClearLastCrashReport(result)
                         "recordAppRuntimeError" -> handleRecordAppRuntimeError(call, result)
+                        "createDocument" -> handleCreateDocument(call, result)
+                        "pickDocumentTree" -> handlePickDocumentTree(result)
+                        "copyFileToDocument" -> handleCopyFileToDocument(call, result)
+                        "writeFileToTree" -> handleWriteFileToTree(call, result)
+                        "listDocumentTree" -> handleListDocumentTree(call, result)
+                        "deleteDocument" -> handleDeleteDocument(call, result)
+                        "takeSharedFiles" -> result.success(
+                            withContext(Dispatchers.IO) { SharedFiles.take(applicationContext) },
+                        )
                         else -> result.notImplemented()
                     }
                 } catch (e: Exception) {

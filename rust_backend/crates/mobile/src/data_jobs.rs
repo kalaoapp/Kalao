@@ -41,6 +41,8 @@ fn execute(request: &Value, check: &dyn Fn() -> Result<(), String>) -> Result<Va
     match string(request, "operation")? {
         "hash_file" => Ok(json!({"sha256": hash_file(string(request, "path")?, check)?})),
         "rebuildSearchKeys" => rebuild_search_keys(request, check),
+        "backupWrite" => crate::native_backup::write(request, check),
+        "backupInspect" => crate::native_backup::inspect(request, check),
         other => Err(format!("Unknown native data job: {other}")),
     }
 }

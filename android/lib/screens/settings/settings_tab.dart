@@ -66,6 +66,18 @@ class SettingsTab extends ConsumerWidget {
             ],
           ),
           SettingsGroup(
+            title: l10n.settingsData,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.backup_outlined),
+                title: Text(l10n.backupTitle),
+                subtitle: Text(l10n.backupSettingsSubtitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/settings/backup'),
+              ),
+            ],
+          ),
+          SettingsGroup(
             title: l10n.settingsDiagnostics,
             children: [
               SwitchListTile(

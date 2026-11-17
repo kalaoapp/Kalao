@@ -319,21 +319,30 @@ class LibraryDatabase {
         });
       }
     }
-    final stale = version - keptLyricVersions;
-    if (stale > 0) {
-      await txn.delete(
-        'lyric_doc',
-        where: 'song_id = ? AND version <= ?',
-        whereArgs: [songId, stale],
-      );
-      await txn.delete(
-        'lyric_annotation',
-        where: 'song_id = ? AND doc_version <= ?',
-        whereArgs: [songId, stale],
-      );
-    }
+    await pruneLyricVersions(txn, songId, version);
     return version;
   });
+
+  /// Drops versions older than the last [keptLyricVersions] before
+  /// [latest].
+  static Future<void> pruneLyricVersions(
+    DatabaseExecutor executor,
+    int songId,
+    int latest,
+  ) async {
+    final stale = latest - keptLyricVersions;
+    if (stale <= 0) return;
+    await executor.delete(
+      'lyric_doc',
+      where: 'song_id = ? AND version <= ?',
+      whereArgs: [songId, stale],
+    );
+    await executor.delete(
+      'lyric_annotation',
+      where: 'song_id = ? AND doc_version <= ?',
+      whereArgs: [songId, stale],
+    );
+  }
 
   /// Changes the per-song offset of the current version in place (an offset
   /// tweak is not a new version).

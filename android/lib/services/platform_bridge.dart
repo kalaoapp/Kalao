@@ -71,6 +71,34 @@ class NativeLogPage {
   final int nextIndex;
 }
 
+/// A file in a SAF folder.
+@immutable
+class DocumentEntry {
+  const DocumentEntry({
+    required this.uri,
+    required this.name,
+    this.bytes = 0,
+    this.modified,
+  });
+
+  factory DocumentEntry.fromMap(Map<String, Object?> map) => DocumentEntry(
+    uri: map['uri'] as String? ?? '',
+    name: map['name'] as String? ?? '',
+    bytes: (map['bytes'] as num?)?.toInt() ?? 0,
+    modified: switch (map['modified']) {
+      final num ms when ms > 0 => DateTime.fromMillisecondsSinceEpoch(
+        ms.toInt(),
+      ),
+      _ => null,
+    },
+  );
+
+  final String uri;
+  final String name;
+  final int bytes;
+  final DateTime? modified;
+}
+
 /// The only caller of the backend. Every method is a typed wrapper over one
 /// channel call; JSON replies are decoded off the UI isolate when large, and
 /// `__json_file` spill replies are read and deleted here.
@@ -248,6 +276,34 @@ class PlatformBridge {
     ];
   }
 
+  /// Writes a `.kalaobackup` archive of [entries] (`{name, path}`) to
+  /// [output]; Rust adds each entry's SHA-256 to [manifest].
+  static Future<Map<String, dynamic>> backupWrite({
+    required String output,
+    required List<Map<String, String>> entries,
+    required Map<String, Object?> manifest,
+    required String requestId,
+  }) => runNativeDataJob({
+    'operation': 'backupWrite',
+    'output': output,
+    'entries': entries,
+    'manifest': manifest,
+  }, requestId: requestId);
+
+  /// Checks the archive at [path] (names, sizes, checksums, format at most
+  /// [maxFormat]), extracts it into [extractTo] and returns its manifest.
+  static Future<Map<String, dynamic>> backupInspect({
+    required String path,
+    required String extractTo,
+    required int maxFormat,
+    required String requestId,
+  }) => runNativeDataJob({
+    'operation': 'backupInspect',
+    'path': path,
+    'extractTo': extractTo,
+    'maxFormat': maxFormat,
+  }, requestId: requestId);
+
   /// Runs CPU or file work in the Rust worker. [requestId] lets
   /// [cancelNativeDataJob] cancel it, also before it starts.
   static Future<Map<String, dynamic>> runNativeDataJob(
@@ -301,6 +357,65 @@ class PlatformBridge {
 
   static Future<void> stopBackgroundWork(String kind) =>
       backendChannel.invokeMethod<void>('stopBackgroundWork', {'kind': kind});
+
+  // Storage Access Framework (backups)
+
+  /// Asks where to save [name]; the document URI, or null when cancelled.
+  static Future<String?> createDocument(String name) =>
+      backendChannel.invokeMethod<String>('createDocument', {'name': name});
+
+  /// Asks for a folder and keeps access to it; its tree URI, or null.
+  static Future<String?> pickDocumentTree() =>
+      backendChannel.invokeMethod<String>('pickDocumentTree');
+
+  static Future<void> copyFileToDocument(String path, String uri) =>
+      backendChannel.invokeMethod<void>('copyFileToDocument', {
+        'path': path,
+        'uri': uri,
+      });
+
+  /// Copies [path] into the folder [treeUri] as [name]; the new document URI.
+  static Future<String> writeFileToTree({
+    required String treeUri,
+    required String name,
+    required String path,
+  }) async =>
+      await backendChannel.invokeMethod<String>('writeFileToTree', {
+        'treeUri': treeUri,
+        'name': name,
+        'path': path,
+      }) ??
+      '';
+
+  /// The files in the folder [treeUri].
+  static Future<List<DocumentEntry>> listDocumentTree(String treeUri) async {
+    final rows =
+        await backendChannel.invokeMethod<List<Object?>>('listDocumentTree', {
+          'treeUri': treeUri,
+        }) ??
+        const [];
+    return [
+      for (final row in rows)
+        DocumentEntry.fromMap((row! as Map).cast<String, Object?>()),
+    ];
+  }
+
+  static Future<bool> deleteDocument(String uri) async =>
+      await backendChannel.invokeMethod<bool>('deleteDocument', {'uri': uri}) ??
+      false;
+
+  /// Files opened with or shared to Kalao since the last call, as cache
+  /// copies `{path, name}` (the caller deletes them).
+  static Future<List<({String path, String name})>> takeSharedFiles() async {
+    final rows =
+        await backendChannel.invokeMethod<List<Object?>>('takeSharedFiles') ??
+        const [];
+    return [
+      for (final row in rows)
+        if (row case {'path': final String path, 'name': final String name})
+          (path: path, name: name),
+    ];
+  }
 
   /// The last native crash report as JSON text, or null.
   static Future<String?> readLastCrashReport() =>

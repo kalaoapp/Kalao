@@ -32,7 +32,12 @@ Future<int> pickAndImport(BuildContext context, WidgetRef ref) async {
     isScrollControlled: true,
     showDragHandle: true,
     isDismissible: false,
-    builder: (_) => ImportSheet(files: usable),
+    builder: (_) => ImportSheet(
+      files: [
+        for (final file in usable)
+          (name: file.name, read: file.readAsByteStream),
+      ],
+    ),
   );
   if (count != null && count > 0) {
     messenger.showSnackBar(SnackBar(content: Text(l10n.importDone(count))));
@@ -45,7 +50,8 @@ Future<int> pickAndImport(BuildContext context, WidgetRef ref) async {
 class ImportSheet extends ConsumerStatefulWidget {
   const ImportSheet({super.key, required this.files});
 
-  final List<PlatformFile> files;
+  /// Picked or shared files: a name and a way to read the bytes.
+  final List<ImportSource> files;
 
   @override
   ConsumerState<ImportSheet> createState() => _ImportSheetState();
@@ -75,7 +81,7 @@ class _ImportSheetState extends ConsumerState<ImportSheet> {
       );
       final staged = <StagedFile>[];
       for (final file in widget.files) {
-        staged.add(await _importer.stage(file.name, file.readAsByteStream()));
+        staged.add(await _importer.stage(file.name, file.read()));
       }
       final proposals = await _importer.propose(staged);
       if (mounted) {

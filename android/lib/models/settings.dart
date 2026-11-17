@@ -31,6 +31,18 @@ enum ChineseVariant {
   final String? conversion;
 }
 
+/// How often a scheduled backup runs (FEATURES 7.4). A due backup runs when
+/// the app is next opened or resumed (ADR-016).
+enum BackupSchedule {
+  off(null),
+  daily(Duration(days: 1)),
+  weekly(Duration(days: 7));
+
+  const BackupSchedule(this.interval);
+
+  final Duration? interval;
+}
+
 /// App preferences, stored as one JSON object in shared_preferences.
 /// Unknown or missing keys fall back to defaults, so adding a field never
 /// breaks an existing install. Secrets never go here (secure storage).
@@ -55,6 +67,11 @@ class AppSettings {
     this.keepScreenOn = true,
     this.tutorialSeen = false,
     this.whatsNewVersion,
+    this.backupFolderUri,
+    this.backupSchedule = BackupSchedule.off,
+    this.backupKeep = 5,
+    this.backupIncludeMedia = false,
+    this.checkUpdates = true,
   });
 
   factory AppSettings.fromJson(Map<String, dynamic> json) => AppSettings(
@@ -80,7 +97,47 @@ class AppSettings {
     keepScreenOn: json['keepScreenOn'] as bool? ?? true,
     tutorialSeen: json['tutorialSeen'] as bool? ?? false,
     whatsNewVersion: json['whatsNewVersion'] as String?,
+    backupFolderUri: json['backupFolderUri'] as String?,
+    backupSchedule:
+        BackupSchedule.values.asNameMap()[json['backupSchedule']] ??
+        BackupSchedule.off,
+    backupKeep: ((json['backupKeep'] as num?)?.toInt() ?? 5).clamp(1, 30),
+    backupIncludeMedia: json['backupIncludeMedia'] as bool? ?? false,
+    checkUpdates: json['checkUpdates'] as bool? ?? true,
   );
+
+  /// Keys that describe this device or this install rather than the user's
+  /// preferences: they are left out of backups and kept on restore.
+  static const deviceKeys = {
+    'setupCompleted',
+    'tutorialSeen',
+    'whatsNewVersion',
+    'customFontPath',
+    'backupFolderUri',
+    'backupSchedule',
+    'backupKeep',
+    'backupIncludeMedia',
+  };
+
+  /// `settings.json` in a backup (DATA_MODEL.md §3).
+  Map<String, dynamic> toBackupJson() => {
+    for (final MapEntry(:key, :value) in toJson().entries)
+      if (!deviceKeys.contains(key)) key: value,
+  };
+
+  /// Preferences from a backup's `settings.json`, with this device's
+  /// [deviceKeys] values from [device].
+  static AppSettings restoredFrom(
+    Map<String, dynamic> backup,
+    AppSettings device,
+  ) {
+    final local = device.toJson();
+    return AppSettings.fromJson({
+      for (final MapEntry(:key, :value) in backup.entries)
+        if (!deviceKeys.contains(key)) key: value,
+      for (final key in deviceKeys) key: local[key],
+    });
+  }
 
   /// The user finished the first-run setup.
   final bool setupCompleted;
@@ -133,6 +190,19 @@ class AppSettings {
   /// The app version whose What's New page was last shown.
   final String? whatsNewVersion;
 
+  /// The SAF folder (tree URI) scheduled backups are written to.
+  final String? backupFolderUri;
+  final BackupSchedule backupSchedule;
+
+  /// Scheduled backups kept in the folder (1–30); older ones are deleted.
+  final int backupKeep;
+
+  /// Scheduled backups include imported audio (large).
+  final bool backupIncludeMedia;
+
+  /// Check GitHub Releases for a newer version once a day (FEATURES 9.8).
+  final bool checkUpdates;
+
   Map<String, dynamic> toJson() => {
     'setupCompleted': setupCompleted,
     'themeMode': themeMode.name,
@@ -152,6 +222,11 @@ class AppSettings {
     'keepScreenOn': keepScreenOn,
     'tutorialSeen': tutorialSeen,
     'whatsNewVersion': whatsNewVersion,
+    'backupFolderUri': backupFolderUri,
+    'backupSchedule': backupSchedule.name,
+    'backupKeep': backupKeep,
+    'backupIncludeMedia': backupIncludeMedia,
+    'checkUpdates': checkUpdates,
   };
 
   AppSettings copyWith({
@@ -173,6 +248,11 @@ class AppSettings {
     bool? keepScreenOn,
     bool? tutorialSeen,
     String? Function()? whatsNewVersion,
+    String? Function()? backupFolderUri,
+    BackupSchedule? backupSchedule,
+    int? backupKeep,
+    bool? backupIncludeMedia,
+    bool? checkUpdates,
   }) => AppSettings(
     setupCompleted: setupCompleted ?? this.setupCompleted,
     themeMode: themeMode ?? this.themeMode,
@@ -196,6 +276,13 @@ class AppSettings {
     whatsNewVersion: whatsNewVersion != null
         ? whatsNewVersion()
         : this.whatsNewVersion,
+    backupFolderUri: backupFolderUri != null
+        ? backupFolderUri()
+        : this.backupFolderUri,
+    backupSchedule: backupSchedule ?? this.backupSchedule,
+    backupKeep: backupKeep ?? this.backupKeep,
+    backupIncludeMedia: backupIncludeMedia ?? this.backupIncludeMedia,
+    checkUpdates: checkUpdates ?? this.checkUpdates,
   );
 
   @override
@@ -218,10 +305,15 @@ class AppSettings {
       other.countdown == countdown &&
       other.keepScreenOn == keepScreenOn &&
       other.tutorialSeen == tutorialSeen &&
-      other.whatsNewVersion == whatsNewVersion;
+      other.whatsNewVersion == whatsNewVersion &&
+      other.backupFolderUri == backupFolderUri &&
+      other.backupSchedule == backupSchedule &&
+      other.backupKeep == backupKeep &&
+      other.backupIncludeMedia == backupIncludeMedia &&
+      other.checkUpdates == checkUpdates;
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     setupCompleted,
     themeMode,
     localeTag,
@@ -240,5 +332,10 @@ class AppSettings {
     keepScreenOn,
     tutorialSeen,
     whatsNewVersion,
-  );
+    backupFolderUri,
+    backupSchedule,
+    backupKeep,
+    backupIncludeMedia,
+    checkUpdates,
+  ]);
 }

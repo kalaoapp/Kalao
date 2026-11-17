@@ -92,6 +92,24 @@ class SettingsNotifier extends Notifier<AppSettings> {
   Future<void> setWhatsNewVersion(String version) =>
       _save(state.copyWith(whatsNewVersion: () => version));
 
+  Future<void> setBackupFolderUri(String? uri) =>
+      _save(state.copyWith(backupFolderUri: () => uri));
+
+  Future<void> setBackupSchedule(BackupSchedule value) =>
+      _save(state.copyWith(backupSchedule: value));
+
+  Future<void> setBackupKeep(int value) =>
+      _save(state.copyWith(backupKeep: value.clamp(1, 30)));
+
+  Future<void> setBackupIncludeMedia(bool value) =>
+      _save(state.copyWith(backupIncludeMedia: value));
+
+  Future<void> setCheckUpdates(bool value) =>
+      _save(state.copyWith(checkUpdates: value));
+
+  /// Applies preferences restored from a backup (device keys stay).
+  Future<void> restore(AppSettings restored) => _save(restored);
+
   Future<void> setVerboseLogging(bool value) async {
     await _save(state.copyWith(verboseLogging: value));
     LogBuffer().verbose = value;

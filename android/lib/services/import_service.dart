@@ -26,6 +26,9 @@ String _extension(String name) {
 }
 
 /// A picked file copied into staging, with what probing found.
+/// A file to import, from the picker or shared to Kalao.
+typedef ImportSource = ({String name, Stream<List<int>> Function() read});
+
 class StagedFile {
   StagedFile({required this.name, required this.path});
 

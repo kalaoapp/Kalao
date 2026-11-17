@@ -18,6 +18,7 @@ sha2.workspace = true
 thiserror.workspace = true
 uniffi.workspace = true
 chrono.workspace = true
+zip.workspace = true
 
 [lints]
 workspace = true

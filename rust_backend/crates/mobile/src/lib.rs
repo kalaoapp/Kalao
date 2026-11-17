@@ -9,6 +9,7 @@ mod data_jobs;
 mod logging;
 mod lyrics;
 mod media;
+mod native_backup;
 mod player;
 
 uniffi::setup_scaffolding!();

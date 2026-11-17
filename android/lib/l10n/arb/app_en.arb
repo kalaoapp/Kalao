@@ -330,5 +330,101 @@
   "privacyBackupTitle": "Backups",
   "privacyBackupBody": "A backup file holds your library and settings but no passwords, keys or other secrets. Backups are not encrypted, so keep them somewhere you trust.",
   "privacyDiagnosticsTitle": "Logs and crash reports",
-  "privacyDiagnosticsBody": "The debug log and crash reports stay on this device. They leave it only if you share them or open a GitHub issue yourself."
+  "privacyDiagnosticsBody": "The debug log and crash reports stay on this device. They leave it only if you share them or open a GitHub issue yourself.",
+  "settingsData": "Your data",
+  "backupTitle": "Backup and restore",
+  "backupSettingsSubtitle": "Move your library to another device",
+  "backupNow": "Back up",
+  "backupIncludeMedia": "Include audio",
+  "backupIncludeMediaSubtitle": "Imported songs make the file much larger",
+  "backupSave": "Save a backup…",
+  "backupUnencrypted": "Songs, lyrics, favorites, history, queue and settings. Backups are not encrypted and hold no passwords or keys.",
+  "backupRunning": "Backing up…",
+  "backupBusy": "A backup or restore is already running",
+  "backupSaved": "Backup saved",
+  "backupFailed": "Backup failed: {error}",
+  "@backupFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "backupScheduled": "Scheduled backup",
+  "backupFolder": "Backup folder",
+  "backupFolderNone": "Choose a folder to turn on scheduled backups. Sync it with your own tools to keep a copy elsewhere.",
+  "backupSchedule": "How often",
+  "backupScheduleOff": "Off",
+  "backupScheduleDaily": "Daily",
+  "backupScheduleWeekly": "Weekly",
+  "backupKeep": "Backups to keep",
+  "backupKeepFewer": "Keep fewer",
+  "backupKeepMore": "Keep more",
+  "backupLast": "Last scheduled backup",
+  "backupLastNever": "Not yet. A due backup runs when you open Kalao.",
+  "backupLastOk": "{when} · {size}",
+  "@backupLastOk": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "backupLastFailed": "Failed {when}: {error}",
+  "@backupLastFailed": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "restoreTitle": "Restore",
+  "restoreFromFile": "Restore from a backup…",
+  "restoreSubtitle": "You see what is in it before anything changes",
+  "restorePick": "Choose a Kalao backup",
+  "restoreChecking": "Checking the backup…",
+  "restoreRunning": "Restoring…",
+  "restoreDone": "Backup restored",
+  "restoreFailed": "Restore failed: {error}",
+  "@restoreFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "restorePreviewTitle": "Restore this backup?",
+  "restoreCreated": "Made",
+  "restoreSongs": "Songs",
+  "restoreSongsValue": "{count} ({added} new)",
+  "@restoreSongsValue": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "added": {
+        "type": "int"
+      }
+    }
+  },
+  "restoreLyrics": "Songs with lyrics",
+  "restoreFavorites": "Favorites",
+  "restorePlays": "Plays",
+  "restoreMedia": "Audio files",
+  "restoreMediaNone": "Not included",
+  "restoreSize": "Size",
+  "restoreMerge": "Merge",
+  "restoreMergeSubtitle": "Add what is new. Songs already here are matched; newer lyrics win and your own readings are kept.",
+  "restoreReplace": "Replace",
+  "restoreReplaceSubtitle": "Make this device match the backup. Your current data is saved to a safety backup first.",
+  "restoreApply": "Restore",
+  "sharedUnsupported": "Kalao can open backups, lyrics (.lrc, .ttml, .txt) and audio files",
+  "sharedLyricsChooseSong": "Add these lyrics to",
+  "sharedLyricsNoSongs": "Import a song first, then add lyrics to it"
 }

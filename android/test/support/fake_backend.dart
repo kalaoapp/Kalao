@@ -13,6 +13,19 @@ class FakeBackend {
   final calls = <MethodCall>[];
   String? crashReport;
 
+  /// SAF stand-ins: documents by URI (their copied file) and the URI the
+  /// next `createDocument` returns (null = the user cancelled).
+  final documents = <String, File>{};
+  String? nextDocumentUri = 'content://docs/picked';
+  String? nextTreeUri = 'content://tree/primary%3ABackups';
+  Directory? documentRoot;
+
+  /// Files the host hands to `takeSharedFiles` once.
+  final shared = <Map<String, String>>[];
+
+  /// Methods that fail with a PlatformException carrying their message.
+  final failing = <String, String>{};
+
   /// File names whose probe reports `decodable: false`.
   final undecodable = <String>{'opus', 'wma', 'ape'};
 
@@ -46,6 +59,9 @@ class FakeBackend {
   }
 
   void uninstall() {
+    if (documentRoot?.existsSync() ?? false) {
+      documentRoot!.deleteSync(recursive: true);
+    }
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_channel, null);
   }
@@ -55,6 +71,9 @@ class FakeBackend {
 
   Future<Object?> _handle(MethodCall call) async {
     calls.add(call);
+    if (failing[call.method] case final message?) {
+      throw PlatformException(code: 'ERROR', message: message);
+    }
     final args = _args(call);
     switch (call.method) {
       case 'getBackendInfo':
@@ -181,6 +200,35 @@ class FakeBackend {
         ]);
       case 'setScreenAwake':
         return null;
+      case 'takeSharedFiles':
+        final taken = [...shared];
+        shared.clear();
+        return taken;
+      case 'createDocument':
+        return nextDocumentUri;
+      case 'pickDocumentTree':
+        return nextTreeUri;
+      case 'copyFileToDocument':
+        _storeDocument(args['uri'] as String, args['path'] as String);
+        return null;
+      case 'writeFileToTree':
+        final uri = '${args['treeUri']}/document/${args['name']}';
+        _storeDocument(uri, args['path'] as String);
+        return uri;
+      case 'listDocumentTree':
+        final prefix = '${args['treeUri']}/document/';
+        return [
+          for (final MapEntry(key: uri, value: file) in documents.entries)
+            if (uri.startsWith(prefix))
+              {
+                'uri': uri,
+                'name': uri.substring(prefix.length),
+                'bytes': file.lengthSync(),
+                'modified': 0,
+              },
+        ];
+      case 'deleteDocument':
+        return documents.remove(args['uri'] as String)?.existsSync() ?? false;
       case 'runNativeDataJob':
         final request = jsonDecode(args['request_json'] as String) as Map;
         return jsonEncode(_job(request.cast<String, Object?>()));
@@ -191,6 +239,15 @@ class FakeBackend {
               'Rust application method is not connected yet: ${call.method}',
         );
     }
+  }
+
+  void _storeDocument(String uri, String path) {
+    final root = documentRoot ??= Directory.systemTemp.createTempSync(
+      'kalao-docs-',
+    );
+    final copy = File('${root.path}/${documents.length}-${uri.hashCode}');
+    File(path).copySync(copy.path);
+    documents[uri] = copy;
   }
 
   static bool _isInstrumental(String name) =>
@@ -352,15 +409,21 @@ class FakeBackend {
     _ => pinyin,
   };
 
+  /// FNV-1a over the content: equal files hash equally, as SHA-256 does.
+  static String _fnv(List<int> bytes) {
+    var hash = 0x811c9dc5;
+    for (final byte in bytes) {
+      hash = ((hash ^ byte) * 0x01000193) & 0xFFFFFFFF;
+    }
+    return hash.toRadixString(16).padLeft(64, '0');
+  }
+
   static Map<String, Object?> _job(Map<String, Object?> request) {
     switch (request['operation']) {
       case 'hash_file':
-        // FNV-1a over the content: equal files hash equally, as SHA-256 does.
-        var hash = 0x811c9dc5;
-        for (final byte in File(request['path'] as String).readAsBytesSync()) {
-          hash = ((hash ^ byte) * 0x01000193) & 0xFFFFFFFF;
-        }
-        return {'sha256': hash.toRadixString(16).padLeft(64, '0')};
+        return {
+          'sha256': _fnv(File(request['path'] as String).readAsBytesSync()),
+        };
       case 'rebuildSearchKeys':
         String norm(String value) => value.toLowerCase().replaceAll(
           RegExp(r'[^\p{L}\p{N}]', unicode: true),
@@ -389,6 +452,56 @@ class FakeBackend {
               }(),
           ],
         };
+      case 'backupWrite':
+        // A JSON stand-in for the ZIP: same manifest, same entry checks.
+        final files = <String, String>{};
+        final sums = <String, Object?>{};
+        for (final entry in request['entries'] as List) {
+          final map = (entry as Map).cast<String, Object?>();
+          final bytes = File(map['path'] as String).readAsBytesSync();
+          files[map['name'] as String] = base64Encode(bytes);
+          sums[map['name'] as String] = {
+            'sha256': _fnv(bytes),
+            'bytes': bytes.length,
+          };
+        }
+        final manifest = {
+          ...(request['manifest'] as Map).cast<String, Object?>(),
+          'entries': sums,
+        };
+        final output = File(request['output'] as String)
+          ..writeAsStringSync(
+            jsonEncode({'manifest': manifest, 'files': files}),
+          );
+        return {'bytes': output.lengthSync(), 'entries': files.length};
+      case 'backupInspect':
+        final Map<String, Object?> archive;
+        try {
+          archive =
+              (jsonDecode(File(request['path'] as String).readAsStringSync())
+                      as Map)
+                  .cast<String, Object?>();
+        } on FormatException {
+          throw PlatformException(
+            code: 'ERROR',
+            message: 'This file is not a Kalao backup',
+          );
+        }
+        final manifest = (archive['manifest'] as Map).cast<String, Object?>();
+        if ((manifest['format'] as int) > (request['maxFormat'] as int)) {
+          throw PlatformException(
+            code: 'ERROR',
+            message: 'This backup was made by a newer version of Kalao',
+          );
+        }
+        final target = request['extractTo'] as String;
+        for (final MapEntry(:key, :value)
+            in (archive['files'] as Map).cast<String, String>().entries) {
+          File('$target/$key')
+            ..createSync(recursive: true)
+            ..writeAsBytesSync(base64Decode(value));
+        }
+        return manifest;
       default:
         throw PlatformException(
           code: 'ERROR',

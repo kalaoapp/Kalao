@@ -1,27 +1,33 @@
 // Derived from Mornye (https://github.com/mornyeapp/Mornye), Copyright 2026 zarzet,
 // LGPL-3.0-only. Modified for Kalao.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kalao/l10n/app_localizations.dart';
+import 'package:kalao/providers/backup_provider.dart';
 import 'package:kalao/screens/home_tab.dart';
 import 'package:kalao/screens/library_screen.dart';
 import 'package:kalao/screens/queue_tab.dart';
 import 'package:kalao/screens/settings/settings_tab.dart';
+import 'package:kalao/screens/shared_files.dart';
 import 'package:kalao/services/app_crash_service.dart';
 import 'package:kalao/widgets/app_crash_banner.dart';
 import 'package:kalao/widgets/empty_state.dart';
 import 'package:kalao/widgets/mini_player.dart';
 
 /// The tabbed home of the app. Tabs keep their state while hidden.
-class MainShell extends StatefulWidget {
+class MainShell extends ConsumerStatefulWidget {
   const MainShell({super.key});
 
   @override
-  State<MainShell> createState() => _MainShellState();
+  ConsumerState<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends ConsumerState<MainShell> {
   int _index = 0;
   CrashReport? _crash;
+  late final AppLifecycleListener _lifecycle;
 
   @override
   void initState() {
@@ -29,6 +35,22 @@ class _MainShellState extends State<MainShell> {
     AppCrashService.readLastCrash().then((report) {
       if (mounted && report != null) setState(() => _crash = report);
     });
+    // On start and resume: files opened with Kalao (M4.12), then a due
+    // scheduled backup (ADR-016).
+    _lifecycle = AppLifecycleListener(onResume: _onForeground);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onForeground());
+  }
+
+  void _onForeground() {
+    if (!mounted) return;
+    unawaited(handleSharedFiles(context, ref));
+    unawaited(ref.read(backupControllerProvider.notifier).runScheduledIfDue());
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    super.dispose();
   }
 
   @override

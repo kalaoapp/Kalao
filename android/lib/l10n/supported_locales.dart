@@ -31,3 +31,20 @@ String localeDisplayName(Locale locale) => switch (localeTag(locale)) {
   'ja' => '日本語',
   _ => localeTag(locale),
 };
+
+/// The UI locale outside a widget tree (notifications from background
+/// work): the stored [tag], else the closest match to the system locale.
+Locale appLocaleFor(String? tag, [Locale? system]) {
+  final chosen = localeForTag(tag);
+  if (chosen != null) return chosen;
+  final device = system ?? WidgetsBinding.instance.platformDispatcher.locale;
+  return switch (device.languageCode) {
+    'zh'
+        when device.scriptCode == 'Hant' ||
+            const {'TW', 'HK', 'MO'}.contains(device.countryCode) =>
+      kalaoSupportedLocales[2],
+    'zh' => const Locale('zh'),
+    'ja' => const Locale('ja'),
+    _ => const Locale('en'),
+  };
+}
