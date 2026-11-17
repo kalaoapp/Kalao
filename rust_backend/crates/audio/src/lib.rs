@@ -15,8 +15,9 @@ use mixer::Mixer;
 use serde_json::{Value, json};
 use source::Source;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError, Weak};
+use std::time::Duration;
 
 /// Ring size per source: about 0.5 s at 48 kHz.
 const RING_FRAMES: usize = 24_000;
@@ -24,6 +25,14 @@ const RING_FRAMES: usize = 24_000;
 const GAIN_RAMP_MS: u32 = 10;
 /// Original ↔ instrumental switch.
 const SWITCH_RAMP_MS: u32 = 150;
+/// Tempo and key ranges (FEATURES 1.4).
+const MIN_TEMPO: f32 = 0.5;
+const MAX_TEMPO: f32 = 1.5;
+const MAX_KEY_SEMITONES: f32 = 6.0;
+/// `loop_range` when no loop is set.
+const NO_LOOP: u64 = u64::MAX;
+/// The shortest loop: shorter ones would mostly be the seam.
+const MIN_LOOP_MS: u64 = 250;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AudioError {
@@ -81,11 +90,24 @@ struct Shared {
     seeking: AtomicBool,
     completed: AtomicBool,
     buffering: AtomicBool,
-    /// Song position in thousandths of an output frame: each rendered frame
-    /// adds the tempo in permille, so it advances in song time.
+    /// Song position in thousandths of an output-rate frame: every source
+    /// frame mixed adds 1000, so it advances in song time at any tempo.
     position: AtomicU64,
     /// Playback speed in permille (1000 = normal).
     tempo: AtomicU32,
+    /// Transposition in cents (100 = one semitone up).
+    key_cents: AtomicI32,
+    /// Bumped whenever the stretcher must forget its history (seek, load,
+    /// engaging it).
+    stretch_generation: AtomicU32,
+    /// The stretcher's delay in frames: input latency in the high half,
+    /// output latency in the low half.
+    stretch_latency: AtomicU64,
+    /// Loop start and end in ms (start in the high half), or `NO_LOOP`.
+    loop_range: AtomicU64,
+    /// The callback reached the loop end; the loop thread seeks to the start.
+    loop_pending: AtomicBool,
+    loop_thread: OnceLock<std::thread::Thread>,
     output_rate: AtomicU32,
     latency_us: AtomicU64,
     vocal_target: AtomicU32,
@@ -117,6 +139,7 @@ impl Shared {
         if frames == 0
             || !self.playing.load(Ordering::Acquire)
             || self.seeking.load(Ordering::Acquire)
+            || self.loop_pending.load(Ordering::Acquire)
         {
             return;
         }
@@ -139,6 +162,20 @@ impl Shared {
         }
         let count = session.sources.len().min(3);
         let consumers = &mut consumers[..count];
+
+        // With the stretcher engaged, `frames` of output consume
+        // `frames × tempo` source frames; the fraction carries over.
+        let tempo = self.tempo.load(Ordering::Acquire);
+        let key = self.key_cents.load(Ordering::Acquire);
+        let stretching = (tempo != 1000 || key != 0) && mixer.stretch.is_some();
+        let frames_out = frames;
+        let frames = if stretching {
+            let exact = frames as f64 * f64::from(tempo) / 1000.0 + mixer.carry;
+            mixer.carry = exact.fract();
+            exact as usize
+        } else {
+            frames
+        };
 
         use ringbuf::traits::{Consumer, Observer};
         let mut all_done = true;
@@ -173,11 +210,86 @@ impl Shared {
         let mut bus = std::mem::take(&mut mixer.bus);
         bus.resize(frames * 2, 0.0);
         mixer.mix(session.layout, &session.kinds, frames, &mut bus);
-        write_channels(&bus, out, channels);
+        if stretching {
+            let mut stretched = std::mem::take(&mut mixer.stretched);
+            stretched.resize(frames_out * 2, 0.0);
+            let generation = self.stretch_generation.load(Ordering::Acquire);
+            let fresh = mixer.stretch_generation != generation;
+            mixer.stretch_generation = generation;
+            let rekey = mixer.stretch_key != key;
+            mixer.stretch_key = key;
+            if let Some(stretch) = mixer.stretch.as_mut() {
+                if fresh {
+                    stretch.reset();
+                }
+                if rekey || fresh {
+                    stretch.set_transpose_factor_semitones(key as f32 / 100.0, None);
+                }
+                stretch.process(&bus[..frames * 2], &mut stretched[..]);
+            }
+            write_channels(&stretched, out, channels);
+            mixer.stretched = stretched;
+        } else {
+            write_channels(&bus, out, channels);
+        }
         mixer.bus = bus;
-        let tempo = u64::from(self.tempo.load(Ordering::Acquire));
+        let position = self
+            .position
+            .fetch_add(frames as u64 * 1000, Ordering::AcqRel)
+            + frames as u64 * 1000;
+        let range = self.loop_range.load(Ordering::Acquire);
+        if range != NO_LOOP {
+            let rate = u64::from(self.output_rate.load(Ordering::Acquire).max(1));
+            if position / rate >= range & 0xffff_ffff {
+                // Decoders cannot be moved from here: hand over to the loop
+                // thread and stay silent until it has sought.
+                self.loop_pending.store(true, Ordering::Release);
+                if let Some(thread) = self.loop_thread.get() {
+                    thread.unpark();
+                }
+            }
+        }
+    }
+
+    /// Moves every source to `ms` together.
+    fn seek(&self, ms: u64) -> Result<(), AudioError> {
+        let session = lock(&self.session);
+        let Some(current) = session.as_ref() else {
+            return Err(AudioError::Invalid("nothing is loaded".into()));
+        };
+        let ms = current.duration_ms.map_or(ms, |duration| ms.min(duration));
+        self.seeking.store(true, Ordering::Release);
+        let mut result = Ok(());
+        for source in &current.sources {
+            if let Err(error) = source.seek(ms) {
+                result = Err(error);
+            }
+        }
+        let rate = self.output_rate.load(Ordering::Acquire);
         self.position
-            .fetch_add(frames as u64 * tempo, Ordering::AcqRel);
+            .store(ms_to_position(ms, rate), Ordering::Release);
+        self.stretch_generation.fetch_add(1, Ordering::AcqRel);
+        self.completed.store(false, Ordering::Release);
+        self.seeking.store(false, Ordering::Release);
+        result
+    }
+
+    /// Runs on the loop thread: seeks back to the loop start whenever the
+    /// callback reaches the loop end.
+    fn run_loop(shared: &Weak<Shared>) {
+        loop {
+            std::thread::park_timeout(Duration::from_millis(250));
+            let Some(shared) = shared.upgrade() else {
+                return;
+            };
+            if shared.loop_pending.load(Ordering::Acquire) {
+                let range = shared.loop_range.load(Ordering::Acquire);
+                if range != NO_LOOP {
+                    let _ = shared.seek(range >> 32);
+                }
+                shared.loop_pending.store(false, Ordering::Release);
+            }
+        }
     }
 
     fn apply_mix_targets(&self, mixer: &mut Mixer) {
@@ -251,6 +363,12 @@ impl Engine {
             buffering: AtomicBool::new(false),
             position: AtomicU64::new(0),
             tempo: AtomicU32::new(1000),
+            key_cents: AtomicI32::new(0),
+            stretch_generation: AtomicU32::new(0),
+            stretch_latency: AtomicU64::new(0),
+            loop_range: AtomicU64::new(NO_LOOP),
+            loop_pending: AtomicBool::new(false),
+            loop_thread: OnceLock::new(),
             output_rate: AtomicU32::new(rate),
             latency_us: AtomicU64::new(0),
             vocal_target: AtomicU32::new(1.0f32.to_bits()),
@@ -314,7 +432,7 @@ impl Engine {
             }
             let probe = probe_file(path)?;
             duration_ms = duration_ms.max(probe.duration_ms);
-            let source = Source::open(*kind, path, rate, RING_FRAMES, self.tempo())?;
+            let source = Source::open(*kind, path, rate, RING_FRAMES)?;
             if start_ms > 0 {
                 source.seek(start_ms)?;
             }
@@ -335,8 +453,15 @@ impl Engine {
             .position
             .store(ms_to_position(start_ms, rate), Ordering::Release);
         self.shared.completed.store(false, Ordering::Release);
+        // A loop belongs to the song it was set on.
+        self.shared.loop_range.store(NO_LOOP, Ordering::Release);
+        self.shared.loop_pending.store(false, Ordering::Release);
+        self.shared
+            .stretch_generation
+            .fetch_add(1, Ordering::AcqRel);
         // Join the old decoder threads outside the lock.
         drop(previous);
+        self.ensure_stretch();
         Ok(())
     }
 
@@ -363,30 +488,14 @@ impl Engine {
         let previous = lock(&self.shared.session).take();
         self.shared.position.store(0, Ordering::Release);
         self.shared.completed.store(false, Ordering::Release);
+        self.shared.loop_range.store(NO_LOOP, Ordering::Release);
+        self.shared.loop_pending.store(false, Ordering::Release);
         drop(previous);
     }
 
     /// Moves every source to `ms` together.
     pub fn seek(&self, ms: u64) -> Result<(), AudioError> {
-        let session = lock(&self.shared.session);
-        let Some(current) = session.as_ref() else {
-            return Err(AudioError::Invalid("nothing is loaded".into()));
-        };
-        let ms = current.duration_ms.map_or(ms, |duration| ms.min(duration));
-        self.shared.seeking.store(true, Ordering::Release);
-        let mut result = Ok(());
-        for source in &current.sources {
-            if let Err(error) = source.seek(ms) {
-                result = Err(error);
-            }
-        }
-        let rate = self.shared.output_rate.load(Ordering::Acquire);
-        self.shared
-            .position
-            .store(ms_to_position(ms, rate), Ordering::Release);
-        self.shared.completed.store(false, Ordering::Release);
-        self.shared.seeking.store(false, Ordering::Release);
-        result
+        self.shared.seek(ms)
     }
 
     pub fn set_volume(&self, volume: f32) {
@@ -426,27 +535,96 @@ impl Engine {
         self.shared.tempo.load(Ordering::Acquire) as f32 / 1000.0
     }
 
-    /// Playback speed, 0.5–1.5 (1 = normal). The pitch follows the speed;
-    /// positions stay in song time. Buffered audio is dropped so the change
-    /// is heard at once.
+    fn key(&self) -> f32 {
+        self.shared.key_cents.load(Ordering::Acquire) as f32 / 100.0
+    }
+
+    /// Builds the stretcher for the current output rate when key or tempo
+    /// needs it. Done here, never in the callback: it allocates.
+    fn ensure_stretch(&self) {
+        let neutral = self.shared.tempo.load(Ordering::Acquire) == 1000
+            && self.shared.key_cents.load(Ordering::Acquire) == 0;
+        let rate = self.shared.output_rate.load(Ordering::Acquire);
+        let mut mixer = lock(&self.shared.mixer);
+        if neutral || (mixer.stretch.is_some() && mixer.stretch_rate == rate) {
+            return;
+        }
+        let stretch = signalsmith_stretch::Stretch::preset_default(2, rate);
+        self.shared.stretch_latency.store(
+            (stretch.input_latency() as u64) << 32 | stretch.output_latency() as u64,
+            Ordering::Release,
+        );
+        mixer.stretch = Some(stretch);
+        mixer.stretch_rate = rate;
+        mixer.carry = 0.0;
+    }
+
+    /// Whether the stretcher is in the signal path.
+    fn stretching(&self) -> bool {
+        self.shared.tempo.load(Ordering::Acquire) != 1000
+            || self.shared.key_cents.load(Ordering::Acquire) != 0
+    }
+
+    /// Playback speed, 0.5–1.5 (1 = normal), without changing the pitch.
+    /// Positions stay in song time.
     pub fn set_tempo(&self, tempo: f32) -> Result<(), AudioError> {
         if !tempo.is_finite() {
             return Err(AudioError::Invalid("tempo must be a number".into()));
         }
-        let permille = (tempo.clamp(source::MIN_TEMPO, source::MAX_TEMPO) * 1000.0).round() as u32;
-        if self.shared.tempo.swap(permille, Ordering::AcqRel) == permille {
+        let was = self.stretching();
+        let permille = (tempo.clamp(MIN_TEMPO, MAX_TEMPO) * 1000.0).round() as u32;
+        self.shared.tempo.store(permille, Ordering::Release);
+        self.engage(was);
+        Ok(())
+    }
+
+    /// Transposes by `semitones` (±6) without changing the tempo.
+    pub fn set_key(&self, semitones: f32) -> Result<(), AudioError> {
+        if !semitones.is_finite() {
+            return Err(AudioError::Invalid("key must be a number".into()));
+        }
+        let was = self.stretching();
+        let cents = (semitones.clamp(-MAX_KEY_SEMITONES, MAX_KEY_SEMITONES) * 100.0).round() as i32;
+        self.shared.key_cents.store(cents, Ordering::Release);
+        self.engage(was);
+        Ok(())
+    }
+
+    /// After a key or tempo change: build the stretcher if it is now needed
+    /// and start it clean when it enters the signal path.
+    fn engage(&self, was_stretching: bool) {
+        self.ensure_stretch();
+        if self.stretching() && !was_stretching {
+            self.shared
+                .stretch_generation
+                .fetch_add(1, Ordering::AcqRel);
+        }
+    }
+
+    /// Repeats `start_ms..end_ms` (song time) until cleared with `None`.
+    /// Reaching the end seeks back to the start, with a short gap at the
+    /// seam while the decoders refill.
+    pub fn set_loop(&self, range: Option<(u64, u64)>) -> Result<(), AudioError> {
+        let Some((start, end)) = range else {
+            self.shared.loop_range.store(NO_LOOP, Ordering::Release);
             return Ok(());
-        }
-        let loaded = {
-            let session = lock(&self.shared.session);
-            for source in session.iter().flat_map(|session| &session.sources) {
-                source.set_tempo(permille as f32 / 1000.0)?;
-            }
-            session.is_some()
         };
-        if loaded {
-            self.seek(self.rendered_ms())?;
+        if end < start + MIN_LOOP_MS || end > u64::from(u32::MAX) {
+            return Err(AudioError::Invalid(format!(
+                "a loop must be at least {MIN_LOOP_MS} ms long"
+            )));
         }
+        if self.shared.loop_thread.get().is_none() {
+            let shared = Arc::downgrade(&self.shared);
+            let thread = std::thread::Builder::new()
+                .name("kalao-loop".into())
+                .spawn(move || Shared::run_loop(&shared))
+                .map_err(|error| AudioError::Output(error.to_string()))?;
+            let _ = self.shared.loop_thread.set(thread.thread().clone());
+        }
+        self.shared
+            .loop_range
+            .store(start << 32 | end, Ordering::Release);
         Ok(())
     }
 
@@ -459,10 +637,18 @@ impl Engine {
     pub fn position_ms(&self) -> u64 {
         let rendered_ms = self.rendered_ms();
         if self.shared.playing.load(Ordering::Acquire) {
-            // What is heard now left the engine one output latency ago.
+            // What is heard now left the engine one output latency ago, and
+            // entered the stretcher (when engaged) its delay before that.
             let latency_us = self.shared.latency_us.load(Ordering::Acquire);
             let tempo = u64::from(self.shared.tempo.load(Ordering::Acquire));
-            rendered_ms.saturating_sub(latency_us * tempo / 1_000_000)
+            let mut behind_ms = latency_us * tempo / 1_000_000;
+            if self.stretching() {
+                let rate = u64::from(self.shared.output_rate.load(Ordering::Acquire).max(1));
+                let latency = self.shared.stretch_latency.load(Ordering::Acquire);
+                let (input, output) = (latency >> 32, latency & 0xffff_ffff);
+                behind_ms += (input * 1000 + output * tempo) / rate;
+            }
+            rendered_ms.saturating_sub(behind_ms)
         } else {
             rendered_ms
         }
@@ -493,10 +679,18 @@ impl Engine {
             "vocalLevel": load_f32(&self.shared.vocal_target),
             "volume": load_f32(&self.shared.volume_target),
             "tempo": self.tempo(),
+            "key": self.key(),
+            "loopStartMs": self.loop_range().map(|range| range.0),
+            "loopEndMs": self.loop_range().map(|range| range.1),
             "outputLatencyMs": self.shared.latency_us.load(Ordering::Acquire) / 1000,
             "sampleRate": self.shared.output_rate.load(Ordering::Acquire),
             "error": errors.first(),
         })
+    }
+
+    fn loop_range(&self) -> Option<(u64, u64)> {
+        let range = self.shared.loop_range.load(Ordering::Acquire);
+        (range != NO_LOOP).then_some((range >> 32, range & 0xffff_ffff))
     }
 
     /// Pulls frames as the audio callback would (manual output and tests).

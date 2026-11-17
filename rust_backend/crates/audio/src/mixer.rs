@@ -3,6 +3,7 @@
 //! driving `Engine::render`) touches `Mixer`.
 
 use crate::SourceKind;
+use signalsmith_stretch::Stretch;
 use std::f32::consts::FRAC_PI_2;
 
 /// How the loaded sources combine, decided at load time.
@@ -100,6 +101,18 @@ pub struct Mixer {
     pub scratch: Vec<Vec<f32>>,
     /// The mixed stereo bus, reused across callbacks.
     pub bus: Vec<f32>,
+    /// Key and tempo on the bus (IMPLEMENTATION.md §2), created by the
+    /// control thread the first time either is not neutral.
+    pub stretch: Option<Stretch>,
+    /// The output rate `stretch` was built for.
+    pub stretch_rate: u32,
+    pub stretch_generation: u32,
+    /// The transposition last given to `stretch`, in cents.
+    pub stretch_key: i32,
+    /// The stretcher's output, reused across callbacks.
+    pub stretched: Vec<f32>,
+    /// Fraction of a source frame owed to the next callback at tempo ≠ 1.
+    pub carry: f64,
 }
 
 impl Mixer {
@@ -111,6 +124,12 @@ impl Mixer {
             mix_generation: 0,
             scratch: Vec::new(),
             bus: Vec::new(),
+            stretch: None,
+            stretch_rate: 0,
+            stretch_generation: 0,
+            stretch_key: 0,
+            stretched: Vec::new(),
+            carry: 0.0,
         }
     }
 

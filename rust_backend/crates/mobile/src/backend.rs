@@ -35,6 +35,8 @@ pub const METHODS: &[&str] = &[
     "playerPause",
     "playerPlay",
     "playerSeek",
+    "playerSetKey",
+    "playerSetLoop",
     "playerSetStemGains",
     "playerSetTempo",
     "playerSetVolume",

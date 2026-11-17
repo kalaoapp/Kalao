@@ -65,6 +65,20 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, BackendError> {
         "playerSetStemGains" => {
             engine.set_stem_gains(level(args, "vocals"), level(args, "instrumental"))
         }
+        "playerSetKey" => engine
+            .set_key(
+                level(args, "semitones")
+                    .ok_or_else(|| invalid(method, "missing number field semitones"))?,
+            )
+            .map_err(operation)?,
+        "playerSetLoop" => {
+            let range = match (args["startMs"].as_u64(), args["endMs"].as_u64()) {
+                (Some(start), Some(end)) => Some((start, end)),
+                (None, None) => None,
+                _ => return Err(invalid(method, "startMs and endMs go together")),
+            };
+            engine.set_loop(range).map_err(operation)?;
+        }
         "playerSetTempo" => engine
             .set_tempo(
                 level(args, "rate").ok_or_else(|| invalid(method, "missing number field rate"))?,

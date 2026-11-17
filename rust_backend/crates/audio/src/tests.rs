@@ -268,19 +268,23 @@ fn probe_reports_wav_details() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// The frame of the first sample louder than 0.5 at or after `from`.
-fn click_frame(out: &[f32], from: usize) -> Option<usize> {
-    out.as_chunks::<2>()
+/// Sign changes of the left channel in `out` (two per cycle of a tone).
+fn zero_crossings(out: &[f32]) -> usize {
+    let left: Vec<f32> = out
+        .as_chunks::<2>()
         .0
         .iter()
-        .skip(from)
-        .position(|frame| frame[0].abs() > 0.5)
-        .map(|index| index + from)
+        .map(|frame| frame[0])
+        .collect();
+    left.windows(2)
+        .filter(|pair| (pair[0] < 0.0) != (pair[1] < 0.0))
+        .count()
 }
 
 /// M2.6: the position the engine reports is the song time of the audio it
 /// renders, so a lyric line timed at a click lights up within ±30 ms of the
-/// click, through the resampler and at a slowed tempo.
+/// click: through the resampler, and through the stretcher at a slowed
+/// tempo (whose delay the position allows for).
 #[test]
 fn reported_position_tracks_rendered_clicks_within_30_ms() {
     let dir = temp_dir("clicks");
@@ -288,7 +292,7 @@ fn reported_position_tracks_rendered_clicks_within_30_ms() {
     let source_rate = 44_100u32;
     // A 5 ms click every 500 ms of song time.
     let clicks_ms: Vec<u64> = (1..=5).map(|index| index * 500).collect();
-    write_wav(&path, source_rate, source_rate * 3, |frame| {
+    write_wav(&path, source_rate, source_rate * 4, |frame| {
         let ms = frame as u64 * 1000 / u64::from(source_rate);
         if ms % 500 < 5 && ms >= 500 { 0.9 } else { 0.0 }
     });
@@ -303,23 +307,30 @@ fn reported_position_tracks_rendered_clicks_within_30_ms() {
         // Render in callback-sized blocks, noting the position after each.
         let block = 480;
         let mut out = Vec::new();
-        let mut positions = Vec::new();
-        while engine.position_ms() < 2700 {
+        let mut positions = vec![0u64];
+        while engine.position_ms() < 2800 {
             assert_eq!(engine.state()["completed"], false, "song ended early");
             out.extend(render(&engine, block));
             positions.push(engine.position_ms());
         }
-        let mut from = 0;
+        // Song time of an output frame, by the engine clock.
+        let song_ms = |frame: usize| {
+            let (start, end) = (positions[frame / block], positions[frame / block + 1]);
+            start + (end - start) * (frame % block) as u64 / block as u64
+        };
         for click_ms in &clicks_ms {
-            let frame = click_frame(&out, from).expect("click rendered");
-            from = frame + block * 4;
-            // Song time when that frame was rendered, by the engine clock.
-            let index = frame / block;
-            let start = if index == 0 { 0 } else { positions[index - 1] };
-            let heard = start + (positions[index] - start) * (frame % block) as u64 / block as u64;
-            let error = heard as i64 - *click_ms as i64;
+            // The loudest frame the clock places near the click.
+            let loudest = (0..out.len() / 2)
+                .filter(|frame| song_ms(*frame).abs_diff(*click_ms) <= 200)
+                .max_by(|a, b| out[a * 2].abs().total_cmp(&out[b * 2].abs()))
+                .expect("frames near the click");
             assert!(
-                error.abs() <= 30,
+                out[loudest * 2].abs() > 0.2,
+                "click at {click_ms} ms is audible"
+            );
+            let heard = song_ms(loudest);
+            assert!(
+                heard.abs_diff(*click_ms) <= 30,
                 "click at {click_ms} ms rendered at {heard} ms (tempo {tempo})"
             );
         }
@@ -328,13 +339,10 @@ fn reported_position_tracks_rendered_clicks_within_30_ms() {
 }
 
 #[test]
-fn tempo_slows_song_time_and_keeps_the_position() {
+fn tempo_changes_speed_but_not_pitch() {
     let dir = temp_dir("tempo");
-    let path = dir.join("ramp.wav");
-    let frames = RATE as usize * 2;
-    write_wav(&path, RATE, frames as u32, |f| {
-        f as f32 / frames as f32 * 0.7
-    });
+    let path = dir.join("tone.wav");
+    write_wav(&path, RATE, RATE * 4, |f| sine(f, RATE));
     let engine = Engine::new(Output::Manual { sample_rate: RATE });
     engine
         .load("song", &[(SourceKind::Original, path)], 0)
@@ -342,21 +350,91 @@ fn tempo_slows_song_time_and_keeps_the_position() {
     engine.play().unwrap();
     render(&engine, RATE as usize / 2);
     assert_eq!(engine.position_ms(), 500);
-    // Half speed: one second of output is half a second of song.
+    // Half speed: two seconds of output are one second of song.
     engine.set_tempo(0.5).unwrap();
-    assert_eq!(engine.position_ms(), 500);
-    let out = render(&engine, RATE as usize);
-    assert_eq!(engine.position_ms(), 1000);
-    let expected = 0.7 * 0.5;
-    let last = out[out.len() - 2];
-    assert!((last - expected).abs() < 0.01, "{last} vs {expected}");
-    // Out-of-range values are clamped; back to normal passes frames through.
+    let out = render(&engine, RATE as usize * 2);
+    engine.pause();
+    assert_eq!(engine.position_ms(), 1500);
+    // The tone is still 440 Hz: 880 sign changes per second.
+    let crossings = zero_crossings(&out[RATE as usize * 2..]);
+    assert!(
+        (836..=924).contains(&crossings),
+        "{crossings} crossings in the last second"
+    );
+    // Out-of-range values are clamped; back to normal the bus is untouched.
     engine.set_tempo(9.0).unwrap();
     assert_eq!(engine.state()["tempo"], 1.5);
     engine.set_tempo(1.0).unwrap();
     engine.seek(1000).unwrap();
+    engine.play().unwrap();
     let out = render(&engine, 16);
-    assert!((out[0] - expected).abs() < 1e-3);
+    assert!((out[2] - sine(RATE as usize + 1, RATE)).abs() < 1e-3);
     assert!(engine.set_tempo(f32::NAN).is_err());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn key_changes_pitch_but_not_speed() {
+    let dir = temp_dir("key");
+    let path = dir.join("tone.wav");
+    write_wav(&path, RATE, RATE * 4, |f| sine(f, RATE));
+    let engine = Engine::new(Output::Manual { sample_rate: RATE });
+    engine
+        .load("song", &[(SourceKind::Original, path)], 0)
+        .unwrap();
+    engine.set_key(6.0).unwrap();
+    assert_eq!(engine.state()["key"], 6.0);
+    engine.play().unwrap();
+    let out = render(&engine, RATE as usize * 2);
+    engine.pause();
+    assert_eq!(engine.position_ms(), 2000);
+    // Six semitones up: 440 Hz × √2 ≈ 622 Hz, 1245 sign changes per second.
+    let crossings = zero_crossings(&out[RATE as usize * 2..]);
+    assert!(
+        (1182..=1307).contains(&crossings),
+        "{crossings} crossings in the last second"
+    );
+    engine.set_key(-40.0).unwrap();
+    assert_eq!(engine.state()["key"], -6.0);
+    assert!(engine.set_key(f32::INFINITY).is_err());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn loop_repeats_the_range_until_cleared() {
+    let dir = temp_dir("loop");
+    let path = dir.join("tone.wav");
+    write_wav(&path, RATE, RATE * 3, |f| sine(f, RATE));
+    let engine = Engine::new(Output::Manual { sample_rate: RATE });
+    engine
+        .load("song", &[(SourceKind::Original, path)], 0)
+        .unwrap();
+    assert!(engine.set_loop(Some((500, 600))).is_err());
+    engine.set_loop(Some((500, 1000))).unwrap();
+    assert_eq!(engine.state()["loopStartMs"], 500);
+    assert_eq!(engine.state()["loopEndMs"], 1000);
+    engine.play().unwrap();
+    let mut wraps = 0;
+    let mut last = 0;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while wraps < 3 {
+        assert!(Instant::now() < deadline, "the loop did not wrap");
+        render(&engine, 480);
+        let position = engine.position_ms();
+        assert!(position <= 1010, "played past the loop end: {position}");
+        if position < last {
+            assert!((500..520).contains(&position), "wrapped to {position}");
+            wraps += 1;
+        }
+        last = position;
+        // The seek back happens on the loop thread.
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    engine.set_loop(None).unwrap();
+    assert!(engine.state()["loopEndMs"].is_null());
+    while engine.position_ms() < 1200 {
+        assert!(Instant::now() < deadline, "playback did not leave the loop");
+        render(&engine, 480);
+    }
     let _ = std::fs::remove_dir_all(dir);
 }

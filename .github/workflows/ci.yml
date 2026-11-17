@@ -99,7 +99,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install ALSA headers (cpal host build)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev pkg-config
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev pkg-config libclang-dev
 
       - name: Activate pinned Rust toolchain
         working-directory: rust_backend
@@ -157,7 +157,7 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370" >> "$GITHUB_ENV"
 
       - name: Install ALSA headers (cpal host build)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev pkg-config
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev pkg-config libclang-dev
 
       - name: Activate pinned Rust toolchain
         working-directory: rust_backend

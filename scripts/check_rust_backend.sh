@@ -14,6 +14,7 @@ if (( $# > 0 )); then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/rust_env.sh"
 cd "$(dirname "$SCRIPT_DIR")/rust_backend"
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --locked -- -D warnings

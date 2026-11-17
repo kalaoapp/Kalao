@@ -37,6 +37,7 @@ if [[ "$PLATFORM" == "android" ]]; then
   done
 fi
 
+source "$SCRIPT_DIR/rust_env.sh"
 cd "$RUST_BACKEND_DIR"
 export CARGO_TARGET_DIR="$RUST_BACKEND_DIR/target"
 
@@ -63,6 +64,10 @@ if [[ "$PLATFORM" == "android" ]]; then
     exit 1
   fi
   NDK_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$NDK_HOST/bin"
+  NDK_SYSROOT="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$NDK_HOST/sysroot"
+  if [[ "$NDK_HOST" == "windows-x86_64" ]]; then
+    NDK_SYSROOT="$(cygpath -m "$NDK_SYSROOT")"
+  fi
 
   ANDROID_TARGETS=()
   for ABI in "${ANDROID_ABIS[@]}"; do
@@ -80,6 +85,11 @@ if [[ "$PLATFORM" == "android" ]]; then
     LOWER="${TARGET//-/_}"
     export "CARGO_TARGET_${UPPER}_LINKER=$LINKER"
     export "CC_${LOWER}=$LINKER"
+    # C++ (Signalsmith Stretch): the NDK's clang++, libc++ linked statically
+    # so the APK carries no libc++_shared.so, and the NDK headers for bindgen.
+    export "CXX_${LOWER}=$NDK_BIN/${CLANG}++$EXE"
+    export "CXXSTDLIB_${LOWER}=c++_static"
+    export "BINDGEN_EXTRA_CLANG_ARGS_${LOWER}=${BINDGEN_EXTRA_CLANG_ARGS:-} --sysroot=$NDK_SYSROOT"
     export "AR_${LOWER}=$NDK_BIN/llvm-ar"
     ANDROID_TARGETS+=("$TARGET")
   done

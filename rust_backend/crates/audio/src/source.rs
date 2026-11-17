@@ -17,9 +17,6 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 const RESAMPLE_CHUNK: usize = 1024;
-/// Tempo range of `set_tempo`; the resampler ratio moves by its inverse.
-pub const MIN_TEMPO: f32 = 0.5;
-pub const MAX_TEMPO: f32 = 1.5;
 
 /// What the callback and the control thread share for one source.
 pub struct SourceShared {
@@ -31,12 +28,7 @@ pub struct SourceShared {
 
 pub struct Worker {
     decoder: Decoder,
-    resampler: FastFixedIn<f32>,
-    /// Source and output rates match and the tempo is 1: frames pass through
-    /// untouched.
-    passthrough: bool,
-    same_rate: bool,
-    tempo: f32,
+    resampler: Option<FastFixedIn<f32>>,
     producer: HeapProd<f32>,
     /// Decoded stereo frames at the source rate awaiting resampling.
     input: Vec<f32>,
@@ -54,25 +46,28 @@ pub struct Source {
 
 impl Source {
     /// Opens `path` and starts its decoder thread. `ring_frames` is the ring
-    /// capacity in output frames; `tempo` is the playback speed (1 = normal).
+    /// capacity in output frames.
     pub fn open(
         kind: SourceKind,
         path: &Path,
         output_rate: u32,
         ring_frames: usize,
-        tempo: f32,
     ) -> Result<Self, AudioError> {
         let decoder = Decoder::open(path)?;
-        let same_rate = decoder.sample_rate == output_rate;
-        let mut resampler = FastFixedIn::new(
-            f64::from(output_rate) / f64::from(decoder.sample_rate),
-            f64::from(1.0 / MIN_TEMPO),
-            PolynomialDegree::Cubic,
-            RESAMPLE_CHUNK,
-            2,
-        )
-        .map_err(|error| AudioError::Unsupported(error.to_string()))?;
-        set_ratio(&mut resampler, tempo)?;
+        let resampler = if decoder.sample_rate == output_rate {
+            None
+        } else {
+            Some(
+                FastFixedIn::new(
+                    f64::from(output_rate) / f64::from(decoder.sample_rate),
+                    1.0,
+                    PolynomialDegree::Cubic,
+                    RESAMPLE_CHUNK,
+                    2,
+                )
+                .map_err(|error| AudioError::Unsupported(error.to_string()))?,
+            )
+        };
         let (producer, consumer) = HeapRb::<f32>::new(ring_frames * 2).split();
         let shared = Arc::new(SourceShared {
             consumer: Mutex::new(consumer),
@@ -82,9 +77,6 @@ impl Source {
         let worker = Arc::new(Mutex::new(Worker {
             decoder,
             resampler,
-            passthrough: same_rate && tempo == 1.0,
-            same_rate,
-            tempo,
             producer,
             input: Vec::new(),
             pending: Vec::new(),
@@ -118,10 +110,9 @@ impl Source {
         worker.input.clear();
         worker.pending.clear();
         worker.decoder_done = false;
-        // A reset also restores the original ratio.
-        worker.resampler.reset();
-        let tempo = worker.tempo;
-        set_ratio(&mut worker.resampler, tempo)?;
+        if let Some(resampler) = worker.resampler.as_mut() {
+            resampler.reset();
+        }
         self.shared.ended.store(false, Ordering::Release);
         let result = worker.decoder.seek(ms);
         if result.is_err() {
@@ -134,16 +125,6 @@ impl Source {
             thread.thread().unpark();
         }
         result
-    }
-
-    /// Plays at `tempo` times the normal speed (pitch follows, as on a tape).
-    /// Frames already in the ring keep the old speed: seek afterwards.
-    pub fn set_tempo(&self, tempo: f32) -> Result<(), AudioError> {
-        let mut worker = self.worker.lock().unwrap_or_else(PoisonError::into_inner);
-        set_ratio(&mut worker.resampler, tempo)?;
-        worker.passthrough = worker.same_rate && tempo == 1.0;
-        worker.tempo = tempo;
-        Ok(())
     }
 
     /// Frames ready in the ring (for prefill checks).
@@ -163,12 +144,6 @@ impl Drop for Source {
             let _ = thread.join();
         }
     }
-}
-
-fn set_ratio(resampler: &mut FastFixedIn<f32>, tempo: f32) -> Result<(), AudioError> {
-    resampler
-        .set_resample_ratio_relative(f64::from(1.0 / tempo), false)
-        .map_err(|error| AudioError::Invalid(error.to_string()))
 }
 
 fn run(shared: &SourceShared, worker: &Mutex<Worker>, stop: &AtomicBool) {
@@ -221,11 +196,10 @@ impl Worker {
     }
 
     fn resample(&mut self) -> Result<(), AudioError> {
-        if self.passthrough {
+        let Some(resampler) = self.resampler.as_mut() else {
             self.pending.append(&mut self.input);
             return Ok(());
-        }
-        let resampler = &mut self.resampler;
+        };
         loop {
             let needed = resampler.input_frames_next();
             let available = self.input.len() / 2;
