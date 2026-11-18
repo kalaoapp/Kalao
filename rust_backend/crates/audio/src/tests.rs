@@ -391,6 +391,8 @@ fn tempo_changes_speed_but_not_pitch() {
     engine
         .load("song", &[(SourceKind::Original, path)], 0)
         .unwrap();
+    // Built (and warmed up) at load, so a speed change only switches it in.
+    assert!(lock(&engine.shared.mixer).stretch.is_some());
     engine.play().unwrap();
     render(&engine, RATE as usize / 2);
     assert_eq!(engine.position_ms(), 500);

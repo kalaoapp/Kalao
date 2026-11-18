@@ -13,6 +13,7 @@ import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/player_provider.dart';
 import 'package:kalao/providers/queue_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
+import 'package:kalao/screens/now_playing_screen.dart';
 import 'package:kalao/screens/queue_tab.dart';
 import 'package:kalao/services/history_database.dart';
 import 'package:kalao/services/library_database.dart';
@@ -182,15 +183,31 @@ void main() {
     await player.toggleLineLoop();
     expect(backend.player['loopStartMs'], isNull);
 
-    // A–B: two long-presses, in either order.
-    await player.markAb(3);
-    expect(providers.read(playerProvider).abStart, 3);
-    await player.markAb(0);
-    expect(providers.read(playerProvider).abStart, isNull);
+    // Long-press one line: it repeats at once.
+    await player.holdLine(1);
+    expect(providers.read(playerProvider).loopLines, (1, 1));
+    expect(backend.player['loopStartMs'], 8000);
+    expect(backend.player['loopEndMs'], 10000);
+    expect(backend.player['positionMs'], 8000);
+    // Another line next: everything between the two, in either order.
+    await player.holdLine(0);
+    expect(providers.read(playerProvider).loopLines, (0, 1));
+    expect(providers.read(playerProvider).loopOpen, isFalse);
     expect(backend.player['loopStartMs'], 6000);
+    expect(backend.player['loopEndMs'], 10000);
+    // A line inside the repeat stops it; one outside starts a new one.
+    await player.holdLine(0);
+    expect(providers.read(playerProvider).loopLines, isNull);
+    expect(backend.player['loopEndMs'], isNull);
+    await player.holdLine(3);
+    await player.holdLine(3);
+    expect(providers.read(playerProvider).loopLines, isNull);
+    await player.holdLine(0);
+    await player.holdLine(3);
     expect(backend.player['loopEndMs'], 19000);
     await player.clearLoop();
     expect(backend.player['loopEndMs'], isNull);
+    expect(providers.read(playerProvider).loopLines, isNull);
 
     // Stepping skips the backing line.
     await player.seek(ms(8200));
@@ -374,7 +391,9 @@ void main() {
     );
     await tester.pump();
     expect(find.byType(KaraokeLyricsView), findsNothing);
-    expect(find.byTooltip('Repeat this line'), findsOneWidget);
+    expect(find.byType(LyricsView), findsOneWidget);
+    // No repeat button: long-pressing a line starts one.
+    expect(find.text('Stop repeating'), findsNothing);
     expect(find.text('75%'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });

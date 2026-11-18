@@ -200,8 +200,7 @@
       }
     }
   },
-  "learnAbHint": "repeat from this line to another",
-  "learnAbPick": "Long-press another line to repeat between the two",
+  "learnAbPick": "Long-press another line to repeat everything between the two",
   "karaokeCountdown": "{count} seconds until the next line",
   "@karaokeCountdown": {
     "placeholders": {

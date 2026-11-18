@@ -178,6 +178,56 @@ void main() {
     expect(requests, 1);
   });
 
+  test('a rate-limited check says so and waits a day', () async {
+    SharedPreferences.setMockInitialValues({});
+    var requests = 0;
+    final client = MockClient((request) async {
+      requests++;
+      return http.Response(
+        '{"message":"API rate limit exceeded"}',
+        403,
+        headers: {'x-ratelimit-remaining': '0'},
+      );
+    });
+    final service = UpdateService(client: client, cacheDir: cache);
+    await expectLater(
+      service.checkForUpdate(),
+      throwsA(isA<UpdateRateLimitedException>()),
+    );
+    // Any other 403 stays a plain failure.
+    await expectLater(
+      UpdateService(
+        client: MockClient((_) async => http.Response('', 403)),
+        cacheDir: cache,
+      ).checkForUpdate(),
+      throwsA(
+        isA<UpdateException>().having(
+          (error) => error is UpdateRateLimitedException,
+          'rate limited',
+          isFalse,
+        ),
+      ),
+    );
+    final container = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(
+          await SharedPreferences.getInstance(),
+        ),
+        updateServiceProvider.overrideWithValue(service),
+      ],
+    );
+    addTearDown(container.dispose);
+    final controller = container.read(updateControllerProvider.notifier);
+    final now = DateTime(2026, 11, 18, 9);
+    requests = 0;
+    expect(await controller.checkIfDue(now: now), isNull);
+    expect(
+      await controller.checkIfDue(now: now.add(const Duration(hours: 1))),
+      isNull,
+    );
+    expect(requests, 1);
+  });
+
   test('install hands the verified APK to the installer', () async {
     SharedPreferences.setMockInitialValues({});
     final service = UpdateService(client: github('v9.0.0'), cacheDir: cache);

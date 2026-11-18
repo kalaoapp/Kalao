@@ -102,7 +102,7 @@ pub struct Mixer {
     /// The mixed stereo bus, reused across callbacks.
     pub bus: Vec<f32>,
     /// Key and tempo on the bus (IMPLEMENTATION.md §2), created by the
-    /// control thread the first time either is not neutral.
+    /// control thread at the first load.
     pub stretch: Option<Stretch>,
     /// The output rate `stretch` was built for.
     pub stretch_rate: u32,

@@ -37,7 +37,8 @@ class NowPlaying {
     this.manualLine = 0,
     this.mode = PlayMode.learn,
     this.singer = '',
-    this.abStart,
+    this.loopLines,
+    this.loopOpen = false,
   });
 
   final Song? song;
@@ -54,8 +55,12 @@ class NowPlaying {
   /// Who is singing (from the queue); empty when nobody was named.
   final String singer;
 
-  /// The first line picked for an A–B repeat, waiting for the second.
-  final int? abStart;
+  /// The first and last lyric line being repeated, or null.
+  final (int, int)? loopLines;
+
+  /// A long-pressed line is repeating and the next long-press on another
+  /// line widens the repeat to everything between the two.
+  final bool loopOpen;
 
   bool get isInstrumental => engine.canSwitch && engine.vocalLevel < 0.5;
   bool get isKaraoke => mode == PlayMode.karaoke;
@@ -66,7 +71,8 @@ class NowPlaying {
     EnginePlayerState? engine,
     int? manualLine,
     PlayMode? mode,
-    int? Function()? abStart,
+    (int, int)? Function()? loopLines,
+    bool? loopOpen,
   }) => NowPlaying(
     song: song ?? this.song,
     lyrics: lyrics != null ? lyrics() : this.lyrics,
@@ -74,7 +80,8 @@ class NowPlaying {
     manualLine: manualLine ?? this.manualLine,
     mode: mode ?? this.mode,
     singer: singer,
-    abStart: abStart != null ? abStart() : this.abStart,
+    loopLines: loopLines != null ? loopLines() : this.loopLines,
+    loopOpen: loopOpen ?? this.loopOpen,
   );
 }
 
@@ -362,36 +369,44 @@ class PlayerController extends Notifier<NowPlaying>
     return (Duration(milliseconds: from), Duration(milliseconds: to));
   }
 
-  /// Repeats the line being sung, or stops repeating (Learn mode).
-  Future<void> toggleLineLoop() async {
-    if (state.engine.looping || state.abStart != null) return clearLoop();
-    final active = state.lyrics?.activeLineAt(_deck.position);
-    final range = active == null ? null : _lineRange(active, active);
+  /// Repeats lines [first]..[last] from the start of [first].
+  Future<void> _repeatLines(int first, int last, {required bool open}) async {
+    final range = _lineRange(first, last);
     if (range == null) return;
+    state = state.copyWith(loopLines: () => (first, last), loopOpen: open);
     await _deck.setLoop(start: range.$1, end: range.$2);
     await _deck.seek(range.$1);
   }
 
-  /// A–B repeat: the first call marks line [index] as one end, the second
-  /// repeats everything between the two lines.
-  Future<void> markAb(int index) async {
-    final first = state.abStart;
-    if (first == null) {
-      if (state.engine.looping) await _deck.setLoop();
-      state = state.copyWith(abStart: () => index);
-      return;
+  /// Repeats the line being sung, or stops repeating (shortcuts).
+  Future<void> toggleLineLoop() async {
+    if (state.loopLines != null || state.engine.looping) return clearLoop();
+    final active = state.lyrics?.activeLineAt(_deck.position);
+    if (active == null) return;
+    await _repeatLines(active, active, open: false);
+  }
+
+  /// Long-press on line [index] (Learn mode): repeats that line. A
+  /// long-press on another line next repeats everything between the two; a
+  /// long-press on a repeated line stops.
+  Future<void> holdLine(int index) async {
+    final lines = state.loopLines;
+    if (lines != null && state.loopOpen && index != lines.$1) {
+      final anchor = lines.$1;
+      return _repeatLines(
+        anchor < index ? anchor : index,
+        anchor < index ? index : anchor,
+        open: false,
+      );
     }
-    state = state.copyWith(abStart: () => null);
-    final range = first <= index
-        ? _lineRange(first, index)
-        : _lineRange(index, first);
-    if (range == null) return;
-    await _deck.setLoop(start: range.$1, end: range.$2);
-    await _deck.seek(range.$1);
+    if (lines != null && index >= lines.$1 && index <= lines.$2) {
+      return clearLoop();
+    }
+    await _repeatLines(index, index, open: true);
   }
 
   Future<void> clearLoop() async {
-    state = state.copyWith(abStart: () => null);
+    state = state.copyWith(loopLines: () => null, loopOpen: false);
     if (state.engine.looping) await _deck.setLoop();
   }
 

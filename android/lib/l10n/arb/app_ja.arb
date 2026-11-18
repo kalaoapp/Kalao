@@ -158,7 +158,6 @@
   "learnLoop": "この行をリピート",
   "learnLoopOff": "リピートを止める",
   "learnSpeed": "速度 {percent}%",
-  "learnAbHint": "この行から別の行までをリピート",
   "learnAbPick": "もう一つの行を長押しすると、その間をリピートします",
   "karaokeCountdown": "次の行まで {count} 秒",
   "karaokeInterlude": "間奏",

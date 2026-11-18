@@ -158,7 +158,6 @@
   "learnLoop": "重複這一行",
   "learnLoopOff": "停止重複",
   "learnSpeed": "速度 {percent}%",
-  "learnAbHint": "從此行到另一行循環播放",
   "learnAbPick": "長按另一行，在兩行之間循環",
   "karaokeCountdown": "距下一行還有 {count} 秒",
   "karaokeInterlude": "間奏",

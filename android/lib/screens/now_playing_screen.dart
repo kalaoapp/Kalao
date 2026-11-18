@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -7,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/models/lyrics.dart';
+import 'package:kalao/models/settings.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/player_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
@@ -248,8 +250,9 @@ class _NoLyrics extends ConsumerWidget {
 /// active line and drives the sweep across it (word by word with word
 /// timing, linearly without). Otherwise the manual line is highlighted. The
 /// active line is kept near the top third, without animation when the system
-/// asks for reduced motion. Tap a line to play from it (or highlight it);
-/// long-press two lines to repeat everything between them.
+/// asks for reduced motion, and re-centred when the layout changes (rotation,
+/// lyric size). Tap a line to play from it (or highlight it); long-press a
+/// line to repeat it, then another to repeat everything between the two.
 class LyricsView extends ConsumerStatefulWidget {
   const LyricsView({super.key, required this.lyrics});
 
@@ -263,6 +266,10 @@ class _LyricsViewState extends ConsumerState<LyricsView>
     with SingleTickerProviderStateMixin {
   late final Ticker _ticker = createTicker(_tick);
   final _keys = <int, GlobalKey>{};
+  final _scroll = ScrollController();
+
+  /// What the line positions depend on; a change re-centres the active line.
+  Object? _layout;
 
   /// UTF-16 units of the active line sung so far; only the sweep's clip
   /// listens, so a frame repaints one line instead of rebuilding the list.
@@ -286,6 +293,7 @@ class _LyricsViewState extends ConsumerState<LyricsView>
   void dispose() {
     _ticker.dispose();
     _swept.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -301,21 +309,38 @@ class _LyricsViewState extends ConsumerState<LyricsView>
       );
     }
     if (active != _active) {
+      // The first line found (opening, rotation) jumps into place.
+      final animate = _active != null;
       setState(() => _active = active);
-      _reveal(active);
+      _reveal(active, animate: animate);
     }
   }
 
-  void _reveal(int? index) {
+  void _reveal(int? index, {bool animate = true, int attempt = 0}) {
     if (index == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final context = _keys[index]?.currentContext;
-      if (context == null || !mounted) return;
-      final reduced = MediaQuery.disableAnimationsOf(this.context);
+      if (!mounted || !_scroll.hasClients) return;
+      final target = _keys[index]?.currentContext;
+      if (target == null) {
+        // The list only builds lines near the viewport: jump to where the
+        // line should be, then align it once it is built.
+        if (attempt >= 3) return;
+        final position = _scroll.position;
+        final last = math.max(1, widget.lyrics.lines.length - 1);
+        position.jumpTo(
+          (position.maxScrollExtent * index / last).clamp(
+            position.minScrollExtent,
+            position.maxScrollExtent,
+          ),
+        );
+        _reveal(index, animate: false, attempt: attempt + 1);
+        return;
+      }
+      final reduced = MediaQuery.disableAnimationsOf(context);
       Scrollable.ensureVisible(
-        context,
+        target,
         alignment: 0.35,
-        duration: reduced ? Duration.zero : AppTokens.motionMedium,
+        duration: animate && !reduced ? AppTokens.motionMedium : Duration.zero,
         curve: Curves.easeOutCubic,
       );
     });
@@ -323,10 +348,9 @@ class _LyricsViewState extends ConsumerState<LyricsView>
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
     final settings = ref.watch(settingsProvider);
     final manual = ref.watch(playerProvider.select((now) => now.manualLine));
-    final abStart = ref.watch(playerProvider.select((now) => now.abStart));
+    final loopLines = ref.watch(playerProvider.select((now) => now.loopLines));
     final font = ref.watch(customFontFamilyProvider).asData?.value;
     final active = widget.lyrics.timed ? _active : manual;
     ref.listen(playerProvider.select((now) => now.manualLine), (_, next) {
@@ -338,9 +362,31 @@ class _LyricsViewState extends ConsumerState<LyricsView>
       fontFamily: font,
       height: 1.3,
     );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final layout = (constraints.biggest, settings, font);
+        if (_layout != null && _layout != layout) {
+          _reveal(active, animate: false);
+        }
+        _layout = layout;
+        return _buildList(context, settings, active, loopLines, base);
+      },
+    );
+  }
+
+  Widget _buildList(
+    BuildContext context,
+    AppSettings settings,
+    int? active,
+    (int, int)? loopLines,
+    TextStyle base,
+  ) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
     final lines = widget.lyrics.lines;
     final controller = ref.read(playerProvider.notifier);
     return ListView.builder(
+      controller: _scroll,
       padding: const EdgeInsets.symmetric(
         horizontal: AppTokens.space24,
         vertical: AppTokens.space32,
@@ -404,10 +450,13 @@ class _LyricsViewState extends ConsumerState<LyricsView>
                 onTapHint: widget.lyrics.timed
                     ? l10n.lyricsSeekHere
                     : l10n.lyricsSelectLine,
-                onLongPressHint: widget.lyrics.timed ? l10n.learnAbHint : null,
+                onLongPressHint: widget.lyrics.timed ? l10n.learnLoop : null,
                 child: Material(
-                  // The first end of an A–B repeat stays marked.
-                  color: index == abStart
+                  // The repeated lines stay marked while the loop is on.
+                  color:
+                      loopLines != null &&
+                          index >= loopLines.$1 &&
+                          index <= loopLines.$2
                       ? theme.colorScheme.tertiaryContainer
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(AppTokens.radiusSmall),
@@ -424,7 +473,7 @@ class _LyricsViewState extends ConsumerState<LyricsView>
                       }
                     },
                     onLongPress: widget.lyrics.timed
-                        ? () => controller.markAb(index)
+                        ? () => controller.holdLine(index)
                         : null,
                     child: Padding(
                       padding: const EdgeInsets.all(AppTokens.space4),
@@ -489,7 +538,7 @@ class _PlayerControlsState extends ConsumerState<PlayerControls> {
     final lyrics = now.lyrics;
     final hasLyrics = lyrics != null && !lyrics.isEmpty;
     final learn = !now.isKaraoke;
-    final repeating = engine.looping || now.abStart != null;
+    final repeating = engine.looping || now.loopLines != null;
     return Material(
       color: theme.colorScheme.surfaceContainer,
       child: Padding(
@@ -572,16 +621,21 @@ class _PlayerControlsState extends ConsumerState<PlayerControls> {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    IconButton(
-                      tooltip: repeating ? l10n.learnLoopOff : l10n.learnLoop,
-                      isSelected: repeating,
-                      icon: const Icon(Icons.repeat_one),
-                      selectedIcon: const Icon(Icons.repeat_one_on),
-                      onPressed: controller.toggleLineLoop,
-                    ),
-                    for (final tempo in _tempos)
+                    // Long-pressing a line starts a repeat; this ends it.
+                    if (repeating)
                       Padding(
-                        padding: const EdgeInsets.only(left: AppTokens.space8),
+                        padding: const EdgeInsets.only(right: AppTokens.space8),
+                        child: ActionChip(
+                          avatar: const Icon(Icons.repeat_one_on),
+                          label: Text(l10n.learnLoopOff),
+                          onPressed: controller.clearLoop,
+                        ),
+                      ),
+                    for (final (i, tempo) in _tempos.indexed)
+                      Padding(
+                        padding: EdgeInsets.only(
+                          left: i == 0 ? 0 : AppTokens.space8,
+                        ),
                         child: ChoiceChip(
                           label: Text('${(tempo * 100).round()}%'),
                           tooltip: l10n.learnSpeed((tempo * 100).round()),
@@ -592,7 +646,7 @@ class _PlayerControlsState extends ConsumerState<PlayerControls> {
                   ],
                 ),
               ),
-            if (now.abStart != null)
+            if (now.loopOpen)
               Text(
                 l10n.learnAbPick,
                 style: theme.textTheme.bodySmall?.copyWith(

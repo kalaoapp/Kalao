@@ -87,6 +87,11 @@ class UpdateController extends Notifier<UpdateState> {
       await prefs.setInt(_checkedAtKey, at.millisecondsSinceEpoch);
       if (release != null) state = UpdateAvailable(release);
       return release;
+    } on UpdateRateLimitedException catch (error) {
+      // Common on mobile networks; retrying on every start only extends it.
+      _log.i('Update check postponed to tomorrow: $error');
+      await prefs.setInt(_checkedAtKey, at.millisecondsSinceEpoch);
+      return null;
     } catch (error) {
       // Offline is normal; the next start tries again.
       _log.w('Update check failed', error);

@@ -20,6 +20,36 @@ class UpdateException implements Exception {
   String toString() => message;
 }
 
+/// GitHub refused the check because this network used up its hourly quota
+/// of anonymous API calls (shared by everyone behind the same address).
+class UpdateRateLimitedException extends UpdateException {
+  const UpdateRateLimitedException(super.message);
+
+  /// The quota error for a 403 or 429 [response], or null for other errors.
+  static UpdateRateLimitedException? from(http.Response response) {
+    final status = response.statusCode;
+    final headers = response.headers;
+    final limited =
+        status == 429 ||
+        (status == 403 && headers['x-ratelimit-remaining'] == '0');
+    if (!limited) return null;
+    final reset = int.tryParse(headers['x-ratelimit-reset'] ?? '');
+    final minutes = reset == null
+        ? null
+        : (DateTime.fromMillisecondsSinceEpoch(
+                    reset * 1000,
+                  ).difference(DateTime.now()).inSeconds /
+                  60)
+              .ceil();
+    return UpdateRateLimitedException(
+      minutes == null || minutes <= 0
+          ? 'GitHub is limiting requests from this network; try again later'
+          : 'GitHub is limiting requests from this network; try again in '
+                '$minutes min',
+    );
+  }
+}
+
 @immutable
 class ReleaseAsset {
   const ReleaseAsset({required this.name, required this.url, this.bytes = 0});
@@ -144,6 +174,8 @@ class UpdateService {
         )
         .timeout(const Duration(seconds: 20));
     if (response.statusCode == 404) return null; // no release yet
+    final limited = UpdateRateLimitedException.from(response);
+    if (limited != null) throw limited;
     if (response.statusCode != 200) {
       throw UpdateException('GitHub answered ${response.statusCode}');
     }

@@ -22,6 +22,8 @@ use std::time::{Duration, Instant};
 
 /// Ring size per source: about 0.5 s at 48 kHz.
 const RING_FRAMES: usize = 24_000;
+/// Stretcher output reserved up front, in frames (larger than any callback).
+const STRETCH_ROOM_FRAMES: usize = 16_384;
 /// Gain changes from sliders and volume.
 const GAIN_RAMP_MS: u32 = 10;
 /// Original ↔ instrumental switch.
@@ -550,27 +552,36 @@ impl Engine {
         self.shared.key_cents.load(Ordering::Acquire) as f32 / 100.0
     }
 
-    /// Builds the stretcher for the current output rate when key or tempo
-    /// needs it. Done here, never in the callback: it allocates.
+    /// Builds the stretcher for the current output rate, at the first load,
+    /// so the first key or tempo change only switches it in. Done here, never
+    /// in the callback: it allocates. Built and warmed up outside the mixer
+    /// lock, so the callback keeps playing meanwhile.
     fn ensure_stretch(&self) {
-        let neutral = self.shared.tempo.load(Ordering::Acquire) == 1000
-            && self.shared.key_cents.load(Ordering::Acquire) == 0;
         let rate = self.shared.output_rate.load(Ordering::Acquire);
-        let mut mixer = lock(&self.shared.mixer);
-        if neutral || (mixer.stretch.is_some() && mixer.stretch_rate == rate) {
-            return;
+        {
+            let mixer = lock(&self.shared.mixer);
+            if rate == 0 || (mixer.stretch.is_some() && mixer.stretch_rate == rate) {
+                return;
+            }
         }
         // The cheaper preset splits each spectral block's work across calls.
         // The default one does a whole 120 ms block inside a single callback
         // every 30 ms, which misses small AAudio deadlines and stutters.
-        let stretch = signalsmith_stretch::Stretch::preset_cheaper(2, rate);
-        self.shared.stretch_latency.store(
-            (stretch.input_latency() as u64) << 32 | stretch.output_latency() as u64,
-            Ordering::Release,
-        );
+        let mut stretch = signalsmith_stretch::Stretch::preset_cheaper(2, rate);
+        warm_up(&mut stretch, rate);
+        let latency = (stretch.input_latency() as u64) << 32 | stretch.output_latency() as u64;
+        let mut mixer = lock(&self.shared.mixer);
         mixer.stretch = Some(stretch);
         mixer.stretch_rate = rate;
         mixer.carry = 0.0;
+        // Room for any callback size, so the callback never grows it.
+        let room = STRETCH_ROOM_FRAMES * 2;
+        let len = mixer.stretched.len();
+        mixer.stretched.reserve(room.saturating_sub(len));
+        drop(mixer);
+        self.shared
+            .stretch_latency
+            .store(latency, Ordering::Release);
     }
 
     /// Whether the stretcher is in the signal path.
@@ -739,6 +750,26 @@ impl Engine {
                 .unwrap_or(0)
         })
     }
+}
+
+/// Runs a new stretcher over half a second of tone (slowed and transposed,
+/// the full spectral path), then resets it. Its first blocks touch its
+/// buffers and FFT tables for the first time; in the audio callback they
+/// made the first speed change after start stutter on Android.
+fn warm_up(stretch: &mut signalsmith_stretch::Stretch, rate: u32) {
+    const OUTPUT_FRAMES: usize = 1024;
+    const INPUT_FRAMES: usize = OUTPUT_FRAMES * 3 / 4;
+    let step = std::f32::consts::TAU * 440.0 / rate.max(1) as f32;
+    let input: Vec<f32> = (0..INPUT_FRAMES * 2)
+        .map(|sample| 0.25 * (step * (sample / 2) as f32).sin())
+        .collect();
+    let mut output = vec![0.0; OUTPUT_FRAMES * 2];
+    stretch.set_transpose_factor_semitones(1.0, None);
+    for _ in 0..(rate as usize / 2).div_ceil(OUTPUT_FRAMES) {
+        stretch.process(&input, &mut output);
+    }
+    stretch.set_transpose_factor_semitones(0.0, None);
+    stretch.reset();
 }
 
 fn ms_to_position(ms: u64, rate: u32) -> u64 {
