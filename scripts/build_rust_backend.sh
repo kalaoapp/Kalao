@@ -97,7 +97,11 @@ if [[ "$PLATFORM" == "android" ]]; then
   rustup target add "${ANDROID_TARGETS[@]}"
   # Align ELF segments for 16 KB pages and pack relocations; fold only
   # identical functions whose addresses are not significant.
-  export RUSTFLAGS="${RUSTFLAGS:-} -C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wl,--pack-dyn-relocs=android -C link-arg=-Wl,--icf=safe"
+  # libc++_static.a lacks the C++ ABI runtime (std::exception, typeinfo,
+  # std::terminate), which lives in libc++abi.a; the NDK's own libc++.a is
+  # `INPUT(-lc++_static -lc++abi)`. --no-undefined turns any symbol left
+  # unresolved into a link error instead of a dlopen failure on the device.
+  export RUSTFLAGS="${RUSTFLAGS:-} -C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wl,--pack-dyn-relocs=android -C link-arg=-Wl,--icf=safe -C link-arg=-lc++abi -C link-arg=-Wl,--no-undefined"
   for i in "${!ANDROID_TARGETS[@]}"; do
     TARGET="${ANDROID_TARGETS[$i]}"
     ABI="${ANDROID_ABIS[$i]}"
