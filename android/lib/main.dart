@@ -53,6 +53,7 @@ Future<void> main() async {
       sharedPreferencesProvider.overrideWithValue(preferences),
       libraryServicesProvider.overrideWithValue(services),
       audioHandlerProvider.overrideWithValue(handler),
+      audioFocusEnabledProvider.overrideWithValue(true),
       updateServiceProvider.overrideWithValue(await openUpdateService()),
     ],
   );

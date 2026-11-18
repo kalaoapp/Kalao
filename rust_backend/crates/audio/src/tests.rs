@@ -128,6 +128,50 @@ fn seek_lands_on_the_requested_frame() {
 }
 
 #[test]
+fn seeking_past_a_shorter_source_is_not_an_error() {
+    let dir = temp_dir("seek-past");
+    let original = dir.join("original.wav");
+    let instrumental = dir.join("instrumental.wav");
+    write_wav(&original, RATE, RATE * 2, |f| sine(f, RATE));
+    write_wav(&instrumental, RATE, RATE, |f| sine(f, RATE));
+    let engine = Engine::new(Output::Manual { sample_rate: RATE });
+    engine
+        .load(
+            "song",
+            &[
+                (SourceKind::Original, original),
+                (SourceKind::Instrumental, instrumental.clone()),
+            ],
+            0,
+        )
+        .unwrap();
+    // Past the instrumental's end, and past the whole song.
+    engine.seek(1500).unwrap();
+    assert_eq!(engine.position_ms(), 1500);
+    engine.seek(60_000).unwrap();
+    // A saved position beyond the end loads too.
+    engine
+        .load("song", &[(SourceKind::Instrumental, instrumental)], 5000)
+        .unwrap();
+    engine.play().unwrap();
+    render(&engine, 480);
+    assert_eq!(engine.state()["completed"], true);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn implausible_output_latency_is_ignored() {
+    use output::plausible_latency_us;
+    assert_eq!(
+        plausible_latency_us(Some(Duration::from_millis(40))),
+        40_000
+    );
+    assert_eq!(plausible_latency_us(None), 0);
+    // cpal 0.16 on AAudio: CLOCK_MONOTONIC minus time since stream creation.
+    assert_eq!(plausible_latency_us(Some(Duration::from_secs(86_400))), 0);
+}
+
+#[test]
 fn load_can_start_mid_song_and_report_duration() {
     let dir = temp_dir("start");
     let path = dir.join("tone.wav");

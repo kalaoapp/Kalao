@@ -19,6 +19,9 @@ const _log = AppLogger('Player');
 /// Injected in `main` after `AudioService.init`; null in tests.
 final audioHandlerProvider = Provider<KalaoAudioHandler?>((ref) => null);
 
+/// Whether the player requests audio focus; overridden to true in `main`.
+final audioFocusEnabledProvider = Provider<bool>((ref) => false);
+
 final karaokeDeckProvider = Provider<KaraokeDeck>((ref) {
   final deck = KaraokeDeck()..start();
   ref.onDispose(deck.dispose);
@@ -99,14 +102,17 @@ class PlayerController extends Notifier<NowPlaying>
     _deck = ref.watch(karaokeDeckProvider);
     _handler = ref.watch(audioHandlerProvider)?..commands = this;
     _states = _deck.states.listen(_onEngine);
-    final focus = _handler == null
-        ? null
-        : AudioFocus(
+    // Audio focus does not depend on the media session: without focus,
+    // another app's audio plays over Kalao's. Tests have no handler and no
+    // audio session plugin.
+    final focus = ref.watch(audioFocusEnabledProvider)
+        ? AudioFocus(
             this,
             isPlaying: () => state.engine.playing,
             setDucked: (ducked) =>
                 _deck.setVolume(ducked ? _volume * 0.3 : _volume),
-          );
+          )
+        : null;
     _focus = focus;
     unawaited(focus?.start());
     ref.listen(
@@ -192,6 +198,8 @@ class PlayerController extends Notifier<NowPlaying>
       singer: singer,
     );
     _listened.reset();
+    // Before the bump, so "Continue singing" never re-reads the previous song.
+    await _saveSession();
     ref.read(libraryRevisionProvider.notifier).bump();
     _sessionTimer?.cancel();
     _sessionTimer = Timer.periodic(const Duration(seconds: 5), (_) {
@@ -243,6 +251,7 @@ class PlayerController extends Notifier<NowPlaying>
         'positionMs': '${_deck.position.inMilliseconds}',
         'vocalLevel': '${state.engine.vocalLevel}',
       });
+      ref.invalidate(continueSingingProvider);
     } catch (error) {
       _log.w('Session save failed', error);
     }

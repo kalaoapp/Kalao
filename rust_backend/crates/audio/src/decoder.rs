@@ -5,7 +5,7 @@ use std::fs::File;
 use std::path::Path;
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::{CODEC_TYPE_NULL, Decoder as CodecDecoder, DecoderOptions};
-use symphonia::core::errors::Error as SymphoniaError;
+use symphonia::core::errors::{Error as SymphoniaError, SeekErrorKind};
 use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo};
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::{MetadataOptions, MetadataRevision, StandardTagKey, StandardVisualKey};
@@ -113,17 +113,21 @@ impl Decoder {
     }
 
     /// Seeks so the next decoded frame is the one at `ms`.
-    pub fn seek(&mut self, ms: u64) -> Result<(), AudioError> {
-        let seeked = self
-            .format
-            .seek(
-                SeekMode::Accurate,
-                SeekTo::Time {
-                    time: Time::from(ms as f64 / 1000.0),
-                    track_id: Some(self.track_id),
-                },
-            )
-            .map_err(|error| AudioError::Decode(error.to_string()))?;
+    /// Repositions to `ms`. Returns `false` when `ms` is past the end of the
+    /// stream (a shorter stem, or a saved position beyond the end): the
+    /// caller treats the source as finished.
+    pub fn seek(&mut self, ms: u64) -> Result<bool, AudioError> {
+        let seeked = match self.format.seek(
+            SeekMode::Accurate,
+            SeekTo::Time {
+                time: Time::from(ms as f64 / 1000.0),
+                track_id: Some(self.track_id),
+            },
+        ) {
+            Ok(seeked) => seeked,
+            Err(SymphoniaError::SeekError(SeekErrorKind::OutOfRange)) => return Ok(false),
+            Err(error) => return Err(AudioError::Decode(error.to_string())),
+        };
         self.decoder.reset();
         let time_base = self
             .format
@@ -139,7 +143,7 @@ impl Decoder {
             }
             None => behind,
         };
-        Ok(())
+        Ok(true)
     }
 }
 

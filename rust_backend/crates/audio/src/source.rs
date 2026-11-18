@@ -115,7 +115,7 @@ impl Source {
         }
         self.shared.ended.store(false, Ordering::Release);
         let result = worker.decoder.seek(ms);
-        if result.is_err() {
+        if !matches!(result, Ok(true)) {
             // Past the end or unseekable: behave as finished.
             worker.decoder_done = true;
         }
@@ -124,7 +124,7 @@ impl Source {
         if let Some(thread) = &self.thread {
             thread.thread().unpark();
         }
-        result
+        result.map(|_| ())
     }
 
     /// Frames ready in the ring (for prefill checks).

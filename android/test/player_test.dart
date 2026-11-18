@@ -10,6 +10,7 @@ import 'package:kalao/models/song.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/player_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
+import 'package:kalao/screens/now_playing_screen.dart';
 import 'package:kalao/services/history_database.dart';
 import 'package:kalao/services/karaoke_deck.dart';
 import 'package:kalao/services/library_database.dart';
@@ -132,6 +133,27 @@ void main() {
     },
   );
 
+  test('continue singing follows the song just started', () async {
+    final preferences = await SharedPreferences.getInstance();
+    final container = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(preferences),
+        ...testOverrides(services),
+      ],
+    );
+    addTearDown(container.dispose);
+    final first = await addSong();
+    final second = await addSong(backing: false);
+    final controller = container.read(playerProvider.notifier);
+    final listener = container.listen(continueSingingProvider, (_, _) {});
+    addTearDown(listener.close);
+
+    await controller.playSong(first);
+    await controller.playSong(second);
+    final resume = await container.read(continueSingingProvider.future);
+    expect(resume?.song.id, second.id);
+  });
+
   test('a song without an instrumental cannot switch', () async {
     final preferences = await SharedPreferences.getInstance();
     final container = ProviderContainer(
@@ -149,6 +171,43 @@ void main() {
       backend.calls.where((c) => c.method == 'playerSwitchTrack'),
       isEmpty,
     );
+  });
+
+  testWidgets('landscape puts the controls beside the lyrics', (tester) async {
+    tester.view.physicalSize = const Size(2400, 1080);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final song = (await tester.runAsync(() async {
+      final song = await addSong();
+      await services.lyrics.importText(song.id, 'one\ntwo\nthree');
+      return song;
+    }))!;
+    final preferences = await SharedPreferences.getInstance();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(preferences),
+          ...testOverrides(services),
+        ],
+        child: const KalaoApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(MaterialApp).first),
+    );
+    await tester.runAsync(
+      () => container.read(playerProvider.notifier).playSong(song),
+    );
+    container.read(routerProvider).push('/player');
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    final lyrics = tester.getRect(find.byType(LyricsView));
+    final controls = tester.getRect(find.byType(PlayerControls));
+    expect(controls.left, greaterThanOrEqualTo(lyrics.right));
+    // The lyrics keep the full body height (the screen is ~393 dp tall).
+    expect(lyrics.height, greaterThan(300));
   });
 
   testWidgets('now playing shows pinyin and steps untimed lines', (

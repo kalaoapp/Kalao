@@ -121,23 +121,46 @@ class NowPlayingScreen extends ConsumerWidget {
             ],
           ),
           body: SafeArea(
-            child: Column(
-              children: [
-                ScreenAwake(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final lyricsPane = lyrics == null || lyrics.isEmpty
+                    ? _NoLyrics(
+                        onImport: () =>
+                            showLyricsImportSheet(context, ref, song),
+                      )
+                    : karaokeLayout
+                    ? KaraokeLyricsView(lyrics: lyrics)
+                    : LyricsView(lyrics: lyrics);
+                final awake = ScreenAwake(
                   enabled: now.isKaraoke && now.engine.playing && keepOn,
-                ),
-                Expanded(
-                  child: lyrics == null || lyrics.isEmpty
-                      ? _NoLyrics(
-                          onImport: () =>
-                              showLyricsImportSheet(context, ref, song),
-                        )
-                      : karaokeLayout
-                      ? KaraokeLyricsView(lyrics: lyrics)
-                      : LyricsView(lyrics: lyrics),
-                ),
-                const PlayerControls(),
-              ],
+                );
+                // Landscape: stacked controls would take most of the short
+                // height, so they move to a scrolling side panel and the
+                // lyrics keep the full height.
+                if (constraints.maxWidth > constraints.maxHeight) {
+                  return Row(
+                    children: [
+                      awake,
+                      Expanded(child: lyricsPane),
+                      Container(
+                        width: (constraints.maxWidth * 0.4).clamp(280, 400),
+                        color: Theme.of(context).colorScheme.surfaceContainer,
+                        alignment: Alignment.center,
+                        child: const SingleChildScrollView(
+                          child: PlayerControls(),
+                        ),
+                      ),
+                    ],
+                  );
+                }
+                return Column(
+                  children: [
+                    awake,
+                    Expanded(child: lyricsPane),
+                    const PlayerControls(),
+                  ],
+                );
+              },
             ),
           ),
         ),

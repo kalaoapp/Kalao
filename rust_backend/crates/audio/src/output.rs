@@ -90,6 +90,20 @@ impl Drop for OutputThread {
     }
 }
 
+/// Output latencies above this are measurement errors, not latency.
+const MAX_LATENCY: Duration = Duration::from_millis(500);
+
+/// The callback-to-speaker latency cpal reports, or 0 when it is not a real
+/// latency. cpal 0.16's AAudio backend measures `callback` from stream
+/// creation but `playback` on CLOCK_MONOTONIC (time since boot), so their
+/// difference is the device uptime; subtracting that from the position
+/// pinned it at 0 while playing.
+pub(crate) fn plausible_latency_us(latency: Option<Duration>) -> u64 {
+    latency
+        .filter(|latency| *latency <= MAX_LATENCY)
+        .map_or(0, |latency| latency.as_micros() as u64)
+}
+
 fn build(shared: &Arc<Shared>, broken: &Arc<AtomicBool>) -> Result<cpal::Stream, AudioError> {
     let device = cpal::default_host()
         .default_output_device()
@@ -108,11 +122,10 @@ fn build(shared: &Arc<Shared>, broken: &Arc<AtomicBool>) -> Result<cpal::Stream,
             &config,
             move |data: &mut [f32], info: &cpal::OutputCallbackInfo| {
                 let timestamp = info.timestamp();
-                if let Some(latency) = timestamp.playback.duration_since(&timestamp.callback) {
-                    callback_shared
-                        .latency_us
-                        .store(latency.as_micros() as u64, Ordering::Release);
-                }
+                let latency = timestamp.playback.duration_since(&timestamp.callback);
+                callback_shared
+                    .latency_us
+                    .store(plausible_latency_us(latency), Ordering::Release);
                 callback_shared.render(data, 2);
             },
             move |_error| error_flag.store(true, Ordering::Release),

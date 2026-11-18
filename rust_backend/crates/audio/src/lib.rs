@@ -549,7 +549,10 @@ impl Engine {
         if neutral || (mixer.stretch.is_some() && mixer.stretch_rate == rate) {
             return;
         }
-        let stretch = signalsmith_stretch::Stretch::preset_default(2, rate);
+        // The cheaper preset splits each spectral block's work across calls.
+        // The default one does a whole 120 ms block inside a single callback
+        // every 30 ms, which misses small AAudio deadlines and stutters.
+        let stretch = signalsmith_stretch::Stretch::preset_cheaper(2, rate);
         self.shared.stretch_latency.store(
             (stretch.input_latency() as u64) << 32 | stretch.output_latency() as u64,
             Ordering::Release,
