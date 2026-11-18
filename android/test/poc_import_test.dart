@@ -51,7 +51,7 @@ void main() {
           {'text': '沈むように', 'furigana': 'しずむように'},
         ],
       },
-      {'title': 'Missing Song', 'artist': 'Nobody', 'lines': []},
+      {'title': 'Missing Song', 'artist': 'Nobody', 'lines': <Object?>[]},
     ],
   });
 
