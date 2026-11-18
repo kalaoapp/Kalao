@@ -96,7 +96,7 @@ bash scripts/build_android.sh
 
 - `KALAO_RUST_ANDROID_ABIS` selects ABIs (default `arm64-v8a,armeabi-v7a,x86_64`); do not pass `--target-platform` / `--split-per-abi` to `build_android.sh`. `ANDROID_NDK_HOME` must point to NDK 30.0.16248370.
 - Localizations (`lib/l10n/app_localizations*.dart`) are generated from `lib/l10n/arb/` and git-ignored; `flutter pub get` regenerates them.
-- Windows: Gradle's `buildRustBackend` must find Git Bash before WSL's `bash.exe`. Otherwise run `bash scripts/build_rust_backend.sh android` first and pass `-x buildRustBackend` to Gradle. Without Developer Mode, link the FVM SDK with a junction (see `android/docs/DEV_SETUP.md`).
+- Windows: Gradle's `buildRustBackend` finds Git Bash by full path (Windows would otherwise start WSL's `System32\bash.exe`), via a `bash.exe` on PATH or Git's `cmd\git.exe`. Without Git Bash, run `bash scripts/build_rust_backend.sh android` first and pass `-x buildRustBackend` to Gradle. Without Developer Mode, link the FVM SDK with a junction (see `android/docs/DEV_SETUP.md`).
 - Linux hosts need `libasound2-dev pkg-config` for the `cpal` host build and `libclang-dev` for `signalsmith-stretch` (bindgen). On Windows `scripts/rust_env.sh` points bindgen at the NDK's libclang; `source` it before running cargo by hand.
 
 **Before a pull request:** `bash scripts/check_rust_backend.sh`, then `fvm flutter analyze && fvm flutter test` in `android/`.

@@ -3,6 +3,7 @@
 //! output rate, buffered in SPSC rings and mixed on one clock, so stems never
 //! drift. See `android/docs/IMPLEMENTATION.md` §2.
 
+mod clock;
 mod decoder;
 mod mixer;
 mod output;
@@ -17,7 +18,7 @@ use source::Source;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError, Weak};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Ring size per source: about 0.5 s at 48 kHz.
 const RING_FRAMES: usize = 24_000;
@@ -93,6 +94,9 @@ struct Shared {
     /// Song position in thousandths of an output-rate frame: every source
     /// frame mixed adds 1000, so it advances in song time at any tempo.
     position: AtomicU64,
+    /// Bumped whenever `position` jumps (seek, load, stop) or playback
+    /// starts, so the reported clock re-anchors (`clock.rs`).
+    clock_epoch: AtomicU32,
     /// Playback speed in permille (1000 = normal).
     tempo: AtomicU32,
     /// Transposition in cents (100 = one semitone up).
@@ -268,6 +272,7 @@ impl Shared {
         let rate = self.output_rate.load(Ordering::Acquire);
         self.position
             .store(ms_to_position(ms, rate), Ordering::Release);
+        self.clock_epoch.fetch_add(1, Ordering::AcqRel);
         self.stretch_generation.fetch_add(1, Ordering::AcqRel);
         self.completed.store(false, Ordering::Release);
         self.seeking.store(false, Ordering::Release);
@@ -346,6 +351,7 @@ pub struct Engine {
     shared: Arc<Shared>,
     output: Mutex<Option<output::OutputThread>>,
     manual: bool,
+    clock: Mutex<clock::Clock>,
 }
 
 impl Engine {
@@ -362,6 +368,7 @@ impl Engine {
             completed: AtomicBool::new(false),
             buffering: AtomicBool::new(false),
             position: AtomicU64::new(0),
+            clock_epoch: AtomicU32::new(0),
             tempo: AtomicU32::new(1000),
             key_cents: AtomicI32::new(0),
             stretch_generation: AtomicU32::new(0),
@@ -381,6 +388,7 @@ impl Engine {
             shared,
             output: Mutex::new(None),
             manual,
+            clock: Mutex::new(clock::Clock::default()),
         }
     }
 
@@ -452,6 +460,7 @@ impl Engine {
         self.shared
             .position
             .store(ms_to_position(start_ms, rate), Ordering::Release);
+        self.shared.clock_epoch.fetch_add(1, Ordering::AcqRel);
         self.shared.completed.store(false, Ordering::Release);
         // A loop belongs to the song it was set on.
         self.shared.loop_range.store(NO_LOOP, Ordering::Release);
@@ -473,6 +482,7 @@ impl Engine {
             self.seek(0)?;
         }
         self.ensure_output()?;
+        self.shared.clock_epoch.fetch_add(1, Ordering::AcqRel);
         self.shared.playing.store(true, Ordering::Release);
         self.command(output::Command::Play);
         Ok(())
@@ -487,6 +497,7 @@ impl Engine {
         self.pause();
         let previous = lock(&self.shared.session).take();
         self.shared.position.store(0, Ordering::Release);
+        self.shared.clock_epoch.fetch_add(1, Ordering::AcqRel);
         self.shared.completed.store(false, Ordering::Release);
         self.shared.loop_range.store(NO_LOOP, Ordering::Release);
         self.shared.loop_pending.store(false, Ordering::Release);
@@ -651,7 +662,17 @@ impl Engine {
                 let (input, output) = (latency >> 32, latency & 0xffff_ffff);
                 behind_ms += (input * 1000 + output * tempo) / rate;
             }
-            rendered_ms.saturating_sub(behind_ms)
+            let limit_ms = rendered_ms.saturating_sub(behind_ms);
+            if self.manual {
+                // Tests pull blocks faster than real time: report them exactly.
+                return limit_ms;
+            }
+            lock(&self.clock).position_ms(
+                limit_ms,
+                self.shared.clock_epoch.load(Ordering::Acquire),
+                self.shared.tempo.load(Ordering::Acquire),
+                Instant::now(),
+            )
         } else {
             rendered_ms
         }

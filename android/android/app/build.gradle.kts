@@ -122,9 +122,32 @@ kotlin {
     }
 }
 
+// Windows searches System32 before PATH, so a bare "bash" starts WSL's bash.exe.
+// Use Git Bash instead: a bash.exe on PATH outside System32, or the one beside
+// Git's cmd/git.exe (the only Git directory on PATH outside a Git Bash shell).
+fun windowsGitBash(): File? {
+    val pathDirs = System.getenv("PATH").orEmpty()
+        .split(File.pathSeparator)
+        .filter { it.isNotBlank() }
+        .map(::File)
+    val candidates = pathDirs.map { it.resolve("bash.exe") } +
+        pathDirs.filter { it.resolve("git.exe").isFile }.map { it.resolve("../bin/bash.exe") }
+    return candidates.firstOrNull {
+        it.isFile &&
+            !it.parentFile.name.equals("System32", ignoreCase = true) &&
+            !it.path.contains("WindowsApps", ignoreCase = true)
+    }?.canonicalFile
+}
+
+val bashExecutable = if (System.getProperty("os.name").startsWith("Windows")) {
+    windowsGitBash()?.path ?: "bash"
+} else {
+    "bash"
+}
+
 val buildRustBackend = tasks.register<Exec>("buildRustBackend") {
     workingDir(repoRoot)
-    commandLine("bash", "scripts/build_rust_backend.sh", "android")
+    commandLine(bashExecutable, "scripts/build_rust_backend.sh", "android")
     environment("KALAO_RUST_ANDROID_ABIS", rustAndroidAbis.joinToString(","))
     environment(
         "ANDROID_NDK_HOME",
