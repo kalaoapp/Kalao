@@ -24,7 +24,7 @@ void main() {
     final page = await PlatformBridge.getLogs(sinceIndex: 0);
     expect(page.nextIndex, 1);
     expect(page.entries.single.message, 'initialized');
-    expect(backend.calls.last.arguments, {'sinceIndex': 0});
+    expect(FakeBackend.argsOf(backend.calls.last), {'sinceIndex': 0});
   });
 
   test('unknown methods surface as PlatformException', () async {

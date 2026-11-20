@@ -26,9 +26,8 @@ Versions follow Mornye's pins; `android/docs/LIBRARIES.md` lists every dependenc
 
 ```
 rust_backend/            Cargo workspace (the engine)
-  crates/core            kalao-core: JSON/text helpers, lyrics (LRC, eLRC, TTML, doc), sections, annotate (pinyin), matching, pairing, search keys
+  crates/core            kalao-core: JSON/text helpers, lyrics (LRC, eLRC, TTML, doc), sections, annotate (pinyin, furigana/romaji, Chinese variants), pairing, search keys
   crates/audio           kalao-audio: playback engine (Symphonia → rubato → ring buffers → mixer → cpal/AAudio)
-  crates/network         kalao-network: HTTP client, cookies, DNS, TLS — copied unchanged from Mornye
   crates/mobile          kalao-mobile: UniFFI API, method table, native data jobs, log buffer (builds libkalao_mobile.so)
   crates/bindgen         kalao-bindgen: UniFFI CLI that generates the Kotlin bindings
 android/                 Flutter project (package name `kalao`)
@@ -42,7 +41,7 @@ scripts/                 build_rust_backend.sh, check_rust_backend.sh, build_and
 poc-webapp/              old Next.js POC — git-ignored, never commit or publish (leaked secrets, copyrighted audio)
 ```
 
-Crate dependencies point downward: `core`, `network` and `audio` depend on no other workspace crate; `mobile` depends on `core` and `audio`.
+Crate dependencies point downward: `core` and `audio` depend on no other workspace crate; `mobile` depends on `core` and `audio`. Mornye's `network` crate is copied back when extensions need it (M5).
 
 ## Architecture
 
@@ -53,7 +52,8 @@ Crate dependencies point downward: `core`, `network` and `audio` depend on no ot
 - `MainActivity.kt` holds a `nativeBackendMethods` set for calls Kotlin answers itself (Android APIs, foreground service, crash report). Every other method name is forwarded by `dispatchBackendApplication` (`src/rust/kotlin/SelectedCoreBackend.kt`) to Rust on `Dispatchers.IO`.
 - Rust entry point: `invoke_application(method, args_json)` in `rust_backend/crates/mobile/src/backend.rs`. Arguments are a JSON object, replies are JSON text.
 - Replies over 256 KiB are written to a cache file and returned as `{"__json_file": path}`; `PlatformBridge` reads and deletes it. Large JSON is decoded off the UI isolate.
-- Heavy work on database snapshots goes through `runNativeDataJob` / `cancelNativeDataJob` with a cancellation registry.
+- Heavy file and CPU work (hashing, import, search keys, backup archives) goes through `runNativeDataJob` / `cancelNativeDataJob` with a cancellation registry.
+- Rust method arguments are sent by `PlatformBridge` as JSON text; Kotlin passes them through. The engine state reaches Dart on `player_position_stream`, pushed by Rust (`player_subscribe`) with a CLOCK_MONOTONIC timestamp.
 
 **Adding a backend method** touches each layer, and tests enforce the contract:
 

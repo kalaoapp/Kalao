@@ -53,16 +53,16 @@ class LyricsService {
     return doc;
   }
 
-  /// [doc] with generated reading layers by language: kana means Japanese
-  /// (furigana and romaji), otherwise Han characters get pinyin.
+  /// [doc] with generated reading layers. Rust decides the language: kana
+  /// means Japanese (furigana and romaji), otherwise Han characters mean
+  /// Chinese (pinyin).
   Future<LyricDocument> annotate(LyricDocument doc) async {
-    final japanese = doc.hasKana;
-    if (!japanese && !doc.hasHan) return doc;
     final lines = [...doc.lines];
     final annotated = await PlatformBridge.annotateLyrics([
       for (final line in lines) line.text,
-    ], layers: japanese ? const ['furigana', 'romaji'] : const ['pinyin']);
-    for (final entry in annotated) {
+    ]);
+    if (annotated.sourceLang == null) return doc;
+    for (final entry in annotated.layers) {
       final kind = LyricLayerKind.values.asNameMap()[entry['kind']];
       final index = (entry['lineIndex'] as num).toInt();
       if (kind == null || index >= lines.length) continue;
@@ -76,7 +76,7 @@ class LyricsService {
         ),
       );
     }
-    return doc.copyWith(lines: lines, sourceLang: () => japanese ? 'ja' : 'zh');
+    return doc.copyWith(lines: lines, sourceLang: () => annotated.sourceLang);
   }
 
   /// [doc] with each Chinese line's text in [variant] for display. Lines

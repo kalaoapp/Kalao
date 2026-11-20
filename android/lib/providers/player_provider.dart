@@ -9,7 +9,6 @@ import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
 import 'package:kalao/services/history_database.dart';
 import 'package:kalao/services/karaoke_deck.dart';
-import 'package:kalao/services/library_database.dart';
 import 'package:kalao/services/playback_handler.dart';
 import 'package:kalao/utils/logger.dart';
 import 'package:kalao/utils/lyrics_timeline.dart';
@@ -193,14 +192,8 @@ class PlayerController extends Notifier<NowPlaying>
     await play();
     _playId = await _services.history.startPlay(
       songId: song.id,
-      songKey: song.songKey.isNotEmpty
-          ? song.songKey
-          : LibraryDatabase.songKey(
-              song.title,
-              song.artist,
-              song.durationMs,
-              null,
-            ),
+      // Set when the song was inserted (`song.song_key` is NOT NULL).
+      songKey: song.songKey,
       mode: playMode,
       singer: singer,
     );

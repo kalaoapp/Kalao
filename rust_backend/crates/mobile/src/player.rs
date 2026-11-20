@@ -1,12 +1,79 @@
 //! Player methods (IMPLEMENTATION.md §1, "Player") over the process-wide
-//! `kalao-audio` engine. Kotlin polls `playerState` for the
-//! `player_position_stream` event channel.
+//! `kalao-audio` engine, and the state publisher behind the
+//! `player_position_stream` event channel: Kotlin subscribes a sink, and a
+//! publisher thread sends the state whenever it changes (every 33 ms while
+//! playing, at once after a command).
 
 use crate::backend::{BackendError, invalid, operation, str_arg};
 use kalao_audio::{Engine, Output, SourceKind};
 use serde_json::Value;
 use std::path::PathBuf;
-use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
+use std::thread::Thread;
+use std::time::Duration;
+
+const PLAYING_INTERVAL: Duration = Duration::from_millis(33);
+const IDLE_INTERVAL: Duration = Duration::from_millis(250);
+
+/// Receives the engine state (`playerState` JSON) each time it changes.
+#[uniffi::export(callback_interface)]
+pub trait PlayerStateSink: Send + Sync {
+    fn on_state(&self, state_json: String);
+}
+
+fn sink() -> MutexGuard<'static, Option<Box<dyn PlayerStateSink>>> {
+    static SINK: Mutex<Option<Box<dyn PlayerStateSink>>> = Mutex::new(None);
+    SINK.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// The new subscriber gets the current state even if it did not change.
+static RESEND: AtomicBool = AtomicBool::new(false);
+
+fn publisher() -> &'static Thread {
+    static PUBLISHER: OnceLock<Thread> = OnceLock::new();
+    PUBLISHER.get_or_init(|| {
+        std::thread::Builder::new()
+            .name("kalao-state".into())
+            .spawn(publish_states)
+            .map(|handle| handle.thread().clone())
+            .unwrap_or_else(|_| std::thread::current())
+    })
+}
+
+/// Replaces the subscriber; the state is sent to it right away.
+#[uniffi::export]
+pub fn player_subscribe(sink_impl: Box<dyn PlayerStateSink>) {
+    *sink() = Some(sink_impl);
+    RESEND.store(true, Ordering::Release);
+    publisher().unpark();
+}
+
+#[uniffi::export]
+pub fn player_unsubscribe() {
+    *sink() = None;
+}
+
+fn publish_states() {
+    let mut last = String::new();
+    loop {
+        let state = engine().state();
+        let playing = state["playing"] == true;
+        let json = state.to_string();
+        let resend = RESEND.swap(false, Ordering::AcqRel);
+        if resend || json != last {
+            if let Some(sink) = sink().as_ref() {
+                sink.on_state(json.clone());
+            }
+            last = json;
+        }
+        std::thread::park_timeout(if playing {
+            PLAYING_INTERVAL
+        } else {
+            IDLE_INTERVAL
+        });
+    }
+}
 
 fn engine() -> &'static Engine {
     static ENGINE: OnceLock<Engine> = OnceLock::new();
@@ -90,6 +157,8 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, BackendError> {
         "playerState" => return Ok(engine.state()),
         _ => return Err(BackendError::UnknownMethod(method.to_owned())),
     }
+    // Commands change the state: publish it now, not at the next tick.
+    publisher().unpark();
     Ok(engine.state())
 }
 
@@ -97,6 +166,28 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, BackendError> {
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::sync::Arc;
+    use std::sync::mpsc::{Sender, channel};
+
+    struct Collect(Mutex<Sender<String>>);
+
+    impl PlayerStateSink for Arc<Collect> {
+        fn on_state(&self, state_json: String) {
+            let _ = self.0.lock().unwrap().send(state_json);
+        }
+    }
+
+    #[test]
+    fn subscriber_receives_the_state_at_once() {
+        let (send, receive) = channel();
+        player_subscribe(Box::new(Arc::new(Collect(Mutex::new(send)))));
+        let state = receive
+            .recv_timeout(Duration::from_secs(2))
+            .expect("state published");
+        let state: Value = serde_json::from_str(&state).unwrap();
+        assert_eq!(state["playing"], false);
+        player_unsubscribe();
+    }
 
     #[test]
     fn state_without_a_song_and_argument_errors() {

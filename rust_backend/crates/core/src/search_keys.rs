@@ -81,4 +81,10 @@ mod tests {
         assert!(kinds(&keys).contains(&("artist", "aiotsuka")));
         assert_eq!(normalize("Don't Stop — Me Now"), "dontstopmenow");
     }
+
+    #[test]
+    fn normalize_keeps_vowel_signs_like_dart() {
+        // Dart's query rule is [\p{Alphabetic}\p{N}]; it keeps these too.
+        assert_eq!(normalize("गाना"), "गाना");
+    }
 }

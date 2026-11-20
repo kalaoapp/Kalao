@@ -36,6 +36,9 @@ pub struct DocWord {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub end_ms: Option<i64>,
     pub text: String,
+    /// UTF-16 offset of the word in its line's text (Dart string index), set
+    /// by [`parse`].
+    pub start: usize,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -101,25 +104,48 @@ pub fn parse(raw: &str, format: Option<&str>) -> Result<LyricDoc, String> {
         .trim_start_matches('\u{feff}')
         .replace("\r\n", "\n")
         .replace('\r', "\n");
-    match format {
-        Some("lrc" | "elrc") => Ok(parse_lrc(&raw)),
-        Some("plain") => Ok(parse_plain(&raw)),
-        Some("ttml") => parse_ttml(&raw),
-        Some(other) => Err(format!("unknown lyrics format {other}")),
-        None if raw.trim_start().starts_with('<') && raw.contains("<tt") => parse_ttml(&raw),
+    let mut doc = match format {
+        Some("lrc" | "elrc") => parse_lrc(&raw),
+        Some("plain") => parse_plain(&raw),
+        Some("ttml") => parse_ttml(&raw)?,
+        Some(other) => return Err(format!("unknown lyrics format {other}")),
+        None if raw.trim_start().starts_with('<') && raw.contains("<tt") => parse_ttml(&raw)?,
         None => {
             let timed = raw.lines().any(|line| {
                 TIME_TAG
                     .find(line.trim_start())
                     .is_some_and(|tag| tag.start() == 0)
             });
-            Ok(if timed {
+            if timed {
                 parse_lrc(&raw)
             } else {
                 parse_plain(&raw)
-            })
+            }
         }
+    };
+    for line in &mut doc.lines {
+        locate_words(line);
     }
+    Ok(doc)
+}
+
+/// Finds each word in the line's text, in order, and records its UTF-16
+/// offset; a word that is not there (or empty) is dropped.
+fn locate_words(line: &mut DocLine) {
+    let mut cursor = 0;
+    let text = &line.text;
+    line.words.retain_mut(|word| {
+        if word.text.is_empty() {
+            return false;
+        }
+        let Some(found) = text[cursor..].find(&word.text) else {
+            return false;
+        };
+        let at = cursor + found;
+        word.start = text[..at].encode_utf16().count();
+        cursor = at + word.text.len();
+        true
+    });
 }
 
 fn parse_plain(raw: &str) -> LyricDoc {
@@ -170,6 +196,7 @@ fn timed_text(body: &str, start: i64) -> (String, Vec<DocWord>, Option<i64>) {
                 time_ms: tag.unwrap_or(start),
                 end_ms: Some(time),
                 text: chunk.trim().to_owned(),
+                ..DocWord::default()
             });
         }
         tag = Some(time);
@@ -184,6 +211,7 @@ fn timed_text(body: &str, start: i64) -> (String, Vec<DocWord>, Option<i64>) {
                 time_ms: time,
                 end_ms: None,
                 text: tail.trim().to_owned(),
+                ..DocWord::default()
             });
         }
         end = None;
@@ -259,6 +287,7 @@ fn parse_lrc(raw: &str) -> LyricDoc {
                         time_ms: word.time_ms + shift,
                         end_ms: word.end_ms.map(|end| end + shift),
                         text: word.text.clone(),
+                        start: word.start,
                     })
                     .collect(),
                 end: end.map(|end| end + shift),
@@ -627,6 +656,7 @@ mod tests {
             time_ms,
             end_ms: Some(end_ms),
             text: text.into(),
+            start: 0,
         };
         let doc = LyricDoc {
             version: DOC_VERSION,
@@ -697,7 +727,9 @@ mod tests {
              [00:10.00][Chorus]\n\
              [00:10.00]v1:last<00:12.345>\n"
         );
-        assert_eq!(parsed(&text), doc);
+        let mut located = doc.clone();
+        located.lines.iter_mut().for_each(locate_words);
+        assert_eq!(parsed(&text), located);
         // Exporting what was parsed changes nothing.
         assert_eq!(export(&parsed(&text), "elrc").unwrap(), text);
     }

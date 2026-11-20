@@ -56,11 +56,11 @@ Kalao keeps one Flutter project per platform folder (Q6): `desktop/` will be a s
 | `main.dart`, `app.dart` | Startup (error handlers, databases, media session, `ProviderContainer` overrides), `MaterialApp.router` with go_router; `initialLocationForAppState` sends a first start through `/setup` → `/tutorial` → `/whats-new` → `/` |
 | `constants/` | `app_info.dart` (version, repository, donation URL) |
 | `models/` | Hand-written `@immutable` classes with `fromJson`/`toJson`/`copyWith`: `settings.dart`, `song.dart`, `lyrics.dart`, `player_state.dart` (no code generation) |
-| `services/` | All non-UI logic, one file per concern: `platform_bridge.dart`, `backend/`, `library_schema.dart`, `library_database.dart`, `history_database.dart` (also `AppStateDatabase`), `library_queue_store.dart`, `library_search.dart`, `import_service.dart`, `lyrics_service.dart`, `karaoke_deck.dart`, `playback_handler.dart`, `backup_service.dart`, `poc_import_service.dart`, `update_service.dart`, `app_crash_service.dart`, `app_storage.dart`, `custom_font_service.dart`, `external_links.dart` |
+| `services/` | All non-UI logic, one file per concern: `platform_bridge.dart`, `backend/`, `library_schema.dart`, `library_database.dart`, `history_database.dart`, `app_state_database.dart`, `library_queue_store.dart`, `library_search.dart`, `import_service.dart`, `lyrics_service.dart`, `karaoke_deck.dart`, `playback_handler.dart`, `backup_service.dart`, `backup_runs.dart`, `poc_import_service.dart`, `update_service.dart`, `app_crash_service.dart`, `app_storage.dart`, `custom_font_service.dart`, `external_links.dart` |
 | `providers/` | Riverpod `Notifier`s and providers, thin over services: `settings_provider`, `library_provider`, `player_provider`, `queue_provider`, `backup_provider`, `update_provider` |
 | `controllers/` | Multi-step flows without widgets: `lyrics_sync_editor_controller.dart` |
 | `screens/` | `main_shell` (Home, Library, Queue, Extensions placeholder, Settings), `home_tab`, `library_screen`, `queue_tab`, `now_playing_screen` (Learn / Karaoke layouts), `lyrics_sync_screen`, import and lyrics sheets, `setup_screen`, `tutorial_screen`, `whats_new_screen`, `stats_screen`, `shared_files`, `settings/*` |
-| `widgets/` | `ruby_lyric_line` (ruby layout + `SweepText`), `lyric_line_view`, `karaoke_lyrics_view`, `mini_player`, `song_widgets`, `stepper_tile`, `update_dialog`, `settings_group`, `empty_state`, `app_crash_banner` |
+| `widgets/` | `ruby_lyric_line` (ruby layout + `SweepText`), `lyric_line_view`, `screen_awake`, `karaoke_lyrics_view`, `mini_player`, `song_widgets`, `stepper_tile`, `update_dialog`, `settings_group`, `empty_state`, `app_crash_banner` |
 | `theme/` | `app_tokens`, `app_theme` (Material 3, brand palette, Material You through `dynamic_color`) |
 | `l10n/` | `arb/app_{en,zh,zh_Hant,ja}.arb`, generated `app_localizations*.dart` (git-ignored), `supported_locales.dart` |
 | `utils/` | `logger.dart` (`AppLogger`, `LogBuffer`), `lyrics_timeline.dart` (sweep and line timing maths) |
@@ -73,11 +73,11 @@ Workspace settings: `resolver = "3"`, edition 2024, `rust-version = "1.99.0"`, t
 
 | Crate | Package | Origin | Owns | Depends on |
 | --- | --- | --- | --- | --- |
-| `crates/core` | `kalao-core` | Mornye `core` (subset) + new | JSON helpers, text, XML depth check, cancellation, lyrics (`lrc`, `matching`, `payloads/ttml`, and Kalao's `doc`: LRC/eLRC/TTML/plain import and LRC/eLRC export), `sections`, `annotate` (pinyin, furigana and romaji, Chinese variants), `search_keys`, `pairing` | none |
+| `crates/core` | `kalao-core` | Mornye `core` (subset) + new | JSON helpers, text, XML depth check, lyrics (`lrc`, `payloads/ttml`, and Kalao's `doc`: LRC/eLRC/TTML/plain import and LRC/eLRC export), `sections`, `annotate` (pinyin, furigana and romaji, Chinese variants), `search_keys`, `pairing` | none |
 | `crates/audio` | `kalao-audio` | new | Karaoke engine: synchronised decoders, mixer, crossfade, key/tempo (Signalsmith Stretch), loops, clock, cpal/AAudio output, `probe_file`; later mic input, pitch tracking, reverb, recording (M7, M8) | none |
-| `crates/network` | `kalao-network` | Mornye `network`, unchanged | Cancellable HTTP client, cookies, DNS, TLS roots, request policy. No crate uses it yet (M5) | none |
-| `crates/mobile` | `kalao-mobile` | Mornye `mobile` (skeleton) | UniFFI API, `invoke_application` dispatch, cancellation registry, log buffer, native data jobs (`hash_file`, `rebuildSearchKeys`, `backupWrite`, `backupInspect`), backup archive codec, player/lyrics/import methods | core, audio |
+| `crates/mobile` | `kalao-mobile` | Mornye `mobile` (skeleton) | UniFFI API, `invoke_application` dispatch, cancellation registry, log buffer, native data jobs (`hash_file`, `importInspect`, `importStore`, `rebuildSearchKeys`, `backupWrite`, `backupInspect`), backup archive codec, player/lyrics/import methods, the player state publisher | core, audio |
 | `crates/bindgen` | `kalao-bindgen` | Mornye `bindgen`, unchanged | UniFFI CLI for the Kotlin bindings | uniffi only |
+| `crates/network` *(planned, M5)* | `kalao-network` | Mornye `network`, unchanged | Cancellable HTTP client, cookies, DNS, TLS roots, request policy | none |
 | `crates/extensions` *(planned, M5)* | `kalao-extensions` | Mornye `extensions` (subset) | QuickJS runtime, host APIs, manifest, package, repository, storage, lyrics/metadata/health backends | core, network, providers |
 | `crates/providers` *(planned, M6)* | `kalao-providers` | Mornye `providers` (structure) | MyMemory translation client, request coalescer | core, network |
 | `crates/stems` *(planned, M6)* | `kalao-stems` | new | ONNX separation, model manager, resumable chunked jobs, FLAC output, remote stem-server client | core, network |
@@ -85,15 +85,16 @@ Workspace settings: `resolver = "3"`, edition 2024, `rust-version = "1.99.0"`, t
 | `crates/desktop` *(planned, M8.7)* | `kalao-desktop` | Mornye `desktop` | C ABI over the same method table | mobile |
 | `crates/ext-cli` *(planned, M5)* | `kalao-ext` | new | Extension author CLI (validate, test, pack, sign) | extensions |
 
-`crates/mobile/uniffi.toml`: `package_name = "com.brinsley.kalao.backend"`, `cdylib_name = "kalao_mobile"`. Dependencies point downward; `core`, `network` and `audio` depend on no workspace crate.
+`crates/mobile/uniffi.toml`: `package_name = "com.brinsley.kalao.backend"`, `cdylib_name = "kalao_mobile"`. Dependencies point downward; `core`, `audio` (and later `network`) depend on no workspace crate.
 
 ## 5. Dart ↔ Kotlin ↔ Rust transport
 
 - **One backend channel:** `MethodChannel("com.brinsley.kalao/backend")`. Dart side: `PlatformBridge` → `backendChannel` (`MethodChannelBackend`; a `RustFfiBackend` over `dart:ffi` arrives with desktop).
+- **Arguments:** `PlatformBridge` sends the arguments of Rust methods as JSON text, which Kotlin passes to Rust unchanged; Android-native methods take a map.
 - **Android routing:** `MainActivity` keeps a `nativeBackendMethods` set for calls Kotlin must handle (SAF, foreground service, installer, screen-awake, ABIs, crash report, shared files). Every other name goes to `dispatchBackendApplication` in `src/rust/kotlin/SelectedCoreBackend.kt`, which converts the arguments to JSON and runs `invokeApplication(method, argsJson)` on `Dispatchers.IO`. `MainActivityRoutingTest` fails if the set and the `when` labels differ. Handlers live in `MainActivity*Calls.kt` extension files (`MainActivityCalls.kt`, `MainActivityStorageCalls.kt`, `MainActivityUpdateCalls.kt`).
 - **Replies:** JSON text, decoded by Dart (in an isolate above 64 KiB). Replies over 256 KiB use the **`__json_file` spill** (`{"__json_file": path}` in `cacheDir`, read and deleted by Dart; stale files swept at engine setup).
 - **Errors:** `result.error(code, message)`; `foreground_service_start_not_allowed` when Android refuses a service start, otherwise `ERROR`.
-- **Position stream:** the `com.brinsley.kalao/player_position_stream` `EventChannel` (`MainActivityProgressStreams.kt`) polls `playerState` every 33 ms while playing (250 ms otherwise) and forwards changed payloads; Dart interpolates between events. Further streams (`pitch_stream`, `stem_progress_stream`, `party_event_stream`) and host → Dart events (`extensionAuthCallbackReceived`, `stemJobChanged`, `partyGuestEvent`, `audioRouteChanged`) arrive with their features.
+- **Position stream:** on `com.brinsley.kalao/player_position_stream` (`MainActivityProgressStreams.kt`), Kotlin subscribes a UniFFI callback (`player_subscribe`); a Rust thread (`kalao-state`) sends the engine state when it changes — every 33 ms while playing and at once after a command — and Kotlin forwards `{state, atMicros}`, `atMicros` being the CLOCK_MONOTONIC instant of the state. `KaraokeDeck` interpolates from that instant (Dart's `Timeline.now` reads the same clock), so channel delays do not move the lyrics. Further streams (`pitch_stream`, `stem_progress_stream`, `party_event_stream`) and host → Dart events (`extensionAuthCallbackReceived`, `stemJobChanged`, `partyGuestEvent`, `audioRouteChanged`) arrive with their features.
 - **Native data jobs:** `runNativeDataJob(request_json, request_id)` / `cancelNativeDataJob(request_id)` for heavy file and CPU work, with a cancellation registry (`NativeDataJobs.kt`); a lease is taken before the job is queued, so a cancel also reaches work that has not started.
 - **Bindings:** UniFFI Kotlin bindings are generated into `rust_backend/target/bindings/kotlin/` and loaded through JNA (`net.java.dev.jna:jna:5.19.1@aar`; ProGuard keeps `com.sun.jna`). Gradle's `buildRustBackend` task runs `scripts/build_rust_backend.sh android` before `preBuild`.
 
@@ -103,7 +104,7 @@ Workspace settings: `resolver = "3"`, edition 2024, `rust-version = "1.99.0"`, t
 | --- | --- | --- |
 | Library schema (songs, media files, lyrics, annotations, search keys, favorites, backup log) | **Dart** `services/library_schema.dart` + `library_database.dart` (sqflite) | `kalao_library.db` |
 | Play history | Dart `history_database.dart` | `kalao_history.db` |
-| Queue, playback session, recent access | Dart `AppStateDatabase` (`history_database.dart`), `library_queue_store.dart` | `kalao_app_state.db` |
+| Queue, playback session, recent access | Dart `app_state_database.dart`, `library_queue_store.dart` | `kalao_app_state.db` |
 | Settings | Dart `models/settings.dart` via `settings_provider` | `shared_preferences` |
 | Imported audio and covers | Dart `import_service.dart` | `media/<sha256>.<ext>`, `covers/` in app support |
 | Backup archives | Rust `kalao-mobile::native_backup` (codec), Dart `backup_service.dart` (contents, restore) | `.kalaobackup` files |
@@ -123,7 +124,7 @@ The schema stays owned by Dart; Rust never opens the live databases.
 
 1. **Source:** imported or shared file, pasted text, embedded tags, or the sync editor (later: extension results).
 2. **Parse:** Rust `parseLyrics` (`core::lyrics::doc`: LRC, enhanced LRC, TTML, plain text; sections detected by `core::sections`) → lyric document JSON → Dart `LyricDocument` (`models/lyrics.dart`).
-3. **Annotate:** `annotateLyrics(lines, layers)` → per-line ruby layers (`pinyin`, or `furigana` + `romaji` for lyrics with kana) aligned to UTF-16 ranges.
+3. **Annotate:** `annotateLyrics(lines)` → the language Rust detects (`ja` when a line has kana, `zh` when one has Han characters) and its ruby layers (`furigana` + `romaji`, or `pinyin`) aligned to UTF-16 ranges. `parseLyrics` already gives each word its UTF-16 offset in the line.
 4. **Store:** `lyric_doc` + `lyric_annotation` rows (`LyricsService`, `LibraryDatabase`); the last five versions are kept; `origin = human` layers are never overwritten.
 5. **Display:** `convertChinese` applies the Traditional/Simplified setting at load (never stored); `lyric_line_view.dart` and `ruby_lyric_line.dart` lay out the layers and the sweep; `utils/lyrics_timeline.dart` holds the timing maths.
 6. **Translate** *(M6)*: MyMemory, distinct lines once, cached.

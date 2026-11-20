@@ -29,11 +29,11 @@ Kalao is built on Mornye's code wherever Mornye already solves the problem. This
 | Mornye | Kalao | Status |
 | --- | --- | --- |
 | `rust_backend/Cargo.toml`, `rust-toolchain.toml`, `README.md` | `rust_backend/` | Structure copied; members and dependencies are Kalao's (LIBRARIES.md) |
-| `crates/network` | `crates/network` | **Copied** unchanged (not linked until M5) |
+| `crates/network` | `crates/network` | Planned (M5): copy unchanged when extensions need it (it was copied in M0 and removed while nothing linked it) |
 | `crates/bindgen` | `crates/bindgen` | **Copied** unchanged |
-| `crates/core`: `json`, `text`, `xml`, `matching`, `cancellation`, `app_version`, `lyrics/{lrc,matching,errors,json,payloads,payloads/ttml}` | `crates/core` | **Copied**. `lyrics/doc`, `sections`, `annotate`, `search_keys`, `pairing` are Kalao's |
+| `crates/core`: `json`, `text`, `xml`, `matching`, `lyrics/{lrc,json,payloads,payloads/ttml}` | `crates/core` | **Copied**. `lyrics/doc`, `sections`, `annotate`, `search_keys`, `pairing` are Kalao's. `cancellation`, `app_version`, `lyrics/{matching,errors}` were removed until a user needs them (M5) |
 | `crates/core`: `filename`, `tags`, `cover`, `progress`, `isrc` | — | Not copied: Symphonia's metadata reader covers read-only import; `progress` comes with model downloads (M6) |
-| `crates/mobile`: `lib.rs` scaffolding, `cancellation`, `data_jobs`, `logging` | `crates/mobile` | **Copied** and trimmed. `backend`, `player`, `lyrics`, `media`, `native_backup` are Kalao's |
+| `crates/mobile`: `lib.rs` scaffolding, `data_jobs`, `logging` | `crates/mobile` | **Copied** and trimmed. `backend`, `player`, `lyrics`, `media`, `native_backup` and a small `cancellation` registry are Kalao's |
 | `vendor/rustix-1.1.6` | — | Copied with the first crate that depends on `rustix` |
 | `crates/extensions`: `runtime`, `host`, `manifest`, `package`, `repository`, `storage`, `manager/{install,lifecycle,info,providers,metadata}`, `network_host`, `crypto`, `crypto_host`, `redact`, `logging`, `provider.rs`, `provider.js`, `prelude.js`, `backend/{lyrics,metadata,health}`, `auth`, `environment`, `resolution` | `crates/extensions` | Planned (M5): copy, then adapt capabilities to Kalao's (`lyrics`, `metadata`, `audio`, `artwork`) |
 | `crates/providers` | `crates/providers` | Planned (M6): keep the crate shape and request coalescer; MyMemory client instead of the provider clients |

@@ -50,6 +50,7 @@ class BackupPreview {
     required this.favorites,
     required this.withLyrics,
     required this.mediaFiles,
+    required this.missingMedia,
     required this.bytes,
   });
 
@@ -65,6 +66,10 @@ class BackupPreview {
 
   /// Audio files in the backup (0 when it was made without media).
   final int mediaFiles;
+
+  /// Songs whose audio is neither in the backup nor on this device: they are
+  /// restored but cannot play until their audio is imported again.
+  final int missingMedia;
   final int bytes;
 }
 
@@ -238,6 +243,7 @@ class BackupService {
     favorites: 0,
     withLyrics: 0,
     mediaFiles: 0,
+    missingMedia: 0,
     bytes: 0,
   );
 
@@ -316,6 +322,19 @@ class BackupService {
       for (final entry in entries.values) {
         bytes += ((entry as Map)['bytes'] as num?)?.toInt() ?? 0;
       }
+      // Media files are named by SHA-256, so a file here with the same name
+      // is the same audio.
+      final missing = <Object?>{
+        for (final row in await library.query(
+          'media_file',
+          columns: ['song_id', 'path'],
+        ))
+          if (!entries.containsKey(
+                'media/${p.basename(row['path']! as String)}',
+              ) &&
+              !File(_mediaPath(row['path']! as String)).existsSync())
+            row['song_id'],
+      };
       return BackupPreview(
         createdAt: DateTime.tryParse(
           staged.manifest['createdAt'] as String? ?? '',
@@ -330,6 +349,7 @@ class BackupService {
           'SELECT COUNT(DISTINCT song_id) FROM lyric_doc',
         ),
         mediaFiles: entries.keys.where((k) => k.startsWith('media/')).length,
+        missingMedia: missing.length,
         bytes: bytes,
       );
     } finally {
@@ -348,20 +368,23 @@ class BackupService {
     required AppSettings current,
   }) async {
     try {
-      if (mode == RestoreMode.replace) await _writeSafetyBackup(current);
+      final safety = mode == RestoreMode.replace
+          ? await _writeSafetyBackup(current)
+          : null;
       // Files first, so every restored row points at a file that exists.
       await _moveFiles(staged, 'media', services.storage.media);
       await _moveFiles(staged, 'covers', services.storage.covers);
       List<int> added;
-      if (mode == RestoreMode.replace) {
-        await _replace(services.library.db, staged.libraryDb, _libraryTables);
-        await _replace(services.history.db, staged.historyDb, const ['play']);
-        await _replace(services.appState.db, staged.appStateDb, const [
-          'playback_session',
-          'recent_access',
-          'queue_item',
-        ]);
-        await _rewritePaths();
+      if (safety != null) {
+        try {
+          await _replaceAll(staged);
+        } catch (error) {
+          // Each database is replaced in its own transaction: put back the
+          // ones already replaced from the safety backup, then fail.
+          _log.e('Replace failed; restoring the safety backup', error);
+          await _rollBack(safety);
+          rethrow;
+        }
         added = const []; // search keys came with the songs
       } else {
         added = await _mergeLibrary(staged.libraryDb);
@@ -383,14 +406,37 @@ class BackupService {
 
   Future<void> discard(StagedBackup staged) => _delete(staged.dir);
 
-  /// Keeps the three newest safety backups.
-  Future<void> _writeSafetyBackup(AppSettings current) async {
+  Future<void> _replaceAll(StagedBackup staged) async {
+    await _replace(services.library.db, staged.libraryDb, _libraryTables);
+    await _replace(services.history.db, staged.historyDb, const ['play']);
+    await _replace(services.appState.db, staged.appStateDb, const [
+      'playback_session',
+      'recent_access',
+      'queue_item',
+    ]);
+    await _rewritePaths();
+  }
+
+  /// Puts the data saved in the safety backup at [path] back.
+  Future<void> _rollBack(String path) async {
+    StagedBackup? safety;
+    try {
+      safety = await inspect(path);
+      await _replaceAll(safety);
+    } catch (error) {
+      _log.e('Could not restore the safety backup $path', error);
+    } finally {
+      if (safety != null) await discard(safety);
+    }
+  }
+
+  /// Writes a safety backup of the current data and keeps the three newest.
+  /// Returns its path.
+  Future<String> _writeSafetyBackup(AppSettings current) async {
     final dir = services.storage.safetyBackups;
     await dir.create(recursive: true);
-    await create(
-      outputPath: p.join(dir.path, 'safety-${fileName(DateTime.now())}'),
-      settings: current,
-    );
+    final path = p.join(dir.path, 'safety-${fileName(DateTime.now())}');
+    await create(outputPath: path, settings: current);
     final old =
         dir
             .listSync()
@@ -401,6 +447,7 @@ class BackupService {
     for (final file in old.skip(3)) {
       await file.delete();
     }
+    return path;
   }
 
   Future<void> _moveFiles(
@@ -465,8 +512,9 @@ class BackupService {
 
   /// Paths are absolute and differ between devices; files keep their names.
   Future<void> _rewritePaths() => services.library.db.transaction((txn) async {
+    final batch = txn.batch();
     for (final row in await txn.query('media_file', columns: ['id', 'path'])) {
-      await txn.update(
+      batch.update(
         'media_file',
         {'path': _mediaPath(row['path']! as String)},
         where: 'id = ?',
@@ -478,13 +526,14 @@ class BackupService {
       columns: ['id', 'cover_path'],
       where: 'cover_path IS NOT NULL',
     )) {
-      await txn.update(
+      batch.update(
         'song',
         {'cover_path': _coverPath(row['cover_path']! as String)},
         where: 'id = ?',
         whereArgs: [row['id']],
       );
     }
+    await batch.commit(noResult: true);
   });
 
   String _mediaPath(String path) =>
@@ -679,90 +728,4 @@ SELECT * FROM src.play s WHERE NOT EXISTS (
       _log.w('Could not remove ${dir.path}', error);
     }
   }
-}
-
-/// One row of the `backup_run` log (DATA_MODEL.md §2).
-@immutable
-class BackupRun {
-  const BackupRun({
-    required this.startedAt,
-    required this.target,
-    required this.status,
-    this.finishedAt,
-    this.bytes = 0,
-    this.error,
-  });
-
-  final DateTime startedAt;
-  final DateTime? finishedAt;
-
-  /// `folder` (scheduled) or `file` (saved by hand).
-  final String target;
-
-  /// `running`, `ok` or `failed`.
-  final String status;
-  final int bytes;
-  final String? error;
-}
-
-/// The `backup_run` table in `kalao_library.db`.
-class BackupRuns {
-  BackupRuns(this.db);
-
-  final Database db;
-
-  Future<int> start(String target, {DateTime? now}) => db.insert('backup_run', {
-    'started_at': (now ?? DateTime.now()).millisecondsSinceEpoch,
-    'target': target,
-    'status': 'running',
-  });
-
-  Future<void> finish(int id, {int bytes = 0, String? error, DateTime? now}) =>
-      db.update(
-        'backup_run',
-        {
-          'finished_at': (now ?? DateTime.now()).millisecondsSinceEpoch,
-          'status': error == null ? 'ok' : 'failed',
-          'bytes': bytes,
-          'error': error,
-        },
-        where: 'id = ?',
-        whereArgs: [id],
-      );
-
-  /// Runs the process did not live to finish.
-  Future<void> markInterrupted() => db.update('backup_run', {
-    'status': 'failed',
-    'error': 'interrupted',
-  }, where: "status = 'running'");
-
-  /// The newest run for [target], or of any target.
-  Future<BackupRun?> latest({String? target, String? status}) async {
-    final rows = await db.query(
-      'backup_run',
-      where: [
-        if (target != null) 'target = ?',
-        if (status != null) 'status = ?',
-      ].join(' AND ').ifEmpty,
-      whereArgs: [?target, ?status],
-      orderBy: 'started_at DESC, id DESC',
-      limit: 1,
-    );
-    final row = rows.firstOrNull;
-    if (row == null) return null;
-    DateTime? at(Object? ms) =>
-        ms is int ? DateTime.fromMillisecondsSinceEpoch(ms) : null;
-    return BackupRun(
-      startedAt: at(row['started_at'])!,
-      finishedAt: at(row['finished_at']),
-      target: row['target'] as String? ?? '',
-      status: row['status'] as String? ?? '',
-      bytes: row['bytes'] as int? ?? 0,
-      error: row['error'] as String?,
-    );
-  }
-}
-
-extension on String {
-  String? get ifEmpty => isEmpty ? null : this;
 }

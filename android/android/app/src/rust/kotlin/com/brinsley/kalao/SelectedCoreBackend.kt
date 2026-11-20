@@ -3,14 +3,15 @@
 package com.brinsley.kalao
 
 import android.content.Context
+import com.brinsley.kalao.backend.PlayerStateSink
 import com.brinsley.kalao.backend.invokeApplication as rustInvokeApplication
+import com.brinsley.kalao.backend.playerSubscribe
+import com.brinsley.kalao.backend.playerUnsubscribe
 import com.brinsley.kalao.backend.runNativeDataJob
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import org.json.JSONObject
 
 /** The backend that answers every channel method Kotlin does not handle itself. */
 internal interface CoreBackend {
@@ -50,7 +51,7 @@ internal suspend fun MainActivity.dispatchBackendApplication(call: MethodCall, r
             }
         }
     } finally {
-        if (jobLease != null) NativeDataJobs.release(checkNotNull(jobId), jobLease)
+        if (jobLease != null) NativeDataJobs.release(jobLease)
     }
     result.success(bridgeJsonResult(response))
     return true
@@ -65,36 +66,35 @@ internal object RustCoreBackend : CoreBackend {
         if (!initialized) {
             // Load the library now so a missing or broken .so fails at startup,
             // not on the first user action.
-            val app = context.applicationContext
-            rustInvokeApplication(
-                "initBackend",
-                JSONObject()
-                    .put("filesDir", app.filesDir.resolve("backend").absolutePath)
-                    .put("cacheDir", app.cacheDir.resolve("backend").absolutePath)
-                    .toString(),
-            )
+            rustInvokeApplication("initBackend", "{}")
             initialized = true
         }
         return this
     }
 
+    /** Dart sends the arguments of Rust methods as JSON text. */
     override fun invokeApplication(method: String, arguments: Any?): String =
-        rustInvokeApplication(method, toJson(arguments))
-
-    private fun toJson(value: Any?): String = when (value) {
-        null -> "{}"
-        is String -> value
-        else -> jsonValue(value).toString()
-    }
-
-    private fun jsonValue(value: Any?): Any = when (value) {
-        null -> JSONObject.NULL
-        is Map<*, *> -> JSONObject().also { json ->
-            value.forEach { (key, item) -> json.put(key.toString(), jsonValue(item)) }
-        }
-        is List<*> -> JSONArray().also { json -> value.forEach { json.put(jsonValue(it)) } }
-        is ByteArray -> JSONArray().also { json -> value.forEach { json.put(it.toInt() and 0xff) } }
-        is Number, is Boolean, is String -> value
-        else -> value.toString()
-    }
+        rustInvokeApplication(
+            method,
+            when (arguments) {
+                null -> "{}"
+                is String -> arguments
+                else -> error("Arguments of $method must be JSON text")
+            },
+        )
 }
+
+/**
+ * Sends each engine state Rust publishes to [deliver], with the
+ * `System.nanoTime()` (CLOCK_MONOTONIC) instant it was published, in
+ * microseconds. Replaces any earlier subscriber.
+ */
+internal fun subscribePlayerState(deliver: (state: String, atMicros: Long) -> Unit) {
+    playerSubscribe(
+        object : PlayerStateSink {
+            override fun onState(stateJson: String) = deliver(stateJson, System.nanoTime() / 1000)
+        },
+    )
+}
+
+internal fun unsubscribePlayerState() = playerUnsubscribe()

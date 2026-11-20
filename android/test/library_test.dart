@@ -5,6 +5,7 @@ import 'package:kalao/models/lyrics.dart';
 import 'package:kalao/models/song.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/services/history_database.dart';
+import 'package:kalao/services/import_service.dart';
 import 'package:kalao/services/library_database.dart';
 import 'package:kalao/services/library_search.dart';
 import 'package:kalao/widgets/ruby_lyric_line.dart';
@@ -73,7 +74,7 @@ void main() {
       expect(loaded.file(MediaKind.instrumental)!.path, '/m/i.mp3');
       await db.deleteSongs([first]);
       expect(await db.song(first), isNull);
-      expect(await db.isShaUsed('i'), isFalse, reason: 'media rows cascade');
+      expect(await db.usedShas(['i']), isEmpty, reason: 'media rows cascade');
     });
 
     test('lyrics keep layers per version and prune old versions', () async {
@@ -184,6 +185,8 @@ void main() {
     expect(normalizeSearchText("Don't Stop — Me Now"), 'dontstopmenow');
     expect(normalizeSearchText('邓丽君 Teresa Teng'), '邓丽君teresateng');
     expect(normalizeSearchText('Ai Otsuka!'), 'aiotsuka');
+    // Vowel signs are letters to Rust (`is_alphanumeric`), so they stay.
+    expect(normalizeSearchText('गाना'), 'गाना');
   });
 
   group('ImportService', () {
@@ -258,6 +261,52 @@ void main() {
       expect(Directory(services.storage.media.path).listSync(), hasLength(1));
     });
 
+    test(
+      'a failed import keeps the songs before it and removes its files',
+      () async {
+        final importer = openTestServices(convert: (_, _) async => false);
+        final failing = await importer;
+        addTearDown(() => closeTestServices(failing));
+        Future<StagedFile> stage(String name, String content) async {
+          final file = File(p.join(failing.storage.root.path, 'picked', name));
+          await file.create(recursive: true);
+          await file.writeAsString(content);
+          return failing.importer.stage(name, file.openRead());
+        }
+
+        final proposals = await failing.importer.propose([
+          await stage('Good.mp3', 'good audio'),
+          await stage('Bad.opus', 'opus that will not convert'),
+        ]);
+        await expectLater(
+          failing.importer.commit(proposals),
+          throwsA(isA<ImportException>()),
+        );
+        final songs = await failing.library.songs();
+        expect(songs.map((song) => song.title), ['Good']);
+        expect(
+          Directory(failing.storage.media.path).listSync().map((f) => f.path),
+          [songs.single.media.single.path],
+        );
+        expect(
+          (await failing.library.search('good')).single.id,
+          songs.single.id,
+        );
+        expect(failing.storage.importStaging.existsSync(), isFalse);
+      },
+    );
+
+    test(
+      'import hashes each file once and moves it instead of copying',
+      () async {
+        final ids = await importFiles({'Once.mp3': 'once'});
+        final jobs = backend.importJobs.map((job) => job['operation']).toList();
+        expect(jobs, ['importInspect', 'importStore']);
+        final song = (await services.library.song(ids.single))!;
+        expect(File(song.media.single.path).readAsStringSync(), 'once');
+      },
+    );
+
     test('deleting songs removes their unused media', () async {
       final ids = await importFiles({'Gone.mp3': 'gone'});
       final song = (await services.library.song(ids.single))!;
@@ -295,6 +344,28 @@ void main() {
         ).activeLineAt(Duration.zero),
         isNull,
       );
+      // A backing line is never the active line, also before any lead line.
+      const backingFirst = LyricDocument(
+        timed: true,
+        lines: [
+          LyricLine(text: 'ooh', voice: backingVoice),
+          LyricLine(text: 'lead', time: Duration(seconds: 2)),
+        ],
+      );
+      expect(backingFirst.activeLineAt(const Duration(seconds: 1)), isNull);
+      expect(backingFirst.activeLineAt(const Duration(seconds: 3)), 1);
+    });
+
+    test('words take their offset from the document', () {
+      final line = LyricLine.fromJson({
+        'text': 'la la',
+        'words': [
+          {'timeMs': 0, 'text': 'la', 'start': 0},
+          {'timeMs': 500, 'text': 'la', 'start': 3},
+        ],
+      });
+      expect(line.words.map((word) => word.start), [0, 3]);
+      expect(line.words.last.toJson()['start'], 3);
     });
 
     test('ruby units align readings and keep plain words whole', () {

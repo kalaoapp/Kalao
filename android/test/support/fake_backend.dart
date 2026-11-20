@@ -66,8 +66,16 @@ class FakeBackend {
         .setMockMethodCallHandler(_channel, null);
   }
 
-  Map<String, Object?> _args(MethodCall call) =>
-      (call.arguments as Map?)?.cast<String, Object?>() ?? const {};
+  /// The arguments of [call]: JSON text for Rust methods (as `PlatformBridge`
+  /// sends them), a map for Android-native ones.
+  static Map<String, Object?> argsOf(MethodCall call) =>
+      switch (call.arguments) {
+        final String json => (jsonDecode(json) as Map).cast<String, Object?>(),
+        final Map<Object?, Object?> map => map.cast<String, Object?>(),
+        _ => const {},
+      };
+
+  Map<String, Object?> _args(MethodCall call) => argsOf(call);
 
   Future<Object?> _handle(MethodCall call) async {
     calls.add(call);
@@ -162,17 +170,7 @@ class FakeBackend {
       case 'playerState':
         return jsonEncode(player);
       case 'probeAudio':
-        final path = args['path'] as String;
-        final extension = path.split('.').last.toLowerCase();
-        return jsonEncode({
-          'codec': extension,
-          'sampleRate': 44100,
-          'channels': 2,
-          'durationMs': 180000,
-          'title': null,
-          'artist': null,
-          'decodable': !undecodable.contains(extension),
-        });
+        return jsonEncode(_probe(args['path'] as String));
       case 'pairImportFiles':
         return jsonEncode(_pair(args['files'] as List));
       case 'parseLyrics':
@@ -185,12 +183,24 @@ class FakeBackend {
           ),
         });
       case 'annotateLyrics':
-        return jsonEncode(
-          _annotate(
-            (args['lines'] as List).cast<String>(),
-            (args['layers'] as List?)?.cast<String>() ?? const ['pinyin'],
+        final lines = (args['lines'] as List).cast<String>();
+        final language = lines.any(RegExp('[ぁ-ヿ]').hasMatch)
+            ? 'ja'
+            : lines.any(RegExp('[一-鿿]').hasMatch)
+            ? 'zh'
+            : null;
+        return jsonEncode({
+          'sourceLang': language,
+          'layers': _annotate(
+            lines,
+            (args['layers'] as List?)?.cast<String>() ??
+                switch (language) {
+                  'ja' => const ['furigana', 'romaji'],
+                  'zh' => const ['pinyin'],
+                  _ => const <String>[],
+                },
           ),
-        );
+        });
       case 'convertChinese':
         return jsonEncode([
           for (final text in (args['texts'] as List).cast<String>())
@@ -243,6 +253,19 @@ class FakeBackend {
               'Rust application method is not connected yet: ${call.method}',
         );
     }
+  }
+
+  Map<String, Object?> _probe(String path) {
+    final extension = path.split('.').last.toLowerCase();
+    return {
+      'codec': extension,
+      'sampleRate': 44100,
+      'channels': 2,
+      'durationMs': 180000,
+      'title': null,
+      'artist': null,
+      'decodable': !undecodable.contains(extension),
+    };
   }
 
   void _storeDocument(String uri, String path) {
@@ -422,15 +445,44 @@ class FakeBackend {
     return hash.toRadixString(16).padLeft(64, '0');
   }
 
-  static Map<String, Object?> _job(Map<String, Object?> request) {
+  /// Requests of the `importInspect` / `importStore` jobs, for assertions.
+  final importJobs = <Map<String, Object?>>[];
+
+  Map<String, Object?> _job(Map<String, Object?> request) {
     switch (request['operation']) {
       case 'hash_file':
         return {
           'sha256': _fnv(File(request['path'] as String).readAsBytesSync()),
         };
+      case 'importInspect':
+        importJobs.add(request);
+        final path = request['path'] as String;
+        return {
+          'sha256': _fnv(File(path).readAsBytesSync()),
+          'probe': _probe(path),
+        };
+      case 'importStore':
+        importJobs.add(request);
+        final source = File(request['path'] as String);
+        final extension = source.path.split('.').last.toLowerCase();
+        final target = File(
+          '${request['mediaDir']}${Platform.pathSeparator}'
+          '${request['sha256']}.$extension',
+        );
+        Directory(request['mediaDir'] as String).createSync(recursive: true);
+        if (target.existsSync()) {
+          source.deleteSync();
+        } else {
+          source.renameSync(target.path);
+        }
+        return {
+          'path': target.path,
+          'bytes': target.lengthSync(),
+          'probe': _probe(target.path),
+        };
       case 'rebuildSearchKeys':
         String norm(String value) => value.toLowerCase().replaceAll(
-          RegExp(r'[^\p{L}\p{N}]', unicode: true),
+          RegExp(r'[^\p{Alphabetic}\p{N}]', unicode: true),
           '',
         );
         return {

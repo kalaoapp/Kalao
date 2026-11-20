@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -17,12 +16,12 @@ import 'package:kalao/screens/lyrics_options_sheet.dart';
 import 'package:kalao/screens/queue_tab.dart';
 import 'package:kalao/screens/shortcuts_sheet.dart';
 import 'package:kalao/services/custom_font_service.dart';
-import 'package:kalao/services/platform_bridge.dart';
 import 'package:kalao/theme/app_tokens.dart';
 import 'package:kalao/utils/lyrics_timeline.dart';
 import 'package:kalao/widgets/empty_state.dart';
 import 'package:kalao/widgets/karaoke_lyrics_view.dart';
 import 'package:kalao/widgets/lyric_line_view.dart';
+import 'package:kalao/widgets/screen_awake.dart';
 import 'package:kalao/widgets/song_widgets.dart';
 
 /// Now playing: Learn mode (scrolling layered lyrics, loop a line, A–B
@@ -36,8 +35,18 @@ class NowPlayingScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final now = ref.watch(playerProvider);
-    final song = now.song;
+    // The engine reports 30 times a second; the layout only depends on these.
+    final (:song, :lyrics, :singer, :karaoke, :playing) = ref.watch(
+      playerProvider.select(
+        (now) => (
+          song: now.song,
+          lyrics: now.lyrics,
+          singer: now.singer,
+          karaoke: now.isKaraoke,
+          playing: now.engine.playing,
+        ),
+      ),
+    );
     if (song == null) {
       return Scaffold(
         appBar: AppBar(),
@@ -54,8 +63,7 @@ class NowPlayingScreen extends ConsumerWidget {
     void forward5() => controller.seekRelative(const Duration(seconds: 5));
     void switchTrack() =>
         controller.setInstrumental(!ref.read(playerProvider).isInstrumental);
-    final lyrics = now.lyrics;
-    final karaokeLayout = now.isKaraoke && lyrics != null && lyrics.timed;
+    final karaokeLayout = karaoke && lyrics != null && lyrics.timed;
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.space): controller.togglePlay,
@@ -86,10 +94,10 @@ class NowPlayingScreen extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                if (song.artist.isNotEmpty || now.singer.isNotEmpty)
+                if (song.artist.isNotEmpty || singer.isNotEmpty)
                   Text(
                     [
-                      if (now.singer.isNotEmpty) now.singer,
+                      if (singer.isNotEmpty) singer,
                       if (song.artist.isNotEmpty) song.artist,
                     ].join(' · '),
                     maxLines: 1,
@@ -134,7 +142,7 @@ class NowPlayingScreen extends ConsumerWidget {
                     ? KaraokeLyricsView(lyrics: lyrics)
                     : LyricsView(lyrics: lyrics);
                 final awake = ScreenAwake(
-                  enabled: now.isKaraoke && now.engine.playing && keepOn,
+                  enabled: karaoke && playing && keepOn,
                 );
                 // Landscape: stacked controls would take most of the short
                 // height, so they move to a scrolling side panel and the
@@ -169,49 +177,6 @@ class NowPlayingScreen extends ConsumerWidget {
       ),
     );
   }
-}
-
-/// Keeps the screen on while [enabled] (Mornye's `lyrics_screen_awake`), and
-/// lets it sleep again when disabled or removed.
-class ScreenAwake extends StatefulWidget {
-  const ScreenAwake({super.key, required this.enabled});
-
-  final bool enabled;
-
-  @override
-  State<ScreenAwake> createState() => _ScreenAwakeState();
-}
-
-class _ScreenAwakeState extends State<ScreenAwake> {
-  bool _awake = false;
-
-  void _apply(bool awake) {
-    if (awake == _awake) return;
-    _awake = awake;
-    // Not on Android (tests, desktop): nothing to keep awake.
-    PlatformBridge.setScreenAwake(awake).catchError((Object _) {});
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _apply(widget.enabled);
-  }
-
-  @override
-  void didUpdateWidget(ScreenAwake old) {
-    super.didUpdateWidget(old);
-    _apply(widget.enabled);
-  }
-
-  @override
-  void dispose() {
-    _apply(false);
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 class _NoLyrics extends ConsumerWidget {
@@ -522,23 +487,36 @@ class _PlayerControlsState extends ConsumerState<PlayerControls> {
   /// Slow-down presets of Learn mode (IMPLEMENTATION.md §5).
   static const _tempos = [0.5, 0.75, 0.9, 1.0];
 
-  double? _dragging;
   double? _vocalDrag;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final now = ref.watch(playerProvider);
+    // Everything but the position, which only the seek bar follows.
+    final now = ref.watch(
+      playerProvider.select(
+        (now) => (
+          mode: now.mode,
+          karaoke: now.isKaraoke,
+          instrumental: now.isInstrumental,
+          lyrics: now.lyrics,
+          loopLines: now.loopLines,
+          loopOpen: now.loopOpen,
+          playing: now.engine.playing,
+          looping: now.engine.looping,
+          tempo: now.engine.tempo,
+          canSwitch: now.engine.canSwitch,
+          vocalLevel: now.engine.vocalLevel,
+          error: now.engine.error,
+        ),
+      ),
+    );
     final controller = ref.read(playerProvider.notifier);
-    final engine = now.engine;
-    final duration = engine.duration ?? now.song?.duration ?? Duration.zero;
-    final total = duration.inMilliseconds.toDouble();
-    final position = _dragging ?? engine.positionMs.clamp(0, total).toDouble();
     final theme = Theme.of(context);
     final lyrics = now.lyrics;
     final hasLyrics = lyrics != null && !lyrics.isEmpty;
-    final learn = !now.isKaraoke;
-    final repeating = engine.looping || now.loopLines != null;
+    final learn = !now.karaoke;
+    final repeating = now.looping || now.loopLines != null;
     return Material(
       color: theme.colorScheme.surfaceContainer,
       child: Padding(
@@ -552,33 +530,7 @@ class _PlayerControlsState extends ConsumerState<PlayerControls> {
           mainAxisSize: MainAxisSize.min,
           children: [
             PlayModeButton(mode: now.mode, onChanged: controller.setMode),
-            Slider(
-              value: total <= 0 ? 0 : position.clamp(0, total),
-              max: total <= 0 ? 1 : total,
-              semanticFormatterCallback: (value) =>
-                  '${l10n.playerSeek} ${formatDuration(Duration(milliseconds: value.round()))}',
-              onChanged: total <= 0
-                  ? null
-                  : (value) => setState(() => _dragging = value),
-              onChangeEnd: (value) {
-                setState(() => _dragging = null);
-                controller.seek(Duration(milliseconds: value.round()));
-              },
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppTokens.space16,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    formatDuration(Duration(milliseconds: position.round())),
-                  ),
-                  Text(formatDuration(duration)),
-                ],
-              ),
-            ),
+            const SeekBar(),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -597,8 +549,8 @@ class _PlayerControlsState extends ConsumerState<PlayerControls> {
                 const SizedBox(width: AppTokens.space8),
                 IconButton.filled(
                   iconSize: 40,
-                  tooltip: engine.playing ? l10n.playerPause : l10n.playerPlay,
-                  icon: Icon(engine.playing ? Icons.pause : Icons.play_arrow),
+                  tooltip: now.playing ? l10n.playerPause : l10n.playerPlay,
+                  icon: Icon(now.playing ? Icons.pause : Icons.play_arrow),
                   onPressed: controller.togglePlay,
                 ),
                 const SizedBox(width: AppTokens.space8),
@@ -639,7 +591,7 @@ class _PlayerControlsState extends ConsumerState<PlayerControls> {
                         child: ChoiceChip(
                           label: Text('${(tempo * 100).round()}%'),
                           tooltip: l10n.learnSpeed((tempo * 100).round()),
-                          selected: engine.tempo == tempo,
+                          selected: now.tempo == tempo,
                           onSelected: (_) => controller.setTempo(tempo),
                         ),
                       ),
@@ -653,7 +605,7 @@ class _PlayerControlsState extends ConsumerState<PlayerControls> {
                   color: theme.colorScheme.tertiary,
                 ),
               ),
-            if (engine.canSwitch) ...[
+            if (now.canSwitch) ...[
               const SizedBox(height: AppTokens.space8),
               SegmentedButton<bool>(
                 segments: [
@@ -668,7 +620,7 @@ class _PlayerControlsState extends ConsumerState<PlayerControls> {
                     label: Text(l10n.playerInstrumental),
                   ),
                 ],
-                selected: {now.isInstrumental},
+                selected: {now.instrumental},
                 onSelectionChanged: (selection) =>
                     controller.setInstrumental(selection.first),
               ),
@@ -683,10 +635,10 @@ class _PlayerControlsState extends ConsumerState<PlayerControls> {
                   ),
                   Expanded(
                     child: Slider(
-                      value: _vocalDrag ?? engine.vocalLevel,
+                      value: _vocalDrag ?? now.vocalLevel,
                       divisions: 20,
                       label:
-                          '${((_vocalDrag ?? engine.vocalLevel) * 100).round()}%',
+                          '${((_vocalDrag ?? now.vocalLevel) * 100).round()}%',
                       semanticFormatterCallback: (value) =>
                           '${l10n.playerVocalGuide} ${(value * 100).round()}%',
                       onChanged: (value) {
@@ -709,9 +661,9 @@ class _PlayerControlsState extends ConsumerState<PlayerControls> {
                   ),
                 ),
               ),
-            if (engine.error != null)
+            if (now.error case final error?)
               Text(
-                engine.error!,
+                error,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.error,
                 ),
@@ -723,8 +675,63 @@ class _PlayerControlsState extends ConsumerState<PlayerControls> {
   }
 }
 
-/// Whether a custom font file still exists (used by settings).
-bool customFontExists(String? path) => path != null && File(path).existsSync();
+/// The seek slider and times: the only part of the controls that follows
+/// the position.
+class SeekBar extends ConsumerStatefulWidget {
+  const SeekBar({super.key});
+
+  @override
+  ConsumerState<SeekBar> createState() => _SeekBarState();
+}
+
+class _SeekBarState extends ConsumerState<SeekBar> {
+  double? _dragging;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final (positionMs, duration) = ref.watch(
+      playerProvider.select(
+        (now) => (
+          now.engine.positionMs,
+          now.engine.duration ?? now.song?.duration ?? Duration.zero,
+        ),
+      ),
+    );
+    final total = duration.inMilliseconds.toDouble();
+    final position = _dragging ?? positionMs.clamp(0, total).toDouble();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Slider(
+          value: total <= 0 ? 0 : position.clamp(0, total),
+          max: total <= 0 ? 1 : total,
+          semanticFormatterCallback: (value) =>
+              '${l10n.playerSeek} ${formatDuration(Duration(milliseconds: value.round()))}',
+          onChanged: total <= 0
+              ? null
+              : (value) => setState(() => _dragging = value),
+          onChangeEnd: (value) {
+            setState(() => _dragging = null);
+            ref
+                .read(playerProvider.notifier)
+                .seek(Duration(milliseconds: value.round()));
+          },
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppTokens.space16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(formatDuration(Duration(milliseconds: position.round()))),
+              Text(formatDuration(duration)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 /// Heart toggle for the current song.
 class _FavoriteButton extends ConsumerWidget {

@@ -2,43 +2,26 @@
 // LGPL-3.0-only. Modified for Kalao.
 package com.brinsley.kalao
 
-import com.brinsley.kalao.backend.CancellationDomain
 import com.brinsley.kalao.backend.CancellationRegistry
 import com.brinsley.kalao.backend.RequestLease
 
-// Acquire before queuing on IO, so a following channel cancellation also
-// reaches work that has not started.
+/**
+ * Leases for native data jobs. A lease is acquired before the job is queued on
+ * IO, so a `cancelNativeDataJob` that follows on the channel also reaches work
+ * that has not started; cancelling an ID with no active job does nothing.
+ */
 internal object NativeDataJobs {
-    private val registry = CancellationRegistry(CancellationDomain.DATA_JOB)
-    private val active = mutableMapOf<String, MutableList<RequestLease>>()
+    private val registry = CancellationRegistry()
 
-    @Synchronized
-    fun acquire(id: String): RequestLease {
-        val lease = registry.acquire(id)
-        active.getOrPut(id) { mutableListOf() }.add(lease)
-        return lease
-    }
+    fun acquire(id: String): RequestLease = registry.acquire(id)
 
-    @Synchronized
-    fun cancel(id: String) {
-        // Jobs are acquired in channel order and must not retain pre-cancel sentinels.
-        if (active[id]?.isNotEmpty() == true) registry.cancel(id)
-    }
+    fun cancel(id: String) = registry.cancel(id)
 
-    @Synchronized
-    fun release(id: String, lease: RequestLease) {
-        val leases = active[id] ?: return
-        val index = leases.indexOfFirst { it === lease }
-        if (index < 0) return
-        leases.removeAt(index)
+    fun release(lease: RequestLease) {
         try {
             lease.release()
         } finally {
-            try {
-                lease.close()
-            } finally {
-                if (leases.isEmpty()) active.remove(id)
-            }
+            lease.close()
         }
     }
 }

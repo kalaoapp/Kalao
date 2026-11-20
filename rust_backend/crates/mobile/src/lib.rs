@@ -15,5 +15,6 @@ mod player;
 uniffi::setup_scaffolding!();
 
 pub use backend::{BackendError, invoke_application};
-pub use cancellation::{CancellationDomain, CancellationError, CancellationRegistry, RequestLease};
+pub use cancellation::{CancellationRegistry, RequestLease};
 pub use data_jobs::{NativeDataJobError, run_native_data_job};
+pub use player::{PlayerStateSink, player_subscribe, player_unsubscribe};

@@ -315,6 +315,7 @@ void main() {
         await backUp(phone, includeMedia: false),
       );
       expect(staged.preview.mediaFiles, 0);
+      expect(staged.preview.missingMedia, 1);
       await service.restore(
         staged,
         RestoreMode.merge,
@@ -325,6 +326,26 @@ void main() {
       expect(File(song.coverPath!).existsSync(), isTrue);
     },
   );
+
+  test('a Replace that fails part-way puts the current data back', () async {
+    await addSong(phone, 'Moon');
+    await addSong(tablet, 'Sun');
+    final service = backupOf(tablet);
+    final staged = await service.inspect(await backUp(phone));
+    // The history database goes missing after the check: the library is
+    // replaced, then the history step fails.
+    await File(staged.historyDb).delete();
+    await expectLater(
+      service.restore(
+        staged,
+        RestoreMode.replace,
+        current: const AppSettings(),
+      ),
+      throwsA(anything),
+    );
+    final songs = await tablet.library.songs();
+    expect(songs.map((song) => song.title), ['Sun']);
+  });
 
   test('backups from a newer schema or another app are refused', () async {
     await addSong(phone, 'Moon');

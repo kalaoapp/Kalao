@@ -484,3 +484,39 @@ fn loop_repeats_the_range_until_cleared() {
     }
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// The loop seam plays the decoded loop start while the decoders seek back:
+/// blocks rendered back to back across the seam, without waiting for the
+/// rings to refill (as the device callback does), are never silent.
+#[test]
+fn loop_seam_has_no_gap() {
+    let dir = temp_dir("seam");
+    let path = dir.join("tone.wav");
+    write_wav(&path, RATE, RATE * 3, |f| sine(f, RATE));
+    let engine = Engine::new(Output::Manual { sample_rate: RATE });
+    engine
+        .load("song", &[(SourceKind::Original, path)], 0)
+        .unwrap();
+    engine.set_loop(Some((500, 900))).unwrap();
+    engine.play().unwrap();
+    for _ in 0..3 {
+        engine.seek(800).unwrap();
+        // Enough in the rings to reach the seam without the decoders.
+        wait_prefill(&engine, RATE as usize / 5);
+        let mut wrapped = false;
+        for _ in 0..20 {
+            let before = engine.position_ms();
+            let mut block = vec![0.0; 480 * 2];
+            engine.render(&mut block, 2);
+            let peak = block.iter().fold(0.0f32, |peak, s| peak.max(s.abs()));
+            assert!(peak > 0.3, "silent block after {before} ms (peak {peak})");
+            let after = engine.position_ms();
+            if after < before {
+                assert!((500..520).contains(&after), "wrapped to {after}");
+                wrapped = true;
+            }
+        }
+        assert!(wrapped, "the loop did not wrap");
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}

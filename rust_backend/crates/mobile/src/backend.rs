@@ -5,8 +5,7 @@
 
 use crate::logging;
 use serde_json::{Value, json};
-use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi(flat_error)]
@@ -48,16 +47,8 @@ pub const METHODS: &[&str] = &[
     "setLoggingEnabled",
 ];
 
-#[derive(Clone, Debug)]
-struct Paths {
-    files_dir: PathBuf,
-    cache_dir: PathBuf,
-}
-
-fn paths() -> &'static Mutex<Option<Paths>> {
-    static PATHS: OnceLock<Mutex<Option<Paths>>> = OnceLock::new();
-    PATHS.get_or_init(|| Mutex::new(None))
-}
+/// Set by `initBackend`, which the Android host calls before Flutter starts.
+static INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 #[uniffi::export]
 pub fn invoke_application(method: String, args_json: String) -> Result<String, BackendError> {
@@ -74,7 +65,7 @@ pub fn invoke_application(method: String, args_json: String) -> Result<String, B
 
 fn dispatch(method: &str, args: &Value) -> Result<Value, BackendError> {
     match method {
-        "initBackend" => init_backend(method, args),
+        "initBackend" => Ok(init_backend(args)),
         "getBackendInfo" => Ok(backend_info()),
         "getLogs" => Ok(logging::global().since(args["sinceIndex"].as_i64().unwrap_or(0))),
         "clearLogs" => {
@@ -97,38 +88,22 @@ fn dispatch(method: &str, args: &Value) -> Result<Value, BackendError> {
     }
 }
 
-fn init_backend(method: &str, args: &Value) -> Result<Value, BackendError> {
-    let files_dir = PathBuf::from(str_arg(method, args, "filesDir")?);
-    let cache_dir = PathBuf::from(str_arg(method, args, "cacheDir")?);
-    for dir in [&files_dir, &cache_dir] {
-        std::fs::create_dir_all(dir).map_err(|error| BackendError::Operation(error.to_string()))?;
-    }
+fn init_backend(args: &Value) -> Value {
     if let Some(enabled) = args["loggingEnabled"].as_bool() {
         logging::global().set_enabled(enabled);
     }
-    *paths()
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(Paths {
-        files_dir,
-        cache_dir,
-    });
+    INITIALIZED.store(true, Ordering::Release);
     logging::info("Backend", "initialized");
-    Ok(backend_info())
+    backend_info()
 }
 
 fn backend_info() -> Value {
-    let paths = paths()
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .clone();
     json!({
         "name": "kalao-mobile",
         "version": env!("CARGO_PKG_VERSION"),
         "os": std::env::consts::OS,
         "arch": std::env::consts::ARCH,
-        "initialized": paths.is_some(),
-        "filesDir": paths.as_ref().map(|p| p.files_dir.display().to_string()),
-        "cacheDir": paths.as_ref().map(|p| p.cache_dir.display().to_string()),
+        "initialized": INITIALIZED.load(Ordering::Acquire),
         "methods": METHODS,
     })
 }
@@ -199,20 +174,13 @@ mod tests {
     }
 
     #[test]
-    fn init_creates_directories_and_reports_info() {
-        let root = std::env::temp_dir().join(format!("kalao-init-{}", std::process::id()));
-        let info = call(
-            "initBackend",
-            json!({"filesDir": root.join("files"), "cacheDir": root.join("cache")}),
-        )
-        .expect("init");
+    fn init_reports_info() {
+        let info = call("initBackend", json!({})).expect("init");
         assert_eq!(info["initialized"], true);
-        assert!(root.join("files").is_dir() && root.join("cache").is_dir());
         assert_eq!(
             call("getBackendInfo", json!({})).unwrap()["name"],
             "kalao-mobile"
         );
-        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

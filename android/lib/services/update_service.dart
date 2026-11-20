@@ -162,6 +162,9 @@ class UpdateService {
   final http.Client _client;
   final Directory cacheDir;
 
+  /// The longest wait for the next chunk of an APK download.
+  static const _stallTimeout = Duration(seconds: 30);
+
   /// The latest release when it is newer than this build, else null.
   Future<AppRelease?> checkForUpdate() async {
     final response = await _client
@@ -217,14 +220,24 @@ class UpdateService {
     var received = 0;
     final sink = partial.openWrite();
     try {
-      await for (final chunk in response.stream) {
+      // A connection that stops sending fails instead of hanging the dialog.
+      final stalled = response.stream.timeout(
+        _stallTimeout,
+        onTimeout: (events) => events
+          ..addError(const UpdateException('The download stopped'))
+          ..close(),
+      );
+      await for (final chunk in stalled) {
         sink.add(chunk);
         received += chunk.length;
         onProgress?.call(total > 0 ? received / total : null);
       }
-    } finally {
+    } catch (_) {
       await sink.close();
+      if (partial.existsSync()) await partial.delete();
+      rethrow;
     }
+    await sink.close();
     final actual = await PlatformBridge.hashFile(
       partial.path,
       requestId: 'update-${DateTime.now().microsecondsSinceEpoch}',
