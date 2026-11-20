@@ -318,7 +318,7 @@ void main() {
     });
   });
 
-  group('timing accuracy (M2.6)', () {
+  group('timing accuracy', () {
     // The engine reports its position at 30 Hz with jitter; the deck
     // interpolates between reports. Model the engine with a simulated clock
     // and check when the active line changes against the true song time.

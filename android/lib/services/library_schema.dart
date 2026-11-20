@@ -67,7 +67,7 @@ CREATE TABLE song_search (
 )''',
     'CREATE INDEX song_search_song_idx ON song_search(song_id)',
   ],
-  // M4.1 favorites, M4.5 the scheduled-backup log.
+  // v2: favorites and the backup log.
   2: [
     '''
 CREATE TABLE favorite (
@@ -124,7 +124,7 @@ CREATE TABLE recent_access (
   PRIMARY KEY(kind, ref)
 )''',
   ],
-  // M3.4: the singing queue.
+  // v2: the singing queue.
   2: [
     '''
 CREATE TABLE queue_item (

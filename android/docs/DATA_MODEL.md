@@ -1,10 +1,10 @@
 # Data Model
 
-Ownership follows Mornye (ARCHITECTURE.md §6): Dart owns the schemas and migrations (`sqflite`), Rust native data jobs work on detached copies, settings live in `shared_preferences`, secrets in `flutter_secure_storage`.
+Ownership follows Mornye (ARCHITECTURE.md §6): Dart owns the schemas and migrations (`sqflite`, all in `services/library_schema.dart`), Rust never opens the live databases, settings live in `shared_preferences`, secrets (from M5) in `flutter_secure_storage`.
 
 ## 1. Timed lyrics
 
-The POC stored text layers only, with no timing. Kalao separates **text and timing** (the lyric document) from **annotations** (generated or edited layers). In memory, Dart uses Mornye's `ParsedLyrics` / `LyricLine` extended with `section`, `sectionBreakBefore` and `layers` (IMPLEMENTATION.md §4). Rust exchanges the same shape as JSON:
+The POC stored text layers only, with no timing. Kalao separates **text and timing** (the lyric document) from **annotations** (generated or edited layers). In memory, Dart uses `LyricDocument` / `LyricLine` (`models/lyrics.dart`, IMPLEMENTATION.md §4). Rust exchanges the same shape as JSON:
 
 ```json
 {
@@ -44,58 +44,62 @@ Annotation layers per line:
 | `lyric_doc` | song_id, version, json, source_kind, updated_at | Latest version is current; older versions kept (last 5) for undo |
 | `lyric_annotation` | song_id, doc_version, line_index, kind, json, origin | |
 | `song_search` | song_id, key_kind (`title`/`artist`/`pinyin`/`initials`/`romaji`), key | Rebuilt by the `rebuildSearchKeys` job |
-| `favorite` | song_id, created_at | |
-| `melody` | sha256, path, frames, created_at | Reference pitch track for scoring |
-| `stem_job` | id, song_id, sha256, mode (`local`/`remote`), model, status, progress, remote_job_id, error, created_at | Mirror of Rust job state for UI; checkpoints are Rust files |
-| `backup_run` | id, started_at, finished_at, target, bytes, status, error | Scheduled-backup log |
+| `favorite` | song_id, created_at | Library v2 |
+| `backup_run` | id, started_at, finished_at, target (`folder`/`file`), bytes, status, error | Library v2; backup log |
+| `melody` *(planned, M7)* | sha256, path, frames, created_at | Reference pitch track for scoring |
+| `stem_job` *(planned, M6)* | id, song_id, sha256, mode (`local`/`remote`), model, status, progress, remote_job_id, error, created_at | Mirror of Rust job state for UI; checkpoints are Rust files |
 
-### `kalao_history.db` (`services/history_schema.dart`)
+`language`, `origin`, `ext_ref` and `media_file.pinned` exist for extensions and stems but are not written yet.
+
+### `kalao_history.db` (`services/library_schema.dart`, `history_database.dart`)
 
 | Table | Main columns |
 | --- | --- |
 | `play` | id, song_id, song_key, started_at, duration_ms, mode (`learn`/`karaoke`/`listen`), score, line_scores_json, singer, party (bool) |
 
-### `kalao_app_state.db` (`services/app_state_database.dart`)
+### `kalao_app_state.db` (`services/library_schema.dart`, `AppStateDatabase` in `history_database.dart`)
 
 | Table | Main columns |
 | --- | --- |
-| `queue_item` | id, song_id, position, singer, mode, added_by (`host`/guest id) |
-| `playback_session` | key, value (Mornye session restore: current song, position, mode, stem gains, key, tempo) |
+| `queue_item` | id, song_id, position, singer, mode, added_by (`host`/guest id) — app state v2 |
+| `playback_session` | key, value (session restore for "Continue singing": song, position, vocal level) |
 | `recent_access` | kind, ref, accessed_at |
 
 ### Files and other stores
 
 | Store | Owner | Contents |
 | --- | --- | --- |
-| `shared_preferences` | `settings_provider` | `AppSettings` JSON (IMPLEMENTATION.md §16), daily MyMemory character counter |
-| `flutter_secure_storage` | `secure_storage_options.dart` | Stem API key, install ID, MyMemory contact email, extension `secret` settings |
-| `extensions/` | `kalao-extensions` | Installed packages, per-extension key-value storage and cookies |
-| `models/` | `kalao-stems` | User-installed ONNX models (verified by SHA-256), plus partial downloads; deleted from the Models screen |
-| `stems/<sha256>/` | `kalao-stems` | `vocals.flac`, `instrumental.flac`, `job.json` checkpoints |
-| `melody/<sha256>.bin` | `kalao-audio` | Pitch frames (u16 cents per 10 ms) |
-| `translations/` | `lyrics_translation.dart` | Mornye's translation cache files, keyed by line-list hash + language pair |
-| `recordings/` | `kalao-audio` | User-started FLAC recordings |
+| `shared_preferences` | `settings_provider` | `AppSettings` JSON (IMPLEMENTATION.md §16), `update_checked_at`; later the daily MyMemory character counter |
+| `media/`, `covers/` | `import_service.dart` | Imported audio as `<sha256>.<ext>`, embedded cover art |
+| `backups/`, `backup_work/` | `backup_service.dart` | Safety backups before a Replace (newest three), scratch space for export and restore |
+| `flutter_secure_storage` *(M5–M6)* | Dart | Stem API key, install ID, MyMemory contact email, extension `secret` settings |
+| `extensions/` *(M5)* | `kalao-extensions` | Installed packages, per-extension key-value storage and cookies |
+| `models/` *(M6)* | `kalao-stems` | User-installed ONNX models (verified by SHA-256), plus partial downloads |
+| `stems/<sha256>/` *(M6)* | `kalao-stems` | `vocals.flac`, `instrumental.flac`, `job.json` checkpoints |
+| `melody/<sha256>.bin` *(M7)* | `kalao-audio` | Pitch frames (u16 cents per 10 ms) |
+| `translations/` *(M6)* | Dart translation service | Translation cache, keyed by line-list hash + language pair |
+| `recordings/` *(M8)* | `kalao-audio` | User-started FLAC recordings |
 
 ## 3. Backup file (`.kalaobackup`)
 
-A ZIP written and read by `kalao-mobile::native_backup` in the `backupWrite` / `backupInspect` data jobs, with categories and layout decided by Dart `backup_service.dart` (Mornye's split):
+A ZIP written and read by `kalao-mobile::native_backup` in the `backupWrite` / `backupInspect` data jobs, with contents and restore decided by Dart `backup_service.dart`:
 
 ```
-kalao-2026-11-15.kalaobackup
-├── manifest.json        # format, appVersion, createdAt, categories, counts, sha256 per entry
-├── library.db           # SQLite online-backup snapshot
+kalao-2026-11-15-2105.kalaobackup
+├── manifest.json        # format, app, appVersion, createdAt, categories, counts, secrets: false, sha256 + bytes per entry
+├── library.db           # VACUUM INTO snapshot
 ├── history.db
 ├── app_state.db
-├── settings.json        # AppSettings minus secrets and device-specific values (latency, folder URIs)
+├── settings.json        # AppSettings without secrets
 ├── covers/              # cover art, by file name
+├── media/               # optional: imported audio, by sha256
 ├── extensions.json      # (M5) ids, versions, enabled, priority, repositories
 ├── extensions/*.kalaoext # (M5)
-├── media/               # optional: imported audio, by sha256
-└── stems/               # optional: stems, by sha256
+└── stems/               # (M6) optional: stems, by sha256
 ```
 
-- `format` is an integer bumped on breaking changes. A newer app migrates every older format; an older app refuses a newer one with a clear message.
-- Restore verifies every checksum first. **Merge:** songs matched by `song_key`, media by sha256, the newer `lyric_doc.version` wins, `human` layers are kept, favorites and plays are unioned (plays de-duplicated by `started_at` + `song_key`). **Replace:** a safety backup of the current data is written to app storage, then the databases are swapped.
+- `format` (now 1) is an integer bumped on breaking changes. A newer app migrates every older format; an older app refuses a newer one with a clear message. Each database also carries its schema version (`PRAGMA user_version`), migrated on the extracted copy.
+- Restore verifies every checksum first. **Merge:** songs matched by `song_key`, media by sha256, the backup's lyrics win when their `updated_at` is newer, this library's `human` layers are kept on unchanged lines, favorites and plays are unioned (plays de-duplicated by `started_at` + `song_key`). **Replace:** a safety backup of the current data is written to `backups/`, then every table except `backup_run` is replaced from the backup in one transaction per database, and the backup's settings are applied except this device's own keys.
 - Never included: secrets, translation cache, stem models, melody cache, logs.
 - Backups are not encrypted; the export screen says so. They contain no credentials.
 

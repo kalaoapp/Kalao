@@ -1,4 +1,4 @@
-// Files opened with or shared to Kalao (M4.12): a `.kalaobackup`, lyrics or
+// Files opened with or shared to Kalao: a `.kalaobackup`, lyrics or
 // audio. The activity records the intent's URIs; Dart takes them on start
 // and resume, as copies in the cache named like the originals.
 package com.brinsley.kalao

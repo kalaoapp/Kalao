@@ -4,30 +4,30 @@ Milestones are ordered by dependency; each ends with a tested build on `main` an
 
 ## M0 Foundations — implemented (2026-11-15)
 
-Status: ✅ built and tested locally (Rust: fmt, clippy, 60 tests; script tests); ⏳ Flutter analyze/test and the Android build run in CI on the first push (this machine has no Flutter or Android SDK).
+Status: ✅ built and tested; CI green.
 
 | # | Task | Status | Mornye source |
 | --- | --- | --- | --- |
 | M0.1 | Root tooling: `.editorconfig`, `.gitattributes`, `cliff.toml`, `renovate.json` (automerge off), `NOTICE` (Kalao + Mornye attribution), `CONTRIBUTING.md`, issue templates (bug, lyrics, feature), PR template, `FUNDING.yml` (`ko_fi: brinsley`) | ✅ | root files |
-| M0.2 | `rust_backend/` workspace: `Cargo.toml` (members `core`, `network`, `mobile`, `bindgen`), `rust-toolchain.toml`, workspace lints, `README.md` crate map, `Cargo.lock` seeded from Mornye's; licence `GPL-3.0-only` | ✅ (`providers` moves to M6.7; the `rustix` patch is added with the first crate that uses `rustix`, M1.5) | `rust_backend/*` |
+| M0.2 | `rust_backend/` workspace: `Cargo.toml` (members `core`, `network`, `mobile`, `bindgen`), `rust-toolchain.toml`, workspace lints, `README.md` crate map, `Cargo.lock` seeded from Mornye's; licence `GPL-3.0-only` | ✅ (`providers` comes with M6.7) | `rust_backend/*` |
 | M0.3 | `crates/network` and `crates/bindgen` copied and renamed | ✅ | `crates/network`, `crates/bindgen` |
-| M0.4 | `crates/core`: JSON helpers, text, XML depth check, matching, cancellation (domains `DataJob`, `ExtensionRequest`), lyrics (`lrc`, `matching`, `errors`, `json`, `payloads` incl. TTML) with Mornye's tests and fixture; built-in provider config, LRCLIB, provider schemas and Paxsenix credits removed | ✅ (`filename`, `tags`, `cover` move to M1.5; `progress` to M6.1) | `crates/core` |
+| M0.4 | `crates/core`: JSON helpers, text, XML depth check, matching, cancellation (domains `DataJob`, `ExtensionRequest`), lyrics (`lrc`, `matching`, `errors`, `json`, `payloads` incl. TTML) with Mornye's tests and fixture; built-in provider config, LRCLIB, provider schemas and Paxsenix credits removed | ✅ (`progress` comes with M6.1) | `crates/core` |
 | M0.5 | `crates/mobile`: UniFFI scaffolding; `invoke_application(method, args_json)` with a sorted method table (`initBackend`, `getBackendInfo`, `getLogs`, `clearLogs`, `setLoggingEnabled`); `run_native_data_job` (`hash_file`); cancellation registry; process-wide log buffer; `uniffi.toml` (`com.brinsley.kalao.backend`, `kalao_mobile`) | ✅ | `crates/mobile` |
 | M0.6 | `scripts/build_rust_backend.sh` (host + android; arm64, armv7, x86_64; Linux, macOS and Windows hosts), `check_rust_backend.sh`, `build_android.sh`, `check_backend_apk.py` (ELF, ABI set, 16 KB `PT_LOAD` alignment) + `test_check_backend_apk.py` | ✅ | `scripts/` |
 | M0.7 | Flutter project `android/` (`com.brinsley.kalao`, Flutter 3.47.8 via `.fvmrc`), `pubspec.yaml` (M0 subset), Mornye's `analysis_options.yaml` and `l10n.yaml` | ✅ | `pubspec.yaml`, `lib/` layout |
-| M0.8 | Kotlin host: `KalaoApplication`, `MainActivity` routing (`nativeBackendMethods` + `MainActivityRoutingTest`), `MainActivityCalls.kt` (screen awake, background work, crash report), `SelectedCoreBackend.kt` (CoreBackend over UniFFI/JNA, JSON argument conversion), `NativeDataJobs.kt`, `__json_file` spill + stale-file sweep, `BackgroundWorkService` + `ForegroundWorkLock` + `CoalescingWorkRefresh` + `ForegroundServiceStartPolicy`, `AppCrashReporter`; Gradle `buildRustBackend` before `preBuild`, JNA, ProGuard rules, ABI splits, signing from `key.properties`; adaptive launcher icon; HTTPS-only network config; Android backup disabled | ✅ (progress `EventChannel`s arrive with the first stream, M1.1; audio_service's cached engine with M1.4; `NativeCrashTrace` with M1.1) | `android/app/*` |
-| M0.9 | Dart backend layer: `services/backend/{backend_channel,method_channel_backend}.dart`, `platform_bridge.dart` (typed calls, isolate JSON decode, `__json_file` spill) | ✅ (`RustFfiBackend` with `desktop/`) | `lib/services/backend`, `platform_bridge.dart` |
-| M0.10 | App shell: `main.dart` (error handlers, settings, engine check), `app.dart` (go_router, `initialLocationForAppState`), `main_shell.dart` (Home, Library, Queue, Extensions placeholders + Settings), `setup_screen.dart` (language, theme) | ✅ (tutorial and What's New in M3.8; permission steps with the features that need them) | `app.dart`, `screens/main_shell.dart`, `setup_*` |
-| M0.11 | Theme layer: `app_tokens.dart`, `app_theme.dart` (Material 3; seed replaced by the brand palette in M1, BRANDING.md); widgets `settings_group`, `empty_state`, `app_crash_banner` | ✅ (Material You moves to M1.14: `dynamic_color` 2.x uses the separate `material_ui` package, so it comes with Mornye's `dynamic_color_wrapper.dart`; further design-system widgets are copied when a screen needs them) | `lib/theme`, `widgets/` |
+| M0.8 | Kotlin host: `KalaoApplication`, `MainActivity` routing (`nativeBackendMethods` + `MainActivityRoutingTest`), `MainActivityCalls.kt` (screen awake, background work, crash report), `SelectedCoreBackend.kt` (CoreBackend over UniFFI/JNA, JSON argument conversion), `NativeDataJobs.kt`, `__json_file` spill + stale-file sweep, `BackgroundWorkService` + `ForegroundWorkLock` + `CoalescingWorkRefresh` + `ForegroundServiceStartPolicy`, `AppCrashReporter`; Gradle `buildRustBackend` before `preBuild`, JNA, ProGuard rules, ABI splits, signing from `key.properties`; adaptive launcher icon; HTTPS-only network config; Android backup disabled | ✅ | `android/app/*` |
+| M0.9 | Dart backend layer: `services/backend/{backend_channel,method_channel_backend}.dart`, `platform_bridge.dart` (typed calls, isolate JSON decode, `__json_file` spill) | ✅ (`RustFfiBackend` comes with `desktop/`) | `lib/services/backend`, `platform_bridge.dart` |
+| M0.10 | App shell: `main.dart` (error handlers, settings, engine check), `app.dart` (go_router, `initialLocationForAppState`), `main_shell.dart` (Home, Library, Queue, Extensions placeholders + Settings), `setup_screen.dart` (language, theme) | ✅ (permission steps come with the features that need them) | `app.dart`, `screens/main_shell.dart`, `setup_*` |
+| M0.11 | Theme layer: `app_tokens.dart`, `app_theme.dart` (Material 3; seed replaced by the brand palette in M1, BRANDING.md); widgets `settings_group`, `empty_state`, `app_crash_banner` | ✅ (further design-system widgets are copied when a screen needs them) | `lib/theme`, `widgets/` |
 | M0.12 | l10n: `app_en.arb`, `app_zh.arb` (Simplified), `app_zh_Hant.arb`, `app_ja.arb`; `supported_locales.dart`; language picker | ✅ | `lib/l10n` |
-| M0.13 | Settings: `models/settings.dart` (hand-written JSON, tolerant of unknown keys), `settings_provider` (shared_preferences), `settings_tab` (appearance, diagnostics, about with engine info and licences) | ✅ (`json_serializable` is introduced when models need code generation; `settings_search_catalog`, `secure_storage_options` and `preference_blob_store` with their first users in M4–M6) | settings files |
-| M0.14 | Logging and crash capture: `AppLogger` + `LogBuffer` with Mornye's redaction rules (plus MyMemory's `de=`), Rust log buffer merged in `log_screen` (copy, clear), `app_crash_service` + `AppCrashReporter.kt` (Dart errors saved as context only; banner after a real crash) | ✅ (log export/share and the GitHub issue link in M4.8) | logging files |
+| M0.13 | Settings: `models/settings.dart` (hand-written JSON, tolerant of unknown keys), `settings_provider` (shared_preferences), `settings_tab` (appearance, diagnostics, about with engine info and licences) | ✅ (models are hand-written; `secure_storage_options` comes with its first user in M5) | settings files |
+| M0.14 | Logging and crash capture: `AppLogger` + `LogBuffer` with Mornye's redaction rules (plus MyMemory's `de=`), Rust log buffer merged in `log_screen` (copy, clear), `app_crash_service` + `AppCrashReporter.kt` (Dart errors saved as context only; banner after a real crash) | ✅ | logging files |
 | M0.15 | CI `ci.yml`: gitleaks; fail if `*.kalaoext`, `android/extensions/` or `poc-webapp/` is tracked; Dart format + analyze + test; `check_rust_backend.sh` + script tests; Android `assembleDebug` + `testDebugUnitTest`, release APK build + audit + `apksigner`/`zipalign` checks | ✅ | `.github/workflows/ci.yml` |
-| M0.16 | `release.yml`: tag `vX.Y.Z` (checked against pubspec) → arm64, arm32, x86_64 and universal APKs, V1–V4 signing and verification, payload audit, symbols artifact, GitHub Release with `SHA256SUMS.txt` and `git-cliff` changelog | ✅ (needs the `KEYSTORE_BASE64`, `KEY_ALIAS`, `KEYSTORE_PASSWORD` secrets; first run at M3.9) | `.github/workflows/release.yml` |
+| M0.16 | `release.yml`: tag `vX.Y.Z` (checked against pubspec) → arm64, arm32, x86_64 and universal APKs, V1–V4 signing and verification, payload audit, symbols artifact, GitHub Release with `SHA256SUMS.txt` and `git-cliff` changelog | ✅ (signs with the `KEYSTORE_BASE64`, `KEY_ALIAS`, `KEYSTORE_PASSWORD` secrets) | `.github/workflows/release.yml` |
 
 Tests added: Rust `backend` (method table sorted and dispatched, init, errors), `data_jobs`, `logging`; Kotlin `MainActivityRoutingTest`; Dart `platform_bridge_test` (decode, spill, errors), `settings_test`, `logger_test` (redaction, ring), `app_test` (setup → shell, engine info, logs, crash banner, locale).
 
-**Exit:** `getBackendInfo` round-trips Dart → Kotlin → Rust on an emulator and a device; logs from Rust appear in the log screen; CI is green; `release.yml` produces signed APKs once the signing secrets exist.
+**Exit:** `getBackendInfo` round-trips Dart → Kotlin → Rust on an emulator and a device; logs from Rust appear in the log screen; CI is green; `release.yml` produces signed APKs.
 
 ## M1 Local player — implemented (2026-11-15)
 
@@ -36,14 +36,14 @@ Status: ✅ built and tested locally (Rust: fmt, clippy, all workspace tests inc
 | # | Task | Features | Status | Source / § |
 | --- | --- | --- | --- | --- |
 | M1.1 | `crates/audio` (`kalao-audio`): Symphonia decoders, rubato (`FastFixedIn`, cubic), `ringbuf` SPSC rings (≈0.5 s), one decoder thread per source, mixer with ramped gains (10 ms) and an equal-power original/instrumental crossfade (150 ms), soft limiter, seek with flush (worker + consumer locks), clock with output-latency correction from cpal timestamps, completion; cpal output thread with rebuild after device errors; `player_position_stream` (`MainActivityProgressStreams.kt`, polls `playerState`); `NativeCrashTrace` + startup capture of native tombstones (`AppCrashReporter.captureNativeExit`) | 1.1, 1.2, 1.3 | ✅ (`PerformanceMode::LowLatency` is not exposed by cpal 0.16: M7) | IMPLEMENTATION §2 |
-| M1.2 | Player methods `playerLoad`, `playerPlay`, `playerPause`, `playerStop`, `playerSeek`, `playerSetVolume`, `playerSetStemGains`, `playerSwitchTrack`, `playerState` | 1.1–1.3 | ✅ (`playerSetKey/Tempo/Loop` with M3.1/M3.2; `playerPrefetch` with the queue, M3.4) | §1 |
-| M1.3 | `KaraokeDeck` (engine commands + interpolated position) and `PlayerController` (load, play/pause/seek, switch, vocal blend, history rows, session restore for "Continue singing") | 1.1 | ✅ (Mornye's multi-deck `music_player_service.dart` is not copied: Kalao has one deck; see §2) | `karaoke_deck.dart`, `player_provider.dart` |
+| M1.2 | Player methods `playerLoad`, `playerPlay`, `playerPause`, `playerStop`, `playerSeek`, `playerSetVolume`, `playerSetStemGains`, `playerSwitchTrack`, `playerState` | 1.1–1.3 | ✅ (`playerPrefetch` is not built) | §1 |
+| M1.3 | `KaraokeDeck` (engine commands + interpolated position) and `PlayerController` (load, play/pause/seek, switch, vocal blend, history rows, session restore for "Continue singing") | 1.1 | ✅ (Mornye's multi-deck `music_player_service.dart` is not copied: Kalao has one deck) | `karaoke_deck.dart`, `player_provider.dart` |
 | M1.4 | Media session: `audio_service` 0.18.19 from pub.dev with `MainActivity : AudioServiceFragmentActivity` (cached engine), `KalaoAudioHandler` (notification, lock screen, artwork, headset buttons), `audio_session` focus (duck, pause, resume after transient loss) and becoming-noisy pause | 1.5 | ✅ (fork not needed, LIBRARIES §2) | `playback_handler.dart` |
 | M1.5 | Import: `file_picker` → staging copy → `hash_file` → `media/<sha256>.<ext>` (once per hash) → `probeAudio` (Symphonia tags, cover, duration, codec) → `pairImportFiles` (`core::pairing`: name similarity, instrumental markers incl. 伴奏/カラオケ/off vocal, ±2 s) → pairing sheet (titles, instrumental, lyrics file, include) with duplicate detection by hash | 1.7 | ✅ (Mornye's `core::tags`/`cover`/`filename` and the `rustix` patch are not needed: see §3) | §3 |
 | M1.6 | Symphonia codecs (MP3, AAC/M4A, ALAC, FLAC, Vorbis, WAV); FFmpegKit (`ffmpeg_kit_flutter_new_audio` 2.5.7) converts the rest to FLAC once at import | 1.6 | ✅ | `main.dart` `_convertWithFfmpeg` |
-| M1.7 | `library_schema.dart` (`song`, `media_file`, `lyric_doc`, `lyric_annotation`, `song_search`; history `play`; app state `playback_session`, `recent_access`), `library_database.dart`, `history_database.dart`, `library_provider.dart` | 6.1 | ✅ (`favorite`, `melody`, `stem_job`, `backup_run`, `queue_item` arrive with their features) | `library_*` |
+| M1.7 | `library_schema.dart` (`song`, `media_file`, `lyric_doc`, `lyric_annotation`, `song_search`; history `play`; app state `playback_session`, `recent_access`), `library_database.dart`, `history_database.dart`, `library_provider.dart` | 6.1 | ✅ (`melody` and `stem_job` arrive with their features) | `library_*` |
 | M1.8 | Home: search, Continue singing, Recently played, Recently added; Library: list/grid, sort (added, title, artist), selection mode with delete (removes unused media files); mini player | 6.1 | ✅ | `home_tab.dart`, `library_screen.dart` |
-| M1.9 | Search keys via `rebuildSearchKeys` (`core::search_keys`): normalised title/artist, toneless pinyin and initials, kana romaji; prefix-ranked substring search | 6.2 (local) | ✅ (romaji for kanji needs the Japanese analyser, M3.6) | `library_search.dart`, §3 |
+| M1.9 | Search keys via `rebuildSearchKeys` (`core::search_keys`): normalised title/artist, toneless pinyin and initials, kana romaji; prefix-ranked substring search | 6.2 (local) | ✅ | `library_search.dart`, §3 |
 | M1.10 | Lyrics import (paste, `.txt`/`.lrc` file, embedded tags, lyrics file paired at import); `parseLyrics` (`core::lyrics::doc`: LRC with several time tags and `[offset:]`, plain text) | 2.1 | ✅ | `lyrics_import_sheet.dart` |
 | M1.11 | Sections and normalisation (`core::sections`, POC marker lists for en/zh/ja/ko/es/fr/de/pt and its bracket forms) | 2.2 | ✅ | §4 |
 | M1.12 | `core::annotate::pinyin` with `pinyin_pro` (context polyphones, tone marks, er-hua merge, per-character UTF-16 segments); POC diacritic, 而, bracket and whitespace cases pass | 2.3 | ✅ | §4 |
@@ -61,10 +61,10 @@ Status: ✅ built and tested locally (Rust: fmt, clippy, all workspace tests inc
 
 | # | Task | Features | Status | Source / § |
 | --- | --- | --- | --- | --- |
-| M2.1 | Timed model: line start/end, word timing (`LyricWord` with its range in the line text), voices (`v1`/`v2`, backing `bg`), line translation, `timed` flag, per-song offset; document JSON version 2; active line from the interpolated engine clock (`KaraokeDeck.position`, song time × tempo), swept characters per frame (`utils/lyrics_timeline.dart`) | 2.6 | ✅ (Mornye's `lyrics_timeline.dart`/`synced_lyrics_scroll.dart` are not copied: Kalao-sized versions, as in M1; a Rust `core::sync` mirror is added when a Rust consumer needs it, M7/M8) | `models/lyrics.dart`, `utils/lyrics_timeline.dart` |
+| M2.1 | Timed model: line start/end, word timing (`LyricWord` with its range in the line text), voices (`v1`/`v2`, backing `bg`), line translation, `timed` flag, per-song offset; document JSON version 2; active line from the interpolated engine clock (`KaraokeDeck.position`, song time × tempo), swept characters per frame (`utils/lyrics_timeline.dart`) | 2.6 | ✅ (Kalao-sized `lyrics_timeline.dart`, not Mornye's; a Rust mirror is added when a Rust consumer needs it, M7/M8) | `models/lyrics.dart`, `utils/lyrics_timeline.dart` |
 | M2.2 | `core::lyrics::doc`: LRC and enhanced LRC (word tags in both common styles, line ends, `v1:`/`v2:` voices, `[bg:…]` rows) import; TTML import through Mornye's Apple payload reader (word timing, duet sides, backing vocals, head translations); `exportLyrics(doc, format)` to LRC (line starts) and enhanced LRC (round-trips line and word timing, ends, sections, breaks, voices); `.ttml` in the import pickers and pairing | 2.8 | ✅ | §4 |
 | M2.3 | Sweep over the active line: word by word with word timing, linear over the line duration otherwise (capped at 10 s); `SweepText` clips a highlight layer to the sung characters and repaints without rebuilding; works under ruby (pinyin) too; setting "Karaoke sweep" | 2.13 | ✅ (Mornye's `player_lyrics_word_sweep.dart` is not copied) | `ruby_lyric_line.dart` |
-| M2.4 | Tap-to-time sync editor (`/player/sync`): line and word modes (words = one per CJK character, else per word), hold to stamp the end, 50/75/100% speed while timing (`playerSetTempo`), tap-latency setting (default 40 ms; output latency is already in the engine clock), nudge ±10/±50 ms, replay line, undo, save as a new `lyric_doc` version (`userEdited`, layers kept), export LRC/eLRC | 2.9 | ✅ (`playerSetTempo` is a resampler speed change, so the pitch drops with the speed; M3.1's Signalsmith Stretch keeps the pitch behind the same method) | `lyrics_sync_editor_controller.dart`, `lyrics_sync_screen.dart`, §4 |
+| M2.4 | Tap-to-time sync editor (`/player/sync`): line and word modes (words = one per CJK character, else per word), hold to stamp the end, 50/75/100% speed while timing (`playerSetTempo`), tap-latency setting (default 40 ms; output latency is already in the engine clock), nudge ±10/±50 ms, replay line, undo, save as a new `lyric_doc` version (`userEdited`, layers kept), export LRC/eLRC | 2.9 | ✅ (speeds keep the pitch since M3.1) | `lyrics_sync_editor_controller.dart`, `lyrics_sync_screen.dart`, §4 |
 | M2.5 | Offset control in the lyrics options sheet (±5 s in 50 ms steps, reset), stored in the current lyric version; LRC `[offset:]` is read and written | 2.6 | ✅ | `lyrics_options_sheet.dart` |
 | M2.6 | Timing accuracy (±30 ms): engine test on rendered click tracks (through the resampler, at tempo 1 and 0.5); Dart test of the deck's interpolation against a simulated 30 Hz engine; on-device `integration_test/lyrics_timing_test.dart` (click track + LRC on the real engine) | 2.6 | ✅ tests written and the host ones pass; ⏳ the device test has not been run | §17 |
 
@@ -78,15 +78,15 @@ Status: ✅ built and tested locally (Rust: fmt, clippy, all workspace tests inc
 
 | # | Task | Features | Status | Source / § |
 | --- | --- | --- | --- | --- |
-| M3.1 | Signalsmith Stretch (`signalsmith-stretch` 0.1.3) on the mix bus: `playerSetKey` ±6 semitones, `playerSetTempo` 50–150% at the same pitch, bypassed when both are neutral; the reported position allows for the stretcher's delay; key and speed steppers in the lyrics options sheet | 1.4 | ✅ (replaces M2's resampler speed change; the build needs libclang and a C++ compiler, see DEV_SETUP) | §2 |
-| M3.2 | Learn mode: loop the current line (`playerSetLoop`), A–B repeat (long-press two lines), slow-down presets 50/75/90/100%, line stepping for timed lyrics, translation under a line when the lyrics carry one | 3.1 | ✅ (the loop seam is a short gap while the decoders refill, not the planned 20 ms crossfade) | §5 |
+| M3.1 | Signalsmith Stretch (`signalsmith-stretch` 0.1.3) on the mix bus: `playerSetKey` ±6 semitones, `playerSetTempo` 50–150% at the same pitch, bypassed when both are neutral; the reported position allows for the stretcher's delay; key and speed steppers in the lyrics options sheet | 1.4 | ✅ (the build needs libclang and a C++ compiler, see DEV_SETUP) | §2 |
+| M3.2 | Learn mode: loop the current line (`playerSetLoop`), A–B repeat (long-press two lines), slow-down presets 50/75/90/100%, line stepping for timed lyrics, translation under a line when the lyrics carry one | 3.1 | ✅ (long-press a line to repeat it, a second line for A–B; the loop seam is a short gap while the decoders refill, not the planned 20 ms crossfade) | §5 |
 | M3.3 | OG Karaoke mode: large two-line layout with the sweep, countdown dots before a line that follows a gap ≥ 4 s (intro included), screen kept on while playing, next singer from the queue after the last line | 3.2 | ✅ (Mornye's `lyric_gap_indicator.dart` and `lyrics_screen_awake.dart` are not copied: Kalao-sized versions) | `karaoke_lyrics_view.dart` |
 | M3.4 | Queue: `queue_item` table (app state v2), add (Home long-press, Library selection, Now playing), reorder, remove, clear, singer name and mode per entry; the next entry starts when a song ends | 6.5 | ✅ | `library_queue_store.dart`, `queue_provider.dart`, `queue_tab.dart` |
 | M3.5 | Keyboard and gamepad shortcuts (Space/A, ←/→ and L1/R1 5 s, ↑/↓ line, S/X switch track, L/Y loop, ? help) and the help sheet | 9.3 | ✅ | `shortcuts_sheet.dart` |
 | M3.6 | `core::annotate::japanese` (lindera 6.2 with embedded IPADIC): furigana over kanji runs, romaji per word with spoken particles, romaji search keys for kanji titles; furigana above and romaji below the line, each with a toggle | 2.4 | ✅ (the embedded dictionary adds about 50 MB to `libkalao_mobile.so` per ABI) | §4 |
 | M3.7 | `core::annotate::chinese_variant` (`ferrous-opencc` 0.4: s2t, s2tw, s2hk, t2s); the Chinese-characters setting converts lyrics for display through `convertChinese` | 2.5 | ✅ (the variant is applied when lyrics are shown, not stored as a layer, so changing the setting needs no regeneration) | §4 |
 | M3.8 | Tutorial (after setup, four pages) and What's New (once per version after an update) screens with Kalao content | — | ✅ | `tutorial_screen.dart`, `whats_new_screen.dart` |
-| M3.9 | **First GitHub Release** (`v0.1.0`) via `release.yml` | — | ⏳ `v0.1.0-alpha` published, but it crashed on launch: `libkalao_mobile.so` left the C++ ABI runtime (`libc++abi`) unlinked, so `dlopen` failed. Fixed in the build script; needs a new tag | `release.yml` |
+| M3.9 | **First GitHub Release** (`v0.1.0`) via `release.yml` | — | ⏳ needs a new tag: `v0.1.0-alpha` crashed on launch (`libc++abi` was not linked); the build now links it and fails on any unresolved symbol | `release.yml` |
 
 Tests added: Rust `kalao-audio` (tempo keeps pitch, key keeps speed, loop wraps, click timing through the stretcher), `core::annotate::{japanese, chinese_variant}`, `mobile` (layers, `convertChinese`); Dart `modes_test` (karaoke frames, queue store, modes/key/tempo/loop/stepping, queue advance, Japanese layers and Chinese variant, Karaoke screen, queue tab, What's New and help).
 
@@ -103,13 +103,13 @@ Status: ✅ built and tested locally (Rust: fmt, clippy, all workspace tests inc
 | M4.3 | Backup export: `VACUUM INTO` snapshots, settings without device keys, covers, optional media; save to a SAF document; `native_backup` archive in the `backupWrite` data job | 7.1, 7.2 | ✅ | `backup_service.dart`, `native_backup.rs`, §12 |
 | M4.4 | Restore: `backupInspect` (checked extraction) + preview, Merge and Replace in Dart over an attached copy, safety backup before Replace | 7.3 | ✅ (no database swap or `backupRestore` job: both modes run in one transaction per database) | `backup_screen.dart`, §12 |
 | M4.5 | Scheduled backup (due-check on start/resume, keep last N, `backup_run` log, hourly retry after a failure) | 7.4 | ✅ | `backup_provider.dart` |
-| M4.6 | Secrets excluded from backups | 7.5 | ✅ (backups never read secure storage; the prompt for restored extensions' secrets moves to M5.3 with extensions) | §12 |
+| M4.6 | Secrets excluded from backups | 7.5 | ✅ (backups never read secure storage; restored extensions ask for secrets in M5.3) | §12 |
 | M4.7 | POC import: export script in the private POC (`poc-webapp/scripts/export-kalao.ts`) + `PocImportService` | 7.6 | ✅ (Dart, not a data job; attaches to already-imported songs by title and artist, as the POC's audio is not migrated) | §12 |
 | M4.8 | Diagnostics: log export through the share sheet, crash banner with a pre-filled GitHub issue link | 9.5 | ✅ | `log_screen.dart`, `app_crash_banner.dart` |
 | M4.9 | About: version, privacy statement, open-source licences (incl. the GPL-3.0 and Mornye's LGPL-3.0 texts) | 9.6 | ✅ | `privacy_screen.dart`, `assets/licenses` |
 | M4.10 | Support Kalao row → `https://ko-fi.com/brinsley` | 9.7 | ✅ | `settings_tab.dart` |
 | M4.11 | Update check + user-started APK download, SHA-256 verify, installer hand-off | 9.8 | ✅ (needs a published release to try end to end) | `update_service.dart`, `update_dialog.dart`, §14 |
-| M4.12 | Opening and sharing `.kalaobackup`, `.lrc`/`.ttml`/`.txt` and audio files | 7.3, 1.7 | ✅ (native `SharedFiles.kt` instead of `receive_sharing_intent`) | `shared_files.dart` |
+| M4.12 | Opening and sharing `.kalaobackup`, `.lrc`/`.ttml`/`.txt` and audio files | 7.3, 1.7 | ✅ (native `SharedFiles.kt` instead of `receive_sharing_intent`; `.kalaoext` joins in M5) | `shared_files.dart` |
 
 Tests added: Rust `native_backup` (round trip, newer format, damaged/unlisted/missing/unsafe entries, cancellation); Dart `stats_test` (favorites, library v1→v2, stats buckets, stats screen), `backup_test` (device keys, Replace to another device, Merge with human layers and play de-duplication, newer lyrics win, backup without media, newer schema refused), `backup_controller_test` (save to document, scheduled due check and pruning, failure retry, Backup screen save and restore), `shared_files_test`, `update_test` (versions, ABI asset, check, verified download, daily check, install), `poc_import_test`.
 
@@ -199,13 +199,9 @@ Tests added: Rust `native_backup` (round trip, newer format, damaged/unlisted/mi
 | — | — | 5.5 | M5.5 | 9.8 | M4.11 |
 
 **Distribution:** GitHub Releases only, from M3 (v0.1.0). Each release: per-ABI and universal signed APKs, SHA-256 checksums, changelog. No store builds.
-
-
 ---
 
-
 # TL;DR version that's more readable - (just a summary of above)
-
 
 ## **M0 — Foundations**
 
@@ -280,13 +276,7 @@ An important addition is the timing editor: users can create or correct synchron
 
 ## **M3 — Modes and first release**
 
-
-
-Features implemented
-
-Release pending
-
-
+Implemented; the first release is pending.
 
 **In simple terms: Turn the player into a complete karaoke and singing-practice experience.**
 
@@ -310,11 +300,9 @@ What it achieves:
 1. A practice environment for learning songs, adjusting pitch and speed, and repeating difficult sections.
 2. A proper karaoke environment for singing along with large, synchronised lyrics.
 
-The first pre-release, `v0.1.0-alpha`, crashed on launch because the native library was missing part of the C++ runtime. The build is fixed and now fails at link time on any unresolved native symbol; the release needs a new tag.
-
 ## **M4 — Library, backup and about**
 
-Implemented (2026-11-18); the on-device checks are still to do.
+Implemented; the on-device checks are still to do.
 
 **In simple terms: Make the app's music library safer, easier to manage and maintain.**
 

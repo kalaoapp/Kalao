@@ -45,7 +45,7 @@ Future<int> pickAndImport(BuildContext context, WidgetRef ref) async {
   return count ?? 0;
 }
 
-/// Pairing sheet (M1.5): one card per proposed song with its instrumental and
+/// Pairing sheet: one card per proposed song with its instrumental and
 /// lyrics file; the user can change titles, pairings and what to import.
 class ImportSheet extends ConsumerStatefulWidget {
   const ImportSheet({super.key, required this.files});

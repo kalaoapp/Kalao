@@ -137,7 +137,7 @@ class _QueueEntrySheetState extends ConsumerState<_QueueEntrySheet> {
   }
 }
 
-/// The singing queue (M3.4): reorder by dragging, tap to sing now, edit the
+/// The singing queue: reorder by dragging, tap to sing now, edit the
 /// singer and mode, remove. The first entry starts when the current song
 /// ends.
 class QueueTab extends ConsumerWidget {

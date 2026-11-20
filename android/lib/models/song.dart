@@ -32,7 +32,7 @@ class Song {
   final List<MediaFile> media;
   final bool hasLyrics;
 
-  /// In `favorite` (M4.1).
+  /// In `favorite`.
   final bool favorite;
 
   /// `song.song_key`: matches the song across backups and devices.

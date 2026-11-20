@@ -9,7 +9,7 @@ import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/player_provider.dart';
 import 'package:kalao/theme/app_tokens.dart';
 
-/// Lyrics import (M1.10, M2.2): paste text or pick a `.txt`, `.lrc` (plain or
+/// Lyrics import: paste text or pick a `.txt`, `.lrc` (plain or
 /// enhanced) or `.ttml` file. Chinese lines get pinyin automatically.
 Future<void> showLyricsImportSheet(
   BuildContext context,

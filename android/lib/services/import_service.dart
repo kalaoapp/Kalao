@@ -25,10 +25,10 @@ String _extension(String name) {
   return ext.isEmpty ? '' : ext.substring(1).toLowerCase();
 }
 
-/// A picked file copied into staging, with what probing found.
 /// A file to import, from the picker or shared to Kalao.
 typedef ImportSource = ({String name, Stream<List<int>> Function() read});
 
+/// A picked file copied into staging, with what probing found.
 class StagedFile {
   StagedFile({required this.name, required this.path});
 

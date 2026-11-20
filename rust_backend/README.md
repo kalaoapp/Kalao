@@ -8,19 +8,19 @@ The toolchain is pinned in `rust-toolchain.toml` (Rust 1.99.1 with rustfmt and c
 
 Dependencies point downward: `core`, `network` and `audio` depend on no other workspace crate.
 
-| Crate | Package | Depends on | Status |
+| Crate | Package | Depends on | Contents |
 | --- | --- | --- | --- |
-| `crates/core` | `kalao-core` | none | M0: JSON helpers, text, XML depth check, matching, cancellation, lyrics (LRC, enhanced LRC, TTML payloads, matching). M1: lyric documents (`lyrics::doc`), section markers (`sections`), pinyin ruby (`annotate::pinyin`, via `pinyin_pro`), search keys, import pairing |
-| `crates/audio` | `kalao-audio` | none | M1: playback engine (Symphonia → rubato → ring buffers → mixer → cpal/AAudio), `probe_file` |
-| `crates/network` | `kalao-network` | none | M0: copied unchanged from Mornye (HTTP client, cookies, DNS, TLS roots, request policy) |
-| `crates/mobile` | `kalao-mobile` | core, audio | M0: UniFFI API: `invoke_application` method table, `run_native_data_job`, cancellation registry, log buffer. M1: player, import and lyrics methods |
-| `crates/bindgen` | `kalao-bindgen` | `uniffi` CLI | M0: generates the Kotlin bindings |
+| `crates/core` | `kalao-core` | none | JSON helpers, text, XML depth check, matching, cancellation, lyrics (`lrc`, TTML payloads, matching, and `doc`: LRC/eLRC/TTML/plain import, LRC/eLRC export), section markers, annotation (pinyin, furigana and romaji, Chinese variants), search keys, import pairing |
+| `crates/audio` | `kalao-audio` | none | Playback engine (Symphonia → rubato → ring buffers → mixer → Signalsmith Stretch → cpal/AAudio), loops, clock, `probe_file` |
+| `crates/network` | `kalao-network` | none | Copied unchanged from Mornye (HTTP client, cookies, DNS, TLS roots, request policy); no crate uses it until extensions (M5) |
+| `crates/mobile` | `kalao-mobile` | core, audio | UniFFI API: `invoke_application` method table, `run_native_data_job`, cancellation registry, log buffer, backup archive codec |
+| `crates/bindgen` | `kalao-bindgen` | `uniffi` CLI | Generates the Kotlin bindings |
 
-Later milestones add `stems`, `providers`, `extensions`, `party`, `desktop` and `ext-cli` (see `android/docs/ARCHITECTURE.md`).
+Later milestones add `extensions`, `providers`, `stems`, `party`, `desktop` and `ext-cli` (see `android/docs/ARCHITECTURE.md`).
 
 ## Method table
 
-`kalao-mobile/src/backend.rs` holds every method name Kotlin forwards (`METHODS`, kept sorted; a test checks each name is dispatched). Arguments arrive as a JSON object; replies are JSON text. Methods: lifecycle (`initBackend`, `getBackendInfo`, `getLogs`, `clearLogs`, `setLoggingEnabled`), player (`playerLoad` … `playerState`), import (`probeAudio`, `pairImportFiles`), lyrics (`parseLyrics`, `detectSections`, `annotateLyrics`). Native data jobs (`run_native_data_job`): `hash_file`, `rebuildSearchKeys`.
+`kalao-mobile/src/backend.rs` holds every method name Kotlin forwards (`METHODS`, kept sorted; a test checks each name is dispatched). Arguments arrive as a JSON object; replies are JSON text. Methods: lifecycle (`initBackend`, `getBackendInfo`, `getLogs`, `clearLogs`, `setLoggingEnabled`), player (`playerLoad` … `playerState`, including key, tempo and loops), import (`probeAudio`, `pairImportFiles`), lyrics (`parseLyrics`, `exportLyrics`, `detectSections`, `annotateLyrics`, `convertChinese`). Native data jobs (`run_native_data_job`): `hash_file`, `rebuildSearchKeys`, `backupWrite`, `backupInspect`.
 
 ## Building
 
@@ -30,4 +30,4 @@ Later milestones add `stems`, `providers`, `extensions`, `party`, `desktop` and 
 | `bash scripts/build_rust_backend.sh android` | Host step, then `libkalao_mobile.so` in `target/android/jniLibs/<abi>/` (16 KB page aligned) |
 | `bash scripts/check_rust_backend.sh` | `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` |
 
-Android Gradle runs the android build in its `buildRustBackend` task before `preBuild`, so a normal Flutter build is enough. `KALAO_RUST_ANDROID_ABIS` selects ABIs (default `arm64-v8a,armeabi-v7a,x86_64`); `ANDROID_NDK_HOME` must point to NDK 30.0.16248370.
+Android Gradle runs the android build in its `buildRustBackend` task before `preBuild`, so a normal Flutter build is enough. `KALAO_RUST_ANDROID_ABIS` selects ABIs (default `arm64-v8a,armeabi-v7a,x86_64`); `ANDROID_NDK_HOME` must point to NDK 30.0.16248370. On Windows, `source scripts/rust_env.sh` before running cargo by hand (it points bindgen at the NDK's libclang).

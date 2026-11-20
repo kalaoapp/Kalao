@@ -15,7 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'support/fake_backend.dart';
 import 'support/test_services.dart';
 
-/// M4.12: files opened with or shared to Kalao.
+/// Files opened with or shared to Kalao.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 

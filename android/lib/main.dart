@@ -84,7 +84,7 @@ Future<LibraryServices> openLibraryServices() async {
   );
 }
 
-/// One-off import conversion to FLAC for codecs Symphonia lacks (M1.6).
+/// One-off import conversion to FLAC for codecs Symphonia lacks.
 Future<bool> _convertWithFfmpeg(String input, String output) async {
   final session = await FFmpegKit.executeWithArguments([
     '-y', '-i', input, '-vn', '-map_metadata', '0', '-c:a', 'flac', output, //

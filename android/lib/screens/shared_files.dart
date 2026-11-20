@@ -19,7 +19,7 @@ import 'package:path/path.dart' as p;
 
 const _log = AppLogger('SharedFiles');
 
-/// What to do with files opened with or shared to Kalao (M4.12).
+/// What to do with files opened with or shared to Kalao.
 enum SharedFilesAction { restore, importAudio, importLyrics, unsupported }
 
 SharedFilesAction sharedFilesAction(List<String> names) {

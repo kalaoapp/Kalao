@@ -1,4 +1,4 @@
-// In-app updates (M4.11): Dart downloads and verifies the APK; Kotlin only
+// In-app updates: Dart downloads and verifies the APK; Kotlin only
 // reports the device ABIs and hands the file to the system installer, which
 // checks that its signature matches the installed app.
 package com.brinsley.kalao

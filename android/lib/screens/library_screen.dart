@@ -12,7 +12,7 @@ import 'package:kalao/theme/app_tokens.dart';
 import 'package:kalao/widgets/empty_state.dart';
 import 'package:kalao/widgets/song_widgets.dart';
 
-/// Library (M1.8): grid or list, sort, and a selection mode (long press) for
+/// Library: grid or list, sort, and a selection mode (long press) for
 /// deleting songs.
 class LibraryScreen extends ConsumerStatefulWidget {
   const LibraryScreen({super.key});

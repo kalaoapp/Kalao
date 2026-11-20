@@ -25,7 +25,7 @@ Future<void> openSong(
   if (context.mounted) await context.push('/player');
 }
 
-/// Home (M1.8): search, Continue singing, Recently played, Recently added.
+/// Home: search, Continue singing, Recently played, Recently added.
 class HomeTab extends ConsumerStatefulWidget {
   const HomeTab({super.key});
 

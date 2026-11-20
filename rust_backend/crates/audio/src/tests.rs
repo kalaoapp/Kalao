@@ -325,7 +325,7 @@ fn zero_crossings(out: &[f32]) -> usize {
         .count()
 }
 
-/// M2.6: the position the engine reports is the song time of the audio it
+/// The position the engine reports is the song time of the audio it
 /// renders, so a lyric line timed at a click lights up within ±30 ms of the
 /// click: through the resampler, and through the stretcher at a slowed
 /// tempo (whose delay the position allows for).

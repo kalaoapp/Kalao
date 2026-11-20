@@ -25,7 +25,7 @@ final playStatsProvider = FutureProvider<StatsView>((ref) async {
   return (stats: stats, songs: {for (final song in songs) song.id: song});
 });
 
-/// Stats (M4.2, FEATURES 6.7): local only, from the `play` history.
+/// Stats (FEATURES 6.7): local only, from the `play` history.
 class StatsScreen extends ConsumerWidget {
   const StatsScreen({super.key});
 

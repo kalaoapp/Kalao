@@ -2,9 +2,11 @@
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/M5S22AP7IF)
 
-**Kalao** (pronounced *ka-la-oh*), application ID `com.brinsley.kalao`, is the ground-up rebuild of the `poc-webapp` karaoke POC as a native app. It is built with **Flutter** (UI) and **Rust** (engine, data, networking), using the same template as Mornye's `rust_backend/`: one Cargo workspace of focused crates, a UniFFI mobile crate for Android, and a C ABI desktop crate.
+**Kalao** (pronounced *ka-la-oh*), application ID `com.brinsley.kalao`, is the ground-up rebuild of the `poc-webapp` karaoke POC as a native app. It is built with **Flutter** (UI) and **Rust** (engine, lyrics, heavy data jobs), using the same template as Mornye's `rust_backend/`: one Cargo workspace of focused crates and a UniFFI mobile crate for Android (a C ABI desktop crate follows with `desktop/`).
 
 This folder (`android/`) is the Android app. Desktop and web will live in their own top-level folders (`desktop/`, `web/`), separate from `poc-webapp/`. The shared Rust workspace lives at the top level in `rust_backend/`.
+
+These documents also describe planned work (extensions, stems, scoring, parties). ROADMAP.md says what each milestone has built; ARCHITECTURE.md and DATA_MODEL.md mark planned parts with their milestone.
 
 | Doc | Contents |
 | --- | --- |

@@ -91,7 +91,7 @@ class _LogScreenState extends State<LogScreen> {
     messenger.showSnackBar(SnackBar(content: Text(l10n.logsCopied)));
   }
 
-  /// Writes the log to a text file and opens the share sheet (M4.8).
+  /// Writes the log to a text file and opens the share sheet.
   Future<void> _share() async {
     final stamp = DateTime.now()
         .toIso8601String()

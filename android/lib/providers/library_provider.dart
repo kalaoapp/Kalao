@@ -46,7 +46,7 @@ class LibraryRevision extends Notifier<int> {
   void bump() => state++;
 }
 
-/// The Library list; [LibraryView.favoritesOnly] shows favorites (M4.1).
+/// The Library list; [LibraryView.favoritesOnly] shows favorites.
 typedef LibraryView = ({SongSort sort, bool favoritesOnly});
 
 final librarySongsProvider = FutureProvider.family<List<Song>, LibraryView>((

@@ -168,7 +168,7 @@ class LibraryDatabase {
     return _withMedia(rows);
   }
 
-  // Favorites (M4.1, Mornye's loved-tracks pattern on `song.id`)
+  // Favorites (Mornye's loved-tracks pattern on `song.id`)
 
   Future<void> setFavorite(int songId, bool favorite, {DateTime? now}) =>
       favorite

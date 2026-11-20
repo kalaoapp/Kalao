@@ -10,7 +10,7 @@ import 'package:kalao/services/poc_import_service.dart';
 import 'support/fake_backend.dart';
 import 'support/test_services.dart';
 
-/// M4.7: a `kalao-poc.json` export attaches to songs already imported.
+/// A `kalao-poc.json` export attaches to songs already imported.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late FakeBackend backend;

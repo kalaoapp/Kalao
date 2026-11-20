@@ -1,4 +1,4 @@
-// Storage Access Framework calls for backups (M4.3–M4.5): save a backup
+// Storage Access Framework calls for backups: save a backup
 // where the user chooses, and write to / list / prune a backup folder the
 // user granted once. Kalao never asks for broad storage permissions.
 package com.brinsley.kalao

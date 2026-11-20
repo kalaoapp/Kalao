@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/theme/app_tokens.dart';
 
-/// The privacy statement (M4.9, FEATURES 9.6): what stays on the device and
+/// The privacy statement (FEATURES 9.6): what stays on the device and
 /// the few network requests the app makes, and only when.
 class PrivacyScreen extends StatelessWidget {
   const PrivacyScreen({super.key});

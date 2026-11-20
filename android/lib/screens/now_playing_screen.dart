@@ -726,7 +726,7 @@ class _PlayerControlsState extends ConsumerState<PlayerControls> {
 /// Whether a custom font file still exists (used by settings).
 bool customFontExists(String? path) => path != null && File(path).existsSync();
 
-/// Heart toggle for the current song (M4.1).
+/// Heart toggle for the current song.
 class _FavoriteButton extends ConsumerWidget {
   const _FavoriteButton({required this.songId});
 

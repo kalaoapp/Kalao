@@ -17,7 +17,7 @@ import 'package:kalao/theme/app_tokens.dart';
 import 'package:kalao/widgets/settings_group.dart';
 import 'package:kalao/widgets/stepper_tile.dart';
 
-/// Backup and restore (M4.3–M4.5, FEATURES 7.1–7.4).
+/// Backup and restore (FEATURES 7.1–7.4).
 class BackupScreen extends ConsumerStatefulWidget {
   const BackupScreen({super.key});
 
@@ -66,7 +66,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
     await FilePicker.clearTemporaryFiles();
   }
 
-  /// M4.7: lyrics, favorites and plays from the old web POC's export.
+  /// Lyrics, favorites and plays from the old web POC's export.
   Future<void> _importPoc() async {
     final l10n = AppLocalizations.of(context);
     final picked = await FilePicker.pickFiles(dialogTitle: l10n.pocImport);

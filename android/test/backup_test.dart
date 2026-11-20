@@ -17,7 +17,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'support/fake_backend.dart';
 import 'support/test_services.dart';
 
-/// M4.3–M4.6: backup export, preview, Merge and Replace restore.
+/// Backup export, preview, Merge and Replace restore.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late FakeBackend backend;

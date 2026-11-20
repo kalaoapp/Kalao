@@ -22,7 +22,7 @@ String formatLyricTime(int? ms) {
   return '$minutes:$seconds.$hundredths';
 }
 
-/// Tap-to-time sync editor (M2.4): play the song, tap at the start of each
+/// Tap-to-time sync editor: play the song, tap at the start of each
 /// line (or word); hold to the end to stamp where it ends. The song can be
 /// slowed while timing; taps are corrected for tap latency (the engine
 /// position already allows for output latency).

@@ -37,7 +37,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     AppCrashService.readLastCrash().then((report) {
       if (mounted && report != null) setState(() => _crash = report);
     });
-    // On start and resume: files opened with Kalao (M4.12), then a due
+    // On start and resume: files opened with Kalao, then a due
     // scheduled backup (ADR-016).
     _lifecycle = AppLifecycleListener(onResume: _onForeground);
     WidgetsBinding.instance.addPostFrameCallback((_) {

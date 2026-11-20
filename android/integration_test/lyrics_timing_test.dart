@@ -1,4 +1,4 @@
-// Timing accuracy on a device (ROADMAP M2.6, IMPLEMENTATION.md §17): a click
+// Timing accuracy on a device (IMPLEMENTATION.md §4, §17): a click
 // track plays on the real engine while Dart follows an LRC whose lines sit on
 // the clicks. The interpolated position that drives lyrics must stay within
 // ±30 ms of the engine clock, and every line must turn active within ±30 ms

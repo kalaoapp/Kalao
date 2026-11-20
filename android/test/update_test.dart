@@ -12,7 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fake_backend.dart';
 
-/// M4.11: update check against GitHub Releases and the verified download.
+/// Update check against GitHub Releases and the verified download.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late FakeBackend backend;

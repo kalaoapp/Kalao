@@ -18,7 +18,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'support/fake_backend.dart';
 import 'support/test_services.dart';
 
-/// M4.1 favorites and M4.2 stats.
+/// Favorites and stats.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late FakeBackend backend;

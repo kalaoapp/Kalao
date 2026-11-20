@@ -21,7 +21,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'support/fake_backend.dart';
 import 'support/test_services.dart';
 
-/// M4.3–M4.5 through the controller: saving to a picked document, the
+/// Backups through the controller: saving to a picked document, the
 /// scheduled backup (due check, pruning, failures) and the Backup screen.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
