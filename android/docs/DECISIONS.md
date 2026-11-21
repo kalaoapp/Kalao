@@ -57,4 +57,6 @@ None at the moment.
 
 **ADR-016 Scheduled backups run when the app opens.** No background scheduler (WorkManager) is added; a due backup runs on the next start or resume. *Accepted.*
 
+**ADR-019 New instrumentals of folder songs go where the user chose** (owner, 2026-11-21). A full-screen screen asks before the first music folder is added: a separate folder the user picks (SAF, read and write, outside every music folder; a music folder cannot be added over it), or next to the original in the music folder. `AppSettings.instrumentalPlacement` and `instrumentalFolderUri` remember it on this device (device keys: another device asks again). `LibraryFolderService.addInstrumental` is the only writer and follows it for every new instrumental: picked files today, stems in M6. Next to the original, the file gets a `folder_file` row so rescans keep it the song's. *Accepted.*
+
 **ADR-017 Public sample extension is LRCLIB.** The earlier "local LRC folder" sample needs filesystem access, which the sandbox forbids. LRCLIB is an open API and Mornye's `lrclib.rs` is a reference. *Accepted.*
