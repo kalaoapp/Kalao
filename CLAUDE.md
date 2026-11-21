@@ -109,7 +109,7 @@ bash scripts/build_android.sh
 
 **CI** (`ci.yml`, on pull requests and pushes to `main`): gitleaks plus a check that no `*.kalaoext`, `android/extensions/` or `poc-webapp/` file is tracked; `dart format` (must produce no diff), analyze, test; Rust checks and script tests; Android `assembleDebug` + `testDebugUnitTest`, release APK build, payload audit, `apksigner`/`zipalign -P 16` checks.
 
-**Release** (`release.yml`): push a tag `vX.Y.Z` that matches `version:` in `android/pubspec.yaml`. CI builds arm64/arm32/x86_64/universal APKs, signs them V1–V4 from repository secrets, audits them, and publishes a GitHub Release with `SHA256SUMS.txt` and a `git-cliff` changelog. There is no other deploy target.
+**Release** (`release.yml`): run `bash scripts/bump_version.sh X.Y.Z[-pre]` (sets `version:` in `android/pubspec.yaml`, bumping the build number, and `AppInfo.version`), commit, then push a tag `vX.Y.Z[-pre]` that matches both exactly. `0.1.0x` versions are not strict semver, so the extension engine gets `AppInfo.semver`. CI builds arm64/arm32/x86_64/universal APKs, signs them V1–V4 from repository secrets, audits them, and publishes a GitHub Release with `SHA256SUMS.txt` and a `git-cliff` changelog. There is no other deploy target.
 
 ## Testing approach
 

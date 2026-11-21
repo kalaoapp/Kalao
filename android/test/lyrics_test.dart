@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kalao/constants/app_info.dart';
 import 'package:kalao/app.dart';
 import 'package:kalao/controllers/lyrics_sync_editor_controller.dart';
 import 'package:kalao/models/lyrics.dart';
@@ -385,7 +386,7 @@ void main() {
         'app_settings': jsonEncode({
           'setupCompleted': true,
           'tutorialSeen': true,
-          'whatsNewVersion': '0.1.0',
+          'whatsNewVersion': AppInfo.version,
         }),
       });
     });

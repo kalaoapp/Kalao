@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:kalao/constants/app_info.dart';
 import 'package:kalao/providers/settings_provider.dart';
 import 'package:kalao/providers/update_provider.dart';
 import 'package:kalao/services/update_service.dart';
@@ -79,6 +80,14 @@ void main() {
     expect(isNewerVersion('0.1.0', '0.2.0'), isFalse);
     expect(isNewerVersion('0.2.0', '0.2.0-beta'), isTrue);
     expect(isNewerVersion('0.2.0-beta', '0.2.0'), isFalse);
+    expect(isNewerVersion('0.1.05-alpha', '0.1.04-alpha'), isTrue);
+  });
+
+  test('the app version has a strict semver form for extensions', () {
+    expect(
+      AppInfo.semver,
+      matches(RegExp(r'^(0|[1-9]\d*)(\.(0|[1-9]\d*)){2}(-[0-9A-Za-z.-]+)?$')),
+    );
   });
 
   test('the APK follows the device ABI, else universal', () {

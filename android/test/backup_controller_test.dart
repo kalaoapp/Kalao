@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kalao/constants/app_info.dart';
 import 'package:kalao/app.dart';
 import 'package:kalao/models/settings.dart';
 import 'package:kalao/models/song.dart';
@@ -35,7 +36,7 @@ void main() {
       'app_settings': jsonEncode({
         'setupCompleted': true,
         'tutorialSeen': true,
-        'whatsNewVersion': '0.1.0',
+        'whatsNewVersion': AppInfo.version,
       }),
     });
     backend = FakeBackend()..install();

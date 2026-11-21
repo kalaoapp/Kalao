@@ -64,9 +64,10 @@ jobs:
         env:
           VERSION: ${{ needs.get-version.outputs.version }}
         run: |
-          pubspec="$(sed -n 's/^version: \([0-9.]*\)+.*/\1/p' android/pubspec.yaml)"
-          if [[ "${VERSION#v}" != "$pubspec"* ]]; then
-            echo "Tag $VERSION does not match android/pubspec.yaml version $pubspec" >&2
+          pubspec="$(sed -n 's/^version: \([^+]*\).*/\1/p' android/pubspec.yaml)"
+          app_info="$(sed -n "s/.*String version = '\([^']*\)'.*/\1/p" android/lib/constants/app_info.dart)"
+          if [[ "${VERSION#v}" != "$pubspec" || "$pubspec" != "$app_info" ]]; then
+            echo "Tag $VERSION, android/pubspec.yaml ($pubspec) and AppInfo.version ($app_info) must match" >&2
             exit 1
           fi
 

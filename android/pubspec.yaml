@@ -1,7 +1,7 @@
 name: kalao
 description: Kalao, an on-device karaoke and lyrics-learning app.
 publish_to: "none"
-version: 0.1.0+1
+version: 0.1.05-alpha+5
 
 environment:
   sdk: ^3.10.0

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kalao/constants/app_info.dart';
 import 'package:kalao/models/lyrics.dart';
 import 'package:kalao/models/settings.dart';
 import 'package:kalao/models/song.dart';
@@ -152,7 +153,7 @@ void main() {
     expect(staged.preview.favorites, 1);
     expect(staged.preview.withLyrics, 1);
     expect(staged.preview.mediaFiles, 1);
-    expect(staged.preview.appVersion, '0.1.0');
+    expect(staged.preview.appVersion, AppInfo.version);
 
     const tabletSettings = AppSettings(
       setupCompleted: true,

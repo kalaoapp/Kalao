@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kalao/constants/app_info.dart';
 import 'package:kalao/app.dart';
 import 'package:kalao/models/lyrics.dart';
 import 'package:kalao/models/settings.dart';
@@ -57,7 +58,7 @@ void main() {
       'app_settings': jsonEncode({
         'setupCompleted': true,
         'tutorialSeen': true,
-        'whatsNewVersion': '0.1.0',
+        'whatsNewVersion': AppInfo.version,
       }),
     });
   });
@@ -451,11 +452,11 @@ void main() {
     });
     final track = (await tester.runAsync(() => addSong('track')))!;
     final providers = await pumpApp(tester);
-    expect(find.text("What's new in 0.1.0"), findsOneWidget);
+    expect(find.text("What's new in ${AppInfo.version}"), findsOneWidget);
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
     expect(find.text('Recently added'), findsOneWidget);
-    expect(providers.read(settingsProvider).whatsNewVersion, '0.1.0');
+    expect(providers.read(settingsProvider).whatsNewVersion, AppInfo.version);
     expect(
       initialLocationForAppState(
         setupCompleted: true,

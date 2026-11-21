@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kalao/constants/app_info.dart';
 import 'package:kalao/app.dart';
 import 'package:kalao/models/song.dart';
 import 'package:kalao/providers/settings_provider.dart';
@@ -39,7 +40,7 @@ void main() {
       'app_settings': jsonEncode({
         'setupCompleted': true,
         'tutorialSeen': true,
-        'whatsNewVersion': '0.1.0',
+        'whatsNewVersion': AppInfo.version,
       }),
     });
     final backend = FakeBackend()..install();

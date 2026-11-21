@@ -5,6 +5,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kalao/constants/app_info.dart';
 import 'package:kalao/app.dart';
 import 'package:kalao/models/lyrics.dart';
 import 'package:kalao/models/player_state.dart';
@@ -35,7 +36,7 @@ void main() {
       'app_settings': jsonEncode({
         'setupCompleted': true,
         'tutorialSeen': true,
-        'whatsNewVersion': '0.1.0',
+        'whatsNewVersion': AppInfo.version,
       }),
     });
   });
