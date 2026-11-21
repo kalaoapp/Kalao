@@ -6,7 +6,10 @@ import 'package:kalao/services/app_storage.dart';
 import 'package:kalao/services/history_database.dart';
 import 'package:kalao/services/import_service.dart';
 import 'package:kalao/services/library_database.dart';
+import 'package:kalao/services/library_browse.dart';
 import 'package:kalao/services/library_folder_service.dart';
+import 'package:kalao/services/library_maintenance.dart';
+import 'package:kalao/services/playlist_store.dart';
 import 'package:kalao/services/library_queue_store.dart';
 import 'package:kalao/services/lyrics_service.dart';
 
@@ -19,6 +22,7 @@ class LibraryServices {
     required this.history,
     required this.appState,
     required this.importer,
+    this.transcoder,
   });
 
   final AppStorage storage;
@@ -26,6 +30,9 @@ class LibraryServices {
   final HistoryDatabase history;
   final AppStateDatabase appState;
   final ImportService importer;
+
+  /// FFprobe/FFmpeg for music-folder formats the engine cannot decode.
+  final FolderTranscoder? transcoder;
 
   LyricsService get lyrics => importer.lyrics;
 
@@ -35,6 +42,18 @@ class LibraryServices {
     library: library,
     importer: importer,
     storage: storage,
+    transcoder: transcoder,
+  );
+
+  late final LibraryBrowse browse = LibraryBrowse(library);
+
+  late final PlaylistStore playlists = PlaylistStore(library.db);
+
+  late final LibraryMaintenance maintenance = LibraryMaintenance(
+    library: library,
+    history: history,
+    queue: queue,
+    importer: importer,
   );
 }
 
@@ -53,20 +72,6 @@ class LibraryRevision extends Notifier<int> {
 
   void bump() => state++;
 }
-
-/// The Library list; [LibraryView.favoritesOnly] shows favorites.
-typedef LibraryView = ({SongSort sort, bool favoritesOnly});
-
-final librarySongsProvider = FutureProvider.family<List<Song>, LibraryView>((
-  ref,
-  view,
-) {
-  ref.watch(libraryRevisionProvider);
-  return ref
-      .watch(libraryServicesProvider)
-      .library
-      .songs(sort: view.sort, favoritesOnly: view.favoritesOnly);
-});
 
 final favoriteProvider = FutureProvider.family<bool, int>((ref, songId) {
   ref.watch(libraryRevisionProvider);
@@ -124,4 +129,13 @@ final songLyricsProvider = FutureProvider.family<LyricDocument?, int>((
 ) {
   ref.watch(libraryRevisionProvider);
   return ref.watch(libraryServicesProvider).library.lyrics(songId);
+});
+
+/// Songs whose current lyrics have every word of the query (FEATURES 6.12).
+final lyricsSearchProvider = FutureProvider.family<List<Song>, String>((
+  ref,
+  query,
+) {
+  ref.watch(libraryRevisionProvider);
+  return ref.watch(libraryServicesProvider).library.searchLyrics(query);
 });

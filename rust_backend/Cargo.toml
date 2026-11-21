@@ -65,7 +65,7 @@ roxmltree = "=0.21.2"
 # .kalaobackup archives (DATA_MODEL.md §3).
 zip = { version = "=9.1.3", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 # Audio engine (docs/LIBRARIES.md).
-symphonia = { version = "0.5.5", default-features = false, features = ["mp3", "aac", "isomp4", "alac", "flac", "vorbis", "ogg", "wav", "pcm"] }
+symphonia = { version = "0.5.5", default-features = false, features = ["mp3", "aac", "isomp4", "alac", "flac", "vorbis", "ogg", "wav", "aiff", "pcm"] }
 cpal = "0.16"
 rubato = "0.16"
 ringbuf = "0.4"

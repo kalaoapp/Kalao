@@ -64,6 +64,15 @@ class SongBadges extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (song.unavailable)
+          Tooltip(
+            message: l10n.songUnavailable,
+            child: Icon(
+              Icons.cloud_off_outlined,
+              size: 16,
+              color: Theme.of(context).colorScheme.error,
+            ),
+          ),
         if (song.hasBacking)
           Tooltip(
             message: l10n.songHasInstrumental,
@@ -87,6 +96,7 @@ class SongListTile extends StatelessWidget {
     this.onLongPress,
     this.selected = false,
     this.selectionMode = false,
+    this.trailing,
   });
 
   final Song song;
@@ -95,23 +105,30 @@ class SongListTile extends StatelessWidget {
   final bool selected;
   final bool selectionMode;
 
+  /// Replaces the badges (a playlist's drag handle).
+  final Widget? trailing;
+
   @override
   Widget build(BuildContext context) {
     final subtitle = [
       if (song.artist.isNotEmpty) song.artist,
       formatDuration(song.duration),
     ].join(' · ');
-    return ListTile(
+    final tile = ListTile(
       leading: selectionMode
           ? Checkbox(value: selected, onChanged: (_) => onTap?.call())
           : SongCover(song: song),
       title: Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
-      trailing: SongBadges(song: song),
+      trailing: trailing ?? SongBadges(song: song),
       selected: selected,
       onTap: onTap,
       onLongPress: onLongPress,
     );
+    // A song whose file is gone or offline is shown dimmed (FEATURES 6.9).
+    return song.unavailable && !selectionMode
+        ? Opacity(opacity: 0.55, child: tile)
+        : tile;
   }
 }
 

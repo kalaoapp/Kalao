@@ -58,3 +58,5 @@ None at the moment.
 **ADR-016 Scheduled backups run when the app opens.** No background scheduler (WorkManager) is added; a due backup runs on the next start or resume. *Accepted.*
 
 **ADR-017 Public sample extension is LRCLIB.** The earlier "local LRC folder" sample needs filesystem access, which the sandbox forbids. LRCLIB is an open API and Mornye's `lrclib.rs` is a reference. *Accepted.*
+
+**ADR-018 Lent descriptors are duplicated, never reopened** (Q15, 2026-11-21). Music-folder files reach Rust as `/proc/self/fd/N` paths lent by Kotlin. Android AppFuse-proxied descriptors (some cloud and MTP providers) reject a reopen, so `kalao-audio::open_file` (`lent.rs`) duplicates the descriptor (`BorrowedFd::borrow_raw` + `try_clone_to_owned`), as Mornye's `open_audio_file` does. It is the one `#[allow(unsafe_code)]` in the workspace; `unsafe_code` stays `deny` everywhere else. Each duplicate is independent of the lent descriptor, so seeks and loops work from it. *Accepted.*

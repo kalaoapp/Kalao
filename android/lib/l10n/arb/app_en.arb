@@ -811,7 +811,7 @@
   },
   "foldersTitle": "Music folders",
   "foldersSettingsSubtitle": "Songs from folders on this device, played where they are",
-  "foldersIntro": "Add a folder of songs and Kalao keeps the library in step with it: new files are added (with an instrumental and lyrics file from the same folder), changed ones updated and removed ones dropped. Kalao only reads the files; it never moves or deletes them.",
+  "foldersIntro": "Add a folder of songs and Kalao keeps the library in step with it: new files are added (with an instrumental and lyrics file from the same folder) and changed ones updated. A song whose file is gone stays, unavailable, with its lyrics and plays, until the file comes back (even renamed or in another music folder) or you clean it up. Kalao only reads the files; it never moves or deletes them.",
   "foldersAdd": "Add folder",
   "foldersScanAll": "Scan all folders",
   "foldersScan": "Scan now",
@@ -873,8 +873,8 @@
       }
     }
   },
-  "foldersScanResult": "{added} added, {updated} updated, {removed} removed",
-  "@foldersScanResult": {
+  "foldersScanSummary": "{added} added, {updated} updated, {relinked} found again, {missing} missing",
+  "@foldersScanSummary": {
     "placeholders": {
       "added": {
         "type": "int"
@@ -882,9 +882,151 @@
       "updated": {
         "type": "int"
       },
-      "removed": {
+      "relinked": {
+        "type": "int"
+      },
+      "missing": {
         "type": "int"
       }
     }
-  }
+  },
+  "foldersOffline": "The storage this folder is on is not connected. Its songs come back when it is.",
+  "foldersFullScan": "Force full scan",
+  "foldersCleanup": "Clean up missing songs",
+  "foldersCleanupConfirm": "{count, plural, =1{1 song's file is gone} other{{count} songs' files are gone}}. Delete them from the library? {lyrics} of them have lyrics, which go too.",
+  "@foldersCleanupConfirm": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "lyrics": {
+        "type": "int"
+      }
+    }
+  },
+  "foldersCleanupNone": "No songs are missing.",
+  "foldersCleanupDone": "{count, plural, =1{1 song deleted} other{{count} songs deleted}}",
+  "@foldersCleanupDone": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "foldersAutoScan": "Scan folders",
+  "foldersAutoScanOnOpen": "Every time Kalao opens",
+  "foldersAutoScanDaily": "Once a day",
+  "foldersAutoScanWeekly": "Once a week",
+  "foldersAutoScanManual": "Only when I ask",
+  "songUnavailable": "Unavailable: its file is gone or its storage is not connected",
+  "libraryViewSongs": "Songs",
+  "libraryViewAlbums": "Albums",
+  "libraryViewArtists": "Artists",
+  "libraryViewGenres": "Genres",
+  "libraryViewFolders": "Folders",
+  "libraryViewPlaylists": "Playlists",
+  "libraryViewEmpty": "Nothing here yet",
+  "libraryAlbumsEmpty": "Albums appear once songs have an album tag.",
+  "libraryGenresEmpty": "Genres appear once songs have a genre tag.",
+  "libraryFoldersEmpty": "Add a music folder to browse it here.",
+  "librarySongCount": "{count, plural, =1{1 song} other{{count} songs}}",
+  "@librarySongCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "librarySingAll": "Sing all",
+  "libraryShuffle": "Shuffle",
+  "libraryQueueAll": "Queue all",
+  "libraryFilters": "Filters",
+  "filterAny": "Any",
+  "filterApply": "Apply",
+  "filterReset": "Reset",
+  "filterOrigin": "Source",
+  "originImported": "Imported",
+  "originFolder": "Music folders",
+  "originExtension": "Extensions",
+  "filterFormat": "Format",
+  "filterLyrics": "Lyrics",
+  "lyricsFilterNone": "No lyrics",
+  "lyricsFilterPlain": "Not timed",
+  "lyricsFilterLines": "Timed by line",
+  "lyricsFilterWords": "Timed by word",
+  "filterInstrumental": "Instrumental",
+  "instrumentalYes": "Has an instrumental",
+  "instrumentalNo": "No instrumental",
+  "filterMore": "More",
+  "filterUnavailable": "Unavailable",
+  "filterMissingArtwork": "Missing artwork",
+  "filterMissingGenre": "Missing genre",
+  "filterMissingYear": "Missing year",
+  "sortOldest": "Oldest first",
+  "sortAlbum": "Album",
+  "sortYear": "Year",
+  "sortGenre": "Genre",
+  "sortSize": "Size",
+  "searchInLyrics": "In lyrics",
+  "inLibrary": "In library",
+  "playlistNew": "New playlist",
+  "playlistName": "Name",
+  "playlistRename": "Rename",
+  "playlistDelete": "Delete playlist",
+  "playlistDeleteConfirm": "Delete the playlist {name}? Its songs stay in the library.",
+  "@playlistDeleteConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistAddTo": "Add to playlist",
+  "playlistAdded": "{count, plural, =1{Added 1 song to {name}} other{Added {count} songs to {name}}}",
+  "@playlistAdded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistEmpty": "Select songs in the Library and use Add to playlist.",
+  "duplicatesTitle": "Review duplicates",
+  "duplicatesNone": "No duplicates found.",
+  "duplicatesHint": "Songs with the same ISRC, or the same title, artist and length. Keeping one moves the others' lyrics, favorites and plays to it; files in music folders stay where they are.",
+  "duplicatesKeep": "Keep",
+  "duplicatesMerged": "{count, plural, =1{1 copy merged} other{{count} copies merged}}",
+  "@duplicatesMerged": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "artworkTitle": "Find missing artwork",
+  "artworkNoExtension": "Install and enable an artwork extension to look up covers.",
+  "artworkProgress": "{done} of {total} albums",
+  "@artworkProgress": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "artworkResult": "{count, plural, =0{No new covers found} =1{Found 1 cover} other{Found {count} covers}}",
+  "@artworkResult": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "artworkNothing": "Every album already has artwork, or was looked up before.",
+  "artworkRemove": "Remove artwork"
 }
