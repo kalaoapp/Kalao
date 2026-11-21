@@ -501,6 +501,8 @@ void main() {
     }))!;
     await _pump(tester, services, secrets, const HomeTab());
     expect(find.text('Library'), findsOneWidget);
+    // Import lives in Settings → Your data.
+    expect(find.byType(FloatingActionButton), findsNothing);
     expect(find.text('Blue Moon'), findsWidgets);
 
     await tester.enterText(find.byType(SearchBar), 'moo');

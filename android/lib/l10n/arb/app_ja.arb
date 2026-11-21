@@ -7,7 +7,7 @@
   "navExtensions": "拡張機能",
   "navSettings": "設定",
   "homeEmptyTitle": "まだ歌える曲がありません",
-  "homeEmptyBody": "下のボタンで曲を取り込みます。最近再生した曲がここに表示されます。",
+  "homeEmptyBody": "「設定 → データ」で曲を取り込むか、音楽フォルダを追加してください。最近再生した曲がここに表示されます。",
   "libraryEmptyTitle": "ライブラリは空です",
   "libraryEmptyBody": "原曲と、あればカラオケ音源を取り込んでください。Kalao が自動で組み合わせます。",
   "queueEmptyTitle": "予約リストは空です",
@@ -457,5 +457,7 @@
   "foldersScanResult": "追加 {added}、更新 {updated}、削除 {removed}",
   "extensionPrioritySubtitle": "どの拡張機能を先に使うか",
   "settingsRepositoriesCount": "{count, plural, =0{未追加} other{{count} 件のリポジトリ}}",
-  "settingsExtensionsSubtitle": "ファイルからインストール、順序、リポジトリ、オプション"
+  "settingsExtensionsSubtitle": "ファイルからインストール、順序、リポジトリ、オプション",
+  "importSettingsTitle": "曲を取り込む",
+  "importSettingsSubtitle": "音声と歌詞のファイルを Kalao にコピーします。原曲とカラオケ音源は自動で組み合わせます"
 }

@@ -10,7 +10,6 @@ import 'package:kalao/providers/extension_provider.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/player_provider.dart';
 import 'package:kalao/providers/queue_provider.dart';
-import 'package:kalao/screens/import_sheet.dart';
 import 'package:kalao/screens/queue_tab.dart';
 import 'package:kalao/screens/song_detail_screen.dart';
 import 'package:kalao/services/library_database.dart';
@@ -199,14 +198,6 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                   ),
                 ],
               ),
-        floatingActionButton: _selecting
-            ? null
-            : FloatingActionButton.extended(
-                heroTag: 'import-home',
-                onPressed: () => pickAndImport(context, ref),
-                icon: const Icon(Icons.add),
-                label: Text(l10n.importAction),
-              ),
         body: CustomScrollView(
           slivers: [
             if (!_selecting)
@@ -264,7 +255,9 @@ class _HomeTabState extends ConsumerState<HomeTab> {
               SliverToBoxAdapter(child: _libraryHeader(l10n)),
               ..._librarySlivers(l10n, songs),
             ],
-            const SliverToBoxAdapter(child: SizedBox(height: 96)),
+            const SliverToBoxAdapter(
+              child: SizedBox(height: AppTokens.space24),
+            ),
           ],
         ),
       ),

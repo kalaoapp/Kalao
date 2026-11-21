@@ -7,7 +7,7 @@
   "navExtensions": "扩展",
   "navSettings": "设置",
   "homeEmptyTitle": "还没有可以唱的歌",
-  "homeEmptyBody": "用下方按钮导入歌曲。最近播放的歌曲会显示在这里。",
+  "homeEmptyBody": "在“设置 → 你的数据”中导入歌曲或添加音乐文件夹。最近播放的歌曲会显示在这里。",
   "libraryEmptyTitle": "曲库是空的",
   "libraryEmptyBody": "导入原唱，如有伴奏也一并导入，Kalao 会自动配对。",
   "queueEmptyTitle": "点歌列表是空的",
@@ -457,5 +457,7 @@
   "foldersScanResult": "新增 {added}，更新 {updated}，移除 {removed}",
   "extensionPrioritySubtitle": "优先询问哪个扩展",
   "settingsRepositoriesCount": "{count, plural, =0{尚未添加} other{{count} 个仓库}}",
-  "settingsExtensionsSubtitle": "从文件安装、顺序、仓库和选项"
+  "settingsExtensionsSubtitle": "从文件安装、顺序、仓库和选项",
+  "importSettingsTitle": "导入歌曲",
+  "importSettingsSubtitle": "将音频和歌词文件复制到 Kalao，原唱与伴奏会自动配对"
 }
