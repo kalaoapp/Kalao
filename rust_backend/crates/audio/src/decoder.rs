@@ -2,7 +2,6 @@
 
 use crate::AudioError;
 use crate::Media;
-use std::fs::File;
 use std::path::Path;
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::{CODEC_TYPE_NULL, Decoder as CodecDecoder, DecoderOptions};
@@ -47,7 +46,10 @@ fn probe(media: &Media) -> Result<ProbeResult, AudioError> {
             if let Some(extension) = file_extension(path) {
                 hint.with_extension(&extension);
             }
-            Box::new(File::open(path).map_err(|error| AudioError::Open(error.to_string()))?)
+            Box::new(
+                crate::lent::open_lent(path)
+                    .map_err(|error| AudioError::Open(error.to_string()))?,
+            )
         }
         Media::Stream(stream) => {
             if let Some(extension) = stream.extension() {

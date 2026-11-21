@@ -697,10 +697,9 @@ class _Scan {
 
   Future<String?> _readText(FolderEntry entry) async {
     try {
-      return await _withDocument(
-        entry,
-        (path) async =>
-            utf8.decode(await File(path).readAsBytes(), allowMalformed: true),
+      return utf8.decode(
+        await PlatformBridge.readDocument(entry.uri),
+        allowMalformed: true,
       );
     } catch (error) {
       _log.w('Cannot read ${entry.dir}/${entry.name}', error);
