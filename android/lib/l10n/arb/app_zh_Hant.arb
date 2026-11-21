@@ -293,6 +293,7 @@
   "restorePlays": "播放記錄",
   "restoreMedia": "音訊檔案",
   "restoreMediaNone": "未包含",
+  "restoreMissingMedia": "{count, plural, other{{count} 首歌曲的音訊不在此備份中，也不在此裝置上；重新匯入音訊之前無法播放。}}",
   "restoreSize": "大小",
   "restoreMerge": "合併",
   "restoreMergeSubtitle": "加入新內容。已有的歌曲會自動配對；較新的歌詞優先，你手動修改的讀音會保留。",

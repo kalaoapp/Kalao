@@ -301,11 +301,13 @@ class _SyncControls extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
-    final engine = ref.watch(playerProvider.select((now) => now.engine));
+    final (engineTempo, playing) = ref.watch(
+      playerProvider.select((now) => (now.engine.tempo, now.engine.playing)),
+    );
     final latency = ref.watch(settingsProvider.select((s) => s.tapLatencyMs));
     final settings = ref.read(settingsProvider.notifier);
     final player = ref.read(playerProvider.notifier);
-    final tempo = tempos.contains(engine.tempo) ? engine.tempo : 1.0;
+    final tempo = tempos.contains(engineTempo) ? engineTempo : 1.0;
     final canNudge = editor.target != null;
     return Material(
       color: theme.colorScheme.surfaceContainer,
@@ -392,8 +394,8 @@ class _SyncControls extends ConsumerWidget {
                   onPressed: onReplay,
                 ),
                 IconButton.filledTonal(
-                  tooltip: engine.playing ? l10n.playerPause : l10n.playerPlay,
-                  icon: Icon(engine.playing ? Icons.pause : Icons.play_arrow),
+                  tooltip: playing ? l10n.playerPause : l10n.playerPlay,
+                  icon: Icon(playing ? Icons.pause : Icons.play_arrow),
                   onPressed: player.togglePlay,
                 ),
               ],

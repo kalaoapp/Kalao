@@ -16,13 +16,13 @@ The POC stored text layers only, with no timing. Kalao separates **text and timi
   "lines": [
     { "timeMs": 12340, "endMs": 15800, "text": "月亮代表我的心",
       "section": "chorus", "sectionBreakBefore": true,
-      "words": [ { "timeMs": 12340, "endMs": 12900, "text": "月" } ],
+      "words": [ { "timeMs": 12340, "endMs": 12900, "text": "月", "start": 0 } ],
       "voice": "v1", "translation": "The moon represents my heart" }
   ]
 }
 ```
 
-`version` 2 (M2) added `words`, `voice` and `translation`; version 1 documents read unchanged. `format` is how the text arrived (`plain`, `lrc`, `elrc`, `ttml`). `offsetMs` is added to the playback position before the line lookup (positive = lyrics earlier, as LRC's `[offset:]`). `words` are in text order and each is found in `text` in that order; `endMs` is optional on lines and words (a line ends when the next lead line starts, a word when the next word starts). `voice` is `v1`, `v2`, … in a duet and `bg` for backing vocals; `words`, `voice`, `translation` and `section` are omitted when empty. A `source` object (extension id and item) is added with lyric extensions in M5.
+`version` 2 (M2) added `words`, `voice` and `translation`; version 1 documents read unchanged. `format` is how the text arrived (`plain`, `lrc`, `elrc`, `ttml`). `offsetMs` is added to the playback position before the line lookup (positive = lyrics earlier, as LRC's `[offset:]`). `words` are in text order; `start` is the word's UTF-16 offset in `text`, set by `parseLyrics` (documents saved before it find the words in `text` in order); `endMs` is optional on lines and words (a line ends when the next lead line starts, a word when the next word starts). `voice` is `v1`, `v2`, … in a duet and `bg` for backing vocals; `words`, `voice`, `translation` and `section` are omitted when empty. A `source` object (extension id and item) is added with lyric extensions in M5.
 
 Annotation layers per line:
 

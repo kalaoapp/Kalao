@@ -37,13 +37,47 @@ class KalaoAudioHandler extends BaseAudioHandler with SeekHandler {
     await super.stop();
   }
 
-  /// Publishes [song] and [engine] to the notification and lock screen.
+  EnginePlayerState? _published;
+  final _sincePublished = Stopwatch();
+
+  /// A position this far from where the system extrapolates it is a seek.
+  static const _positionJump = Duration(milliseconds: 750);
+
+  /// Whether [engine] tells the system something it cannot extrapolate from
+  /// the last published state (which carries the position and the speed).
+  bool _changed(EnginePlayerState engine) {
+    final last = _published;
+    if (last == null ||
+        last.songId != engine.songId ||
+        last.playing != engine.playing ||
+        last.buffering != engine.buffering ||
+        last.completed != engine.completed ||
+        last.tempo != engine.tempo ||
+        last.durationMs != engine.durationMs) {
+      return true;
+    }
+    final expected = last.playing
+        ? last.position + _sincePublished.elapsed * last.tempo
+        : last.position;
+    return (engine.position - expected).abs() > _positionJump;
+  }
+
+  /// Publishes [song] and [engine] to the notification and lock screen when
+  /// they changed beyond what the system extrapolates (the engine reports
+  /// 30 times a second while playing).
   void publish(Song? song, EnginePlayerState engine) {
     if (song == null) {
+      if (_published == null && mediaItem.value == null) return;
+      _published = null;
       playbackState.add(PlaybackState());
       mediaItem.add(null);
       return;
     }
+    if (mediaItem.value?.id == '${song.id}' && !_changed(engine)) return;
+    _published = engine;
+    _sincePublished
+      ..reset()
+      ..start();
     final current = mediaItem.value;
     if (current?.id != '${song.id}') {
       final cover = song.coverPath;
@@ -78,6 +112,7 @@ class KalaoAudioHandler extends BaseAudioHandler with SeekHandler {
             : AudioProcessingState.ready,
         playing: engine.playing,
         updatePosition: engine.position,
+        speed: engine.tempo,
       ),
     );
   }

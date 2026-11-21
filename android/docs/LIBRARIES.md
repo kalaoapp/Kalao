@@ -77,12 +77,12 @@ No `play-services-*` artifacts. `androidx.documentfile` is not used: `DocumentsC
 
 | Crate | Version | Used by | Use |
 | --- | --- | --- | --- |
-| `serde`, `serde_json` | 1.0 (derive; float_roundtrip, raw_value) | core, mobile, audio, network | JSON method table |
+| `serde`, `serde_json` | 1.0 (derive; float_roundtrip, raw_value) | core, mobile, audio | JSON method table |
 | `thiserror` | 2.0 | mobile, audio | Error enums |
 | `uniffi` | =0.32.2 | mobile, bindgen | Kotlin bindings |
 | `sha2` | 0.11 | mobile | File hashes, backup checksums |
-| `base64` | 0.23 | core | Payload decoding |
-| `regex`, `unicode-normalization`, `unicode-general-category` | =1.13.1, =0.1.22, =0.6.0 | core | Lyrics parsing, matching |
+| `base64` | 0.23 | core (tests) | Payload fixtures |
+| `regex` | =1.13.1 | core | Lyrics parsing |
 | `roxmltree` | =0.21.2 | core | TTML |
 | `chrono` | =0.4.45 | mobile | Log timestamps |
 | `zip` | =9.1.3 (deflate-flate2-zlib-rs) | mobile | `.kalaobackup` archives |
@@ -95,12 +95,13 @@ No `play-services-*` artifacts. `androidx.documentfile` is not used: `DocumentsC
 | `wana_kana` | 4 | core | Kana → romaji |
 | `lindera` with IPADIC | =6.2.0 (`embed-ipadic`) | core | Japanese readings; the dictionary is downloaded at build time and embedded (about 50 MB per ABI) |
 | `ferrous-opencc` with OpenCC data (Apache-2.0) | =0.4.0 | core | Traditional ↔ Simplified; dictionaries embedded (about 2 MB) |
-| `tokio`, `hyper-util`, `hyper-rustls`, `rustls`, `rustls-pemfile`, `http`, `http-body-util`, `bytes`, `futures-util`, `tokio-util`, `async-compression`, `tower-service`, `hickory-proto`, `cookie`, `url` | Mornye's pins | network | HTTP stack of `kalao-network`, which nothing links yet (M5). `rustls-native-certs` and `rustls-platform-verifier` are declared in the workspace but used by no crate |
 
 ### Planned
 
 | Crate | Version | Crate user | Use | Milestone |
 | --- | --- | --- | --- | --- |
+| `tokio`, `hyper-util`, `hyper-rustls`, `rustls`, `rustls-pemfile`, `http`, `http-body-util`, `bytes`, `futures-util`, `tokio-util`, `async-compression`, `tower-service`, `hickory-proto`, `cookie`, `url` | Mornye's pins | network | HTTP stack of `kalao-network` | M5 |
+| `unicode-normalization`, `unicode-general-category` | =0.1.22, =0.6.0 | core | Lyric search matching (Mornye `lyrics::matching`) | M5 |
 | `rquickjs`, `scraper` + `html5ever`, `aes-gcm`, `aes`, `hmac`, `sha1`, `md-5`, `zeroize`, `getrandom`, `cap-std`, `time`, `httpdate`, `tempfile` | Mornye's pins | extensions | Extension runtime and host APIs | M5 |
 | `ed25519-dalek` | 2.x | extensions | Repository signatures (if Mornye's repository module lacks it) | M5 |
 | `clap` | 4.x | ext-cli | `kalao-ext` CLI | M5 |

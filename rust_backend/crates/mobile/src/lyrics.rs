@@ -59,12 +59,16 @@ pub fn detect_sections(method: &str, args: &Value) -> Result<Value, BackendError
     Ok(Value::Array(detected))
 }
 
-/// `{lines, layers}` → one entry per line and layer that has segments.
+/// `{lines, layers?}` → `{sourceLang, layers}`: the lyrics' language (`ja`,
+/// `zh` or null, from kana and Han characters) and one entry per line and
+/// layer that has segments. Without `layers` the language picks them
+/// (furigana and romaji for `ja`, pinyin for `zh`).
 pub fn annotate(method: &str, args: &Value) -> Result<Value, BackendError> {
     let lines = lines(method, args)?;
+    let language = annotate::source_language(&lines);
     let layers: Vec<&str> = match args["layers"].as_array() {
         Some(layers) => layers.iter().filter_map(Value::as_str).collect(),
-        None => vec![str_arg(method, args, "layer").unwrap_or("pinyin")],
+        None => annotate::layers_for(language).to_vec(),
     };
     let mut out = Vec::new();
     for layer in layers {
@@ -86,7 +90,7 @@ pub fn annotate(method: &str, args: &Value) -> Result<Value, BackendError> {
             }
         }
     }
-    Ok(Value::Array(out))
+    Ok(json!({"sourceLang": language, "layers": out}))
 }
 
 /// `{texts, to}` -> the texts in the Chinese variant `to` (`s2t`, `s2tw`,
@@ -117,13 +121,18 @@ mod tests {
         let doc = parse("parseLyrics", &json!({"raw": "[00:01.00]你好"})).unwrap();
         assert_eq!(doc["timed"], true);
         assert_eq!(doc["lines"][0]["timeMs"], 1000);
-        let layers = annotate(
+        let reply = annotate(
             "annotateLyrics",
             &json!({"lines": ["你好", "hello"], "layers": ["pinyin"]}),
         )
         .unwrap();
+        assert_eq!(reply["sourceLang"], "zh");
+        let layers = &reply["layers"];
         assert_eq!(layers.as_array().unwrap().len(), 1);
         assert_eq!(layers[0]["segments"][1]["reading"], "hǎo");
+        let none = annotate("annotateLyrics", &json!({"lines": ["hello"]})).unwrap();
+        assert!(none["sourceLang"].is_null());
+        assert_eq!(none["layers"], json!([]));
         let sections =
             detect_sections("detectSections", &json!({"lines": ["[Chorus]", "la"]})).unwrap();
         assert_eq!(sections[0]["section"], "chorus");
@@ -140,11 +149,11 @@ mod tests {
 
     #[test]
     fn japanese_layers_and_chinese_variants() {
-        let layers = annotate(
-            "annotateLyrics",
-            &json!({"lines": ["桜が咲く"], "layers": ["furigana", "romaji"]}),
-        )
-        .unwrap();
+        // Kana makes the lyrics Japanese: furigana and romaji, no pinyin.
+        let reply = annotate("annotateLyrics", &json!({"lines": ["桜が咲く"]})).unwrap();
+        assert_eq!(reply["sourceLang"], "ja");
+        let layers = &reply["layers"];
+        assert_eq!(layers.as_array().unwrap().len(), 2);
         assert_eq!(layers[0]["kind"], "furigana");
         assert_eq!(layers[0]["segments"][0]["reading"], "さくら");
         assert_eq!(layers[1]["kind"], "romaji");
@@ -166,6 +175,7 @@ mod tests {
         let doc = parse("parseLyrics", &json!({ "raw": raw })).unwrap();
         assert_eq!(doc["format"], "elrc");
         assert_eq!(doc["lines"][0]["words"][1]["timeMs"], 1500);
+        assert_eq!(doc["lines"][0]["words"][1]["start"], 1);
         let text = export("exportLyrics", &json!({"doc": doc, "format": "elrc"})).unwrap();
         assert_eq!(text["text"], raw);
         let lrc = export("exportLyrics", &json!({"doc": doc, "format": "lrc"})).unwrap();

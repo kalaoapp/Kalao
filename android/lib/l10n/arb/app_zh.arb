@@ -293,6 +293,7 @@
   "restorePlays": "播放记录",
   "restoreMedia": "音频文件",
   "restoreMediaNone": "未包含",
+  "restoreMissingMedia": "{count, plural, other{{count} 首歌曲的音频不在此备份中，也不在此设备上；重新导入音频之前无法播放。}}",
   "restoreSize": "大小",
   "restoreMerge": "合并",
   "restoreMergeSubtitle": "添加新内容。已有的歌曲会自动匹配；较新的歌词优先，你手动修改的读音会保留。",

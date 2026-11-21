@@ -3,13 +3,9 @@
 //! Lyrics contracts shared by built-in providers, extension hosts and exports.
 
 pub mod doc;
-pub mod errors;
 
 pub(crate) mod json;
 pub mod lrc;
-
-pub mod matching;
-
 pub mod payloads;
 
 use crate::json::lenient_deserialize;

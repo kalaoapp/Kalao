@@ -28,13 +28,23 @@ String _extension(String name) {
 /// A file to import, from the picker or shared to Kalao.
 typedef ImportSource = ({String name, Stream<List<int>> Function() read});
 
-/// A picked file copied into staging, with what probing found.
+/// What storing a staged file in `media/` produced.
+typedef StoredMedia = ({NewMediaFile file, int? durationMs, String? coverPath});
+
+/// A picked file copied into staging, with what inspecting it found.
 class StagedFile {
   StagedFile({required this.name, required this.path});
 
   final String name;
   final String path;
   Map<String, dynamic> probe = const {};
+
+  /// Set by [ImportService.propose] for audio files.
+  String? sha256;
+
+  /// Set once the file has moved into `media/` (a file paired with two songs
+  /// is stored once).
+  StoredMedia? stored;
 
   String get extension => _extension(name);
   bool get isAudio => audioExtensions.contains(extension);
@@ -71,9 +81,10 @@ class ImportProposal {
   bool include;
 }
 
-/// Import flow (IMPLEMENTATION.md §3): stage → probe and pair → user
-/// confirms → copy to `media/<sha256>`, convert if needed, insert rows,
-/// lyrics, search keys.
+/// Import flow (IMPLEMENTATION.md §3): stage → inspect (hash + probe) and
+/// pair → user confirms → move to `media/<sha256>`, convert if needed,
+/// insert rows, lyrics, search keys. Each file's bytes are read once (the
+/// hash); staging and `media/` share a file system, so storing is a rename.
 class ImportService {
   ImportService({
     required this.library,
@@ -109,13 +120,20 @@ class ImportService {
     return StagedFile(name: name, path: target.path);
   }
 
-  /// Probes audio files, asks Rust for pairings and marks duplicates.
+  /// Hashes and probes audio files, asks Rust for pairings and marks
+  /// duplicates.
   Future<List<ImportProposal>> propose(List<StagedFile> files) async {
     for (final file in files.where((file) => file.isAudio)) {
       try {
-        file.probe = await PlatformBridge.probeAudio(file.path);
+        final inspected = await PlatformBridge.importInspect(
+          file.path,
+          requestId: _requestId(),
+        );
+        file
+          ..sha256 = inspected.sha256
+          ..probe = inspected.probe ?? const {};
       } catch (error) {
-        _log.w('Probe failed for ${file.name}', error);
+        _log.w('Inspect failed for ${file.name}', error);
       }
     }
     final pairs = await PlatformBridge.pairImportFiles([
@@ -127,10 +145,7 @@ class ImportService {
       final original = files[(pair['original'] as num).toInt()];
       final instrumental = pair['instrumental'] as num?;
       final lyrics = pair['lyrics'] as num?;
-      final sha = await PlatformBridge.hashFile(
-        original.path,
-        requestId: _requestId(),
-      );
+      final sha = original.sha256;
       proposals.add(
         ImportProposal(
           original: original,
@@ -142,7 +157,7 @@ class ImportService {
               original.tagTitle ??
               _titleFromName(pair['title'] as String? ?? original.name),
           artist: original.tagArtist ?? '',
-          duplicateOf: await library.songIdForSha(sha),
+          duplicateOf: sha == null ? null : await library.songIdForSha(sha),
         ),
       );
     }
@@ -153,19 +168,39 @@ class ImportService {
       stem.replaceFirst(RegExp(r'^\d+\s*[-._]\s*'), '').trim();
 
   /// Creates the songs for included proposals. Returns the new song ids.
+  /// When one fails, the songs before it stay (complete, with search keys),
+  /// that song's files are removed unless another song uses them, staging is
+  /// cleared and the error is rethrown.
   Future<List<int>> commit(List<ImportProposal> proposals) async {
     final ids = <int>[];
-    for (final proposal in proposals.where((proposal) => proposal.include)) {
-      try {
-        ids.add(await _commitOne(proposal));
-      } catch (error, stack) {
-        _log.e('Import failed for ${proposal.original.name}', error, stack);
-        rethrow;
+    try {
+      for (final proposal in proposals.where((proposal) => proposal.include)) {
+        try {
+          ids.add(await _commitOne(proposal));
+        } catch (error, stack) {
+          _log.e('Import failed for ${proposal.original.name}', error, stack);
+          await _removeUnused(proposal);
+          rethrow;
+        }
       }
+    } finally {
+      if (ids.isNotEmpty) await refreshSearchKeys(ids);
+      await discardStaging();
     }
-    if (ids.isNotEmpty) await refreshSearchKeys(ids);
-    await discardStaging();
     return ids;
+  }
+
+  /// The media and cover a failed proposal left behind, unless a song uses
+  /// them.
+  Future<void> _removeUnused(ImportProposal proposal) async {
+    final stored = [?proposal.original.stored, ?proposal.instrumental?.stored];
+    final used = await library.usedShas([
+      for (final media in stored) media.file.sha256,
+    ]);
+    for (final media in stored) {
+      if (!used.contains(media.file.sha256)) await _deleteFile(media.file.path);
+      if (media.coverPath case final cover?) await _deleteFile(cover);
+    }
   }
 
   Future<int> _commitOne(ImportProposal proposal) async {
@@ -209,54 +244,87 @@ class ImportService {
     return id;
   }
 
-  /// Hashes [file], copies it to `media/<sha256>.<ext>` (once per hash) and
+  /// Moves [file] to `media/<sha256>.<ext>` (once per hash, by rename) and
   /// converts it to FLAC when the engine cannot decode it.
-  Future<({NewMediaFile file, int? durationMs, String? coverPath})> storeMedia(
+  Future<StoredMedia> storeMedia(
     StagedFile file,
     MediaKind kind, {
     String? coverBase,
   }) async {
-    await storage.media.create(recursive: true);
-    final sha = await PlatformBridge.hashFile(
-      file.path,
+    if (file.stored case final stored?) {
+      return (
+        file: NewMediaFile(
+          kind: kind,
+          path: stored.file.path,
+          sha256: stored.file.sha256,
+          bytes: stored.file.bytes,
+          codec: stored.file.codec,
+          sampleRate: stored.file.sampleRate,
+        ),
+        durationMs: stored.durationMs,
+        coverPath: null,
+      );
+    }
+    final sha =
+        file.sha256 ??
+        (await PlatformBridge.importInspect(
+          file.path,
+          requestId: _requestId(),
+        )).sha256;
+    final moved = await PlatformBridge.importStore(
+      path: file.path,
+      sha256: sha,
+      mediaDir: storage.media.path,
+      coverBase: coverBase,
       requestId: _requestId(),
     );
-    var target = p.join(storage.media.path, '$sha.${file.extension}');
-    if (!File(target).existsSync()) {
-      await File(file.path).copy(target);
-    }
-    var probe = await PlatformBridge.probeAudio(target, coverBase: coverBase);
+    var target = moved.path;
+    var bytes = moved.bytes;
+    var probe = moved.probe ?? const <String, dynamic>{};
     if (probe['decodable'] != true) {
       final flac = p.join(storage.media.path, '$sha.flac');
       if (!File(flac).existsSync() && !await convert(target, flac)) {
+        // Nothing points at the moved file or its cover yet.
+        if (!(await library.usedShas([sha])).contains(sha)) {
+          await _deleteFile(target);
+        }
+        if (probe['coverPath'] case final String cover) {
+          await _deleteFile(cover);
+        }
         throw ImportException(
           'Cannot convert ${file.name} to a playable format',
         );
       }
-      if (target != flac) await File(target).delete();
+      if (target != flac) await _deleteFile(target);
       target = flac;
+      bytes = await File(target).length();
       final converted = await PlatformBridge.probeAudio(target);
       probe = {...probe, ...converted, 'coverPath': probe['coverPath']};
     }
-    return (
+    final stored = (
       file: NewMediaFile(
         kind: kind,
         path: target,
         sha256: sha,
-        bytes: await File(target).length(),
+        bytes: bytes,
         codec: probe['codec'] as String? ?? '',
         sampleRate: (probe['sampleRate'] as num?)?.toInt(),
       ),
       durationMs: (probe['durationMs'] as num?)?.toInt(),
       coverPath: probe['coverPath'] as String?,
     );
+    file.stored = stored;
+    return stored;
   }
 
   /// Adds or replaces a song's instrumental from a staged file.
   Future<void> setInstrumental(int songId, StagedFile file) async {
-    final stored = await storeMedia(file, MediaKind.instrumental);
-    await library.setMedia(songId, stored.file);
-    await discardStaging();
+    try {
+      final stored = await storeMedia(file, MediaKind.instrumental);
+      await library.setMedia(songId, stored.file);
+    } finally {
+      await discardStaging();
+    }
   }
 
   /// Rebuilds `song_search` rows (all songs when [ids] is null).
@@ -281,16 +349,21 @@ class ImportService {
   /// Deletes songs and the media files no other song uses.
   Future<void> deleteSongs(List<Song> songs) async {
     await library.deleteSongs([for (final song in songs) song.id]);
+    final used = await library.usedShas([
+      for (final song in songs)
+        for (final file in song.media) file.sha256,
+    ]);
     for (final song in songs) {
       for (final file in song.media) {
-        if (!await library.isShaUsed(file.sha256)) {
-          final media = File(file.path);
-          if (media.existsSync()) await media.delete();
-        }
+        if (!used.contains(file.sha256)) await _deleteFile(file.path);
       }
-      final cover = song.coverPath;
-      if (cover != null && File(cover).existsSync()) await File(cover).delete();
+      if (song.coverPath case final cover?) await _deleteFile(cover);
     }
+  }
+
+  static Future<void> _deleteFile(String path) async {
+    final file = File(path);
+    if (file.existsSync()) await file.delete();
   }
 }
 

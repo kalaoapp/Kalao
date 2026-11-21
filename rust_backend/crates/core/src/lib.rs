@@ -3,8 +3,6 @@
 //! Shared backend logic, independent of mobile bindings and UI runtimes.
 
 pub mod annotate;
-pub mod app_version;
-pub mod cancellation;
 pub mod json;
 pub mod lyrics;
 pub mod matching;

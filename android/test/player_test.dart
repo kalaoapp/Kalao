@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalao/app.dart';
 import 'package:kalao/models/lyrics.dart';
+import 'package:kalao/models/player_state.dart';
 import 'package:kalao/models/song.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/player_provider.dart';
@@ -14,6 +16,7 @@ import 'package:kalao/screens/now_playing_screen.dart';
 import 'package:kalao/services/history_database.dart';
 import 'package:kalao/services/karaoke_deck.dart';
 import 'package:kalao/services/library_database.dart';
+import 'package:kalao/services/playback_handler.dart';
 import 'package:kalao/widgets/ruby_lyric_line.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -84,6 +87,79 @@ void main() {
   });
 
   test(
+    'deck interpolates from the instant the engine took its state',
+    () async {
+      var now = const Duration(seconds: 10);
+      final events = StreamController<Object?>();
+      final deck = KaraokeDeck(events: events.stream, now: () => now)..start();
+      // Taken 100 ms ago, delivered late: the position allows for the delay.
+      events.add({
+        'state': jsonEncode({'positionMs': 1000, 'playing': true}),
+        'atMicros': (now - const Duration(milliseconds: 100)).inMicroseconds,
+      });
+      await Future<void>.delayed(Duration.zero);
+      expect(deck.position, const Duration(milliseconds: 1100));
+      // A stamp from another clock (too old) falls back to the arrival time.
+      events.add({
+        'state': jsonEncode({'positionMs': 2000, 'playing': true}),
+        'atMicros': 5,
+      });
+      await Future<void>.delayed(Duration.zero);
+      expect(deck.position, const Duration(milliseconds: 2000));
+      now += const Duration(milliseconds: 50);
+      expect(deck.position, const Duration(milliseconds: 2050));
+      await deck.dispose();
+      await events.close();
+    },
+  );
+
+  test('the lock screen is updated on changes, not on every report', () async {
+    final handler = KalaoAudioHandler();
+    final published = <PlaybackState>[];
+    final subscription = handler.playbackState.listen(published.add);
+    final moon = Song(
+      id: 1,
+      title: 'Moon',
+      songKey: 'k',
+      addedAt: DateTime(2026),
+    );
+    const playing = EnginePlayerState(
+      songId: '1',
+      playing: true,
+      durationMs: 100000,
+    );
+    handler.publish(moon, playing);
+    for (var ms = 33; ms < 300; ms += 33) {
+      handler.publish(
+        moon,
+        EnginePlayerState(
+          songId: '1',
+          playing: true,
+          durationMs: 100000,
+          positionMs: ms,
+        ),
+      );
+    }
+    handler.publish(
+      moon,
+      const EnginePlayerState(songId: '1', durationMs: 100000, positionMs: 300),
+    );
+    handler.publish(
+      moon,
+      const EnginePlayerState(
+        songId: '1',
+        durationMs: 100000,
+        positionMs: 60000,
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+    // The initial state (BehaviorSubject seed), play, pause, the seek.
+    expect(published, hasLength(4));
+    expect(published.last.updatePosition, const Duration(minutes: 1));
+    await subscription.cancel();
+  });
+
+  test(
     'playing a song loads both tracks, switches, keeps history and session',
     () async {
       final preferences = await SharedPreferences.getInstance();
@@ -101,7 +177,7 @@ void main() {
       final load = backend.calls.firstWhere(
         (call) => call.method == 'playerLoad',
       );
-      final args = (load.arguments as Map).cast<String, Object?>();
+      final args = FakeBackend.argsOf(load);
       expect(args['startMs'], 12000);
       expect([
         for (final source in args['sources'] as List) (source as Map)['kind'],

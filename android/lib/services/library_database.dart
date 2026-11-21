@@ -209,9 +209,19 @@ class LibraryDatabase {
     return rows.isEmpty ? null : rows.first['song_id'] as int;
   }
 
-  /// Whether any song still uses the file with [sha256] (before deleting it).
-  Future<bool> isShaUsed(String sha256) async =>
-      (await songIdForSha(sha256)) != null;
+  /// Which of [shas] some song still uses (before deleting their files).
+  Future<Set<String>> usedShas(Iterable<String> shas) async {
+    final distinct = shas.toSet().toList();
+    if (distinct.isEmpty) return const {};
+    final rows = await db.query(
+      'media_file',
+      distinct: true,
+      columns: ['sha256'],
+      where: 'sha256 IN (${List.filled(distinct.length, '?').join(',')})',
+      whereArgs: distinct,
+    );
+    return {for (final row in rows) row['sha256']! as String};
+  }
 
   Future<void> deleteSongs(List<int> ids) async {
     if (ids.isEmpty) return;

@@ -12,9 +12,10 @@ mod source;
 pub use decoder::{Probe, probe_file};
 pub use mixer::{Layout, soft_limit};
 
-use mixer::Mixer;
+use mixer::{LoopPlay, Mixer, Preroll};
 use serde_json::{Value, json};
 use source::Source;
+use std::f32::consts::FRAC_PI_2;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError, Weak};
@@ -36,6 +37,11 @@ const MAX_KEY_SEMITONES: f32 = 6.0;
 const NO_LOOP: u64 = u64::MAX;
 /// The shortest loop: shorter ones would mostly be the seam.
 const MIN_LOOP_MS: u64 = 250;
+/// How much of the loop start is decoded ahead, so the seam plays while
+/// the decoders seek back.
+const PREROLL_MS: u64 = 500;
+/// The crossfade from the loop end into the loop start.
+const SEAM_FADE_MS: u64 = 10;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AudioError {
@@ -79,7 +85,10 @@ impl SourceKind {
 
 struct Session {
     song_id: String,
-    sources: Vec<Source>,
+    /// Shared with the loop thread, which repositions them outside the
+    /// session lock so the callback keeps playing the preroll.
+    sources: Vec<Arc<Source>>,
+    paths: Vec<PathBuf>,
     kinds: Vec<SourceKind>,
     layout: Layout,
     duration_ms: Option<u64>,
@@ -111,8 +120,17 @@ struct Shared {
     stretch_latency: AtomicU64,
     /// Loop start and end in ms (start in the high half), or `NO_LOOP`.
     loop_range: AtomicU64,
-    /// The callback reached the loop end; the loop thread seeks to the start.
+    /// The callback reached the loop end; the loop thread seeks to the start
+    /// or, with a preroll, to `loop_resume_ms`.
     loop_pending: AtomicBool,
+    /// Where the decoders resume after the preroll, or `NO_LOOP`.
+    loop_resume_ms: AtomicU64,
+    /// Bumped by every seek, load, stop and loop change, so a resume
+    /// requested before one of them is dropped.
+    loop_generation: AtomicU32,
+    loop_resume_generation: AtomicU32,
+    /// Serialises seeks with the loop thread's resume.
+    seek_lock: Mutex<()>,
     loop_thread: OnceLock<std::thread::Thread>,
     output_rate: AtomicU32,
     latency_us: AtomicU64,
@@ -142,10 +160,14 @@ impl Shared {
         out.fill(0.0);
         let channels = channels.max(1);
         let frames = out.len() / channels;
+        // Without a preroll the seam is silent until the loop thread has
+        // sought back to the loop start.
+        let silent_seam = self.loop_pending.load(Ordering::Acquire)
+            && self.loop_resume_ms.load(Ordering::Acquire) == NO_LOOP;
         if frames == 0
             || !self.playing.load(Ordering::Acquire)
             || self.seeking.load(Ordering::Acquire)
-            || self.loop_pending.load(Ordering::Acquire)
+            || silent_seam
         {
             return;
         }
@@ -158,16 +180,7 @@ impl Shared {
         let Ok(mut mixer) = self.mixer.try_lock() else {
             return;
         };
-        // At most three sources; a fixed array keeps the callback allocation-free.
-        let mut consumers: [Option<MutexGuard<'_, ringbuf::HeapCons<f32>>>; 3] = [None, None, None];
-        for (slot, source) in consumers.iter_mut().zip(&session.sources) {
-            let Ok(consumer) = source.shared.consumer.try_lock() else {
-                return;
-            };
-            *slot = Some(consumer);
-        }
         let count = session.sources.len().min(3);
-        let consumers = &mut consumers[..count];
 
         // With the stretcher engaged, `frames` of output consume
         // `frames × tempo` source frames; the fraction carries over.
@@ -183,35 +196,78 @@ impl Shared {
             frames
         };
 
-        use ringbuf::traits::{Consumer, Observer};
-        let mut all_done = true;
-        for (consumer, source) in consumers.iter().zip(&session.sources) {
-            let consumer = consumer.as_ref().expect("filled above");
-            let available = consumer.occupied_len() / 2;
-            let ended = source.shared.ended.load(Ordering::Acquire);
-            if available < frames && !ended {
-                // Underrun: wait for every source so they stay sample-aligned.
-                self.buffering.store(true, Ordering::Release);
-                return;
-            }
-            all_done &= ended && available == 0;
-        }
-        self.buffering.store(false, Ordering::Release);
-        if all_done {
-            self.playing.store(false, Ordering::Release);
-            self.completed.store(true, Ordering::Release);
+        let rate = u64::from(self.output_rate.load(Ordering::Acquire).max(1));
+        let range = self.loop_range.load(Ordering::Acquire);
+        let fade = (rate * SEAM_FADE_MS / 1000) as usize;
+        let block = Block::plan(
+            &mixer,
+            range,
+            rate,
+            fade,
+            frames,
+            count,
+            self.position.load(Ordering::Acquire) / 1000,
+        );
+        if block.ring_len > 0
+            && matches!(mixer.loop_play, LoopPlay::Preroll { .. })
+            && self.loop_pending.load(Ordering::Acquire)
+        {
+            // The preroll is used up before the decoders resumed after it.
+            self.buffering.store(true, Ordering::Release);
             return;
         }
+
+        use ringbuf::traits::{Consumer, Observer};
+        // At most three sources; a fixed array keeps the callback allocation-free.
+        let mut consumers: [Option<MutexGuard<'_, ringbuf::HeapCons<f32>>>; 3] = [None, None, None];
+        if block.ring_len > 0 {
+            for (slot, source) in consumers.iter_mut().zip(&session.sources) {
+                let Ok(consumer) = source.shared.consumer.try_lock() else {
+                    return;
+                };
+                *slot = Some(consumer);
+            }
+            let mut all_done = true;
+            for (consumer, source) in consumers.iter().zip(&session.sources) {
+                let consumer = consumer.as_ref().expect("filled above");
+                let available = consumer.occupied_len() / 2;
+                let ended = source.shared.ended.load(Ordering::Acquire);
+                if available < block.ring_len && !ended {
+                    // Underrun: wait for every source so they stay sample-aligned.
+                    self.buffering.store(true, Ordering::Release);
+                    return;
+                }
+                all_done &= ended && available == 0;
+            }
+            if all_done && block.pre_len == 0 {
+                self.buffering.store(false, Ordering::Release);
+                self.playing.store(false, Ordering::Release);
+                self.completed.store(true, Ordering::Release);
+                return;
+            }
+        }
+        self.buffering.store(false, Ordering::Release);
 
         self.apply_mix_targets(&mut mixer);
         if mixer.scratch.len() < count {
             mixer.scratch.resize_with(count, Vec::new);
         }
-        for (consumer, scratch) in consumers.iter_mut().zip(mixer.scratch.iter_mut()) {
-            let consumer = consumer.as_mut().expect("filled above");
-            scratch.resize(frames * 2, 0.0);
-            let read = consumer.pop_slice(&mut scratch[..frames * 2]);
-            scratch[read..].fill(0.0);
+        {
+            let Mixer {
+                scratch, preroll, ..
+            } = &mut *mixer;
+            for (index, scratch) in scratch.iter_mut().take(count).enumerate() {
+                scratch.resize(frames * 2, 0.0);
+                scratch[..frames * 2].fill(0.0);
+                if let Some(consumer) = consumers[index].as_mut() {
+                    let region =
+                        &mut scratch[block.ring_off * 2..(block.ring_off + block.ring_len) * 2];
+                    consumer.pop_slice(region);
+                }
+                if let Some(preroll) = preroll.as_ref().filter(|_| block.pre_len > 0) {
+                    block.blend_preroll(&preroll.buffers[index], fade, scratch);
+                }
+            }
         }
         let mut bus = std::mem::take(&mut mixer.bus);
         bus.resize(frames * 2, 0.0);
@@ -239,26 +295,57 @@ impl Shared {
             write_channels(&bus, out, channels);
         }
         mixer.bus = bus;
-        let position = self
-            .position
-            .fetch_add(frames as u64 * 1000, Ordering::AcqRel)
-            + frames as u64 * 1000;
-        let range = self.loop_range.load(Ordering::Acquire);
-        if range != NO_LOOP {
-            let rate = u64::from(self.output_rate.load(Ordering::Acquire).max(1));
-            if position / rate >= range & 0xffff_ffff {
-                // Decoders cannot be moved from here: hand over to the loop
-                // thread and stay silent until it has sought.
-                self.loop_pending.store(true, Ordering::Release);
-                if let Some(thread) = self.loop_thread.get() {
-                    thread.unpark();
-                }
-            }
+
+        let position = if let Some(offset) = block.seam_at {
+            // The block crossed into the loop start: song time jumps there.
+            let start_frame = (range >> 32) * rate / 1000;
+            let position = (start_frame + (frames - offset) as u64) * 1000;
+            self.position.store(position, Ordering::Release);
+            self.clock_epoch.fetch_add(1, Ordering::AcqRel);
+            position
+        } else {
+            self.position
+                .fetch_add(frames as u64 * 1000, Ordering::AcqRel)
+                + frames as u64 * 1000
+        };
+        let (preroll_frames, resume_ms) = mixer
+            .preroll
+            .as_ref()
+            .map_or((0, NO_LOOP), |preroll| (preroll.frames, preroll.resume_ms));
+        let next = block.next_play(mixer.loop_play, fade, preroll_frames);
+        if matches!(next, LoopPlay::Preroll { .. })
+            && !matches!(mixer.loop_play, LoopPlay::Preroll { .. })
+        {
+            // The fade is done and the rings hold the loop end: move the
+            // decoders to where the preroll stops.
+            self.loop_resume_generation.store(
+                self.loop_generation.load(Ordering::Acquire),
+                Ordering::Release,
+            );
+            self.loop_resume_ms.store(resume_ms, Ordering::Release);
+            self.request_loop_seek();
+        }
+        mixer.loop_play = next;
+
+        if range != NO_LOOP && !block.preroll && position / rate >= range & 0xffff_ffff {
+            // No preroll: hand over to the loop thread and stay silent until
+            // it has sought back.
+            self.loop_resume_ms.store(NO_LOOP, Ordering::Release);
+            self.request_loop_seek();
+        }
+    }
+
+    fn request_loop_seek(&self) {
+        self.loop_pending.store(true, Ordering::Release);
+        if let Some(thread) = self.loop_thread.get() {
+            thread.unpark();
         }
     }
 
     /// Moves every source to `ms` together.
     fn seek(&self, ms: u64) -> Result<(), AudioError> {
+        let _seeking = lock(&self.seek_lock);
+        self.loop_generation.fetch_add(1, Ordering::AcqRel);
         let session = lock(&self.session);
         let Some(current) = session.as_ref() else {
             return Err(AudioError::Invalid("nothing is loaded".into()));
@@ -277,8 +364,37 @@ impl Shared {
         self.clock_epoch.fetch_add(1, Ordering::AcqRel);
         self.stretch_generation.fetch_add(1, Ordering::AcqRel);
         self.completed.store(false, Ordering::Release);
+        lock(&self.mixer).loop_play = LoopPlay::Rings;
         self.seeking.store(false, Ordering::Release);
         result
+    }
+
+    /// Moves the decoders to `ms` without touching the position: the callback
+    /// is playing the preroll meanwhile. Dropped when a seek, load or loop
+    /// change came after the request.
+    fn resume_after_preroll(&self, ms: u64, generation: u32) {
+        let _seeking = lock(&self.seek_lock);
+        if self.loop_generation.load(Ordering::Acquire) != generation {
+            return;
+        }
+        let sources = lock(&self.session)
+            .as_ref()
+            .map(|session| session.sources.clone())
+            .unwrap_or_default();
+        for source in &sources {
+            let _ = source.seek(ms);
+        }
+    }
+
+    /// Forgets the preroll and the seam state; the old buffers are freed
+    /// here, not in the callback.
+    fn clear_preroll(&self) {
+        self.loop_generation.fetch_add(1, Ordering::AcqRel);
+        let mut mixer = lock(&self.mixer);
+        let old = mixer.preroll.take();
+        mixer.loop_play = LoopPlay::Rings;
+        drop(mixer);
+        drop(old);
     }
 
     /// Runs on the loop thread: seeks back to the loop start whenever the
@@ -290,11 +406,16 @@ impl Shared {
                 return;
             };
             if shared.loop_pending.load(Ordering::Acquire) {
+                let resume = shared.loop_resume_ms.load(Ordering::Acquire);
                 let range = shared.loop_range.load(Ordering::Acquire);
-                if range != NO_LOOP {
+                if resume != NO_LOOP {
+                    let generation = shared.loop_resume_generation.load(Ordering::Acquire);
+                    shared.resume_after_preroll(resume, generation);
+                } else if range != NO_LOOP {
                     let _ = shared.seek(range >> 32);
                 }
                 shared.loop_pending.store(false, Ordering::Release);
+                shared.loop_resume_ms.store(NO_LOOP, Ordering::Release);
             }
         }
     }
@@ -321,6 +442,121 @@ impl Shared {
 
     fn bump_mix(&self) {
         self.mix_generation.fetch_add(1, Ordering::AcqRel);
+    }
+}
+
+/// Where one callback block takes its source frames from: `ring_len` frames
+/// from the rings at `ring_off`, and `pre_len` preroll frames (from
+/// `pre_cursor`) at `pre_off`. Where both overlap, the first `fade` preroll
+/// frames crossfade over the ring's last frames before the loop end.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Block {
+    ring_off: usize,
+    ring_len: usize,
+    pre_off: usize,
+    pre_len: usize,
+    pre_cursor: usize,
+    /// The offset where this block crosses into the loop start.
+    seam_at: Option<usize>,
+    /// A preroll for the current loop is ready.
+    preroll: bool,
+}
+
+impl Block {
+    fn plan(
+        mixer: &Mixer,
+        range: u64,
+        rate: u64,
+        fade: usize,
+        frames: usize,
+        sources: usize,
+        position_frames: u64,
+    ) -> Self {
+        let mut block = Self {
+            ring_off: 0,
+            ring_len: frames,
+            pre_off: 0,
+            pre_len: 0,
+            pre_cursor: 0,
+            seam_at: None,
+            preroll: false,
+        };
+        let Some(preroll) = mixer.preroll.as_ref().filter(|preroll| {
+            range != NO_LOOP
+                && preroll.range == (range >> 32, range & 0xffff_ffff)
+                && preroll.buffers.len() == sources
+                && preroll.frames > fade
+        }) else {
+            return block;
+        };
+        block.preroll = true;
+        match mixer.loop_play {
+            LoopPlay::Rings => {
+                let seam = ((range & 0xffff_ffff) * rate / 1000).saturating_sub(fade as u64);
+                let offset = seam.saturating_sub(position_frames);
+                if offset < frames as u64 {
+                    let offset = offset as usize;
+                    block.seam_at = Some(offset);
+                    block.ring_len = frames.min(offset + fade);
+                    block.pre_off = offset;
+                    block.pre_len = (frames - offset).min(preroll.frames);
+                }
+            }
+            LoopPlay::Fading { done } => {
+                block.ring_len = frames.min(fade.saturating_sub(done));
+                block.pre_cursor = done;
+                block.pre_len = frames.min(preroll.frames - done);
+            }
+            LoopPlay::Preroll { cursor } => {
+                let from_preroll = frames.min(preroll.frames.saturating_sub(cursor));
+                block.pre_cursor = cursor;
+                block.pre_len = from_preroll;
+                block.ring_off = from_preroll;
+                block.ring_len = frames - from_preroll;
+            }
+        }
+        block
+    }
+
+    /// Writes this block's preroll frames of one source into `scratch`,
+    /// fading in over the ring frames already there during the fade.
+    fn blend_preroll(&self, preroll: &[f32], fade: usize, scratch: &mut [f32]) {
+        for index in 0..self.pre_len {
+            let at = self.pre_cursor + index;
+            let to = (self.pre_off + index) * 2;
+            let (left, right) = (preroll[at * 2], preroll[at * 2 + 1]);
+            if at < fade {
+                let t = (at as f32 + 0.5) / fade as f32 * FRAC_PI_2;
+                let (fade_out, fade_in) = (t.cos(), t.sin());
+                scratch[to] = scratch[to] * fade_out + left * fade_in;
+                scratch[to + 1] = scratch[to + 1] * fade_out + right * fade_in;
+            } else {
+                scratch[to] = left;
+                scratch[to + 1] = right;
+            }
+        }
+    }
+
+    /// The loop state after this block.
+    fn next_play(&self, play: LoopPlay, fade: usize, preroll_frames: usize) -> LoopPlay {
+        let faded = |played: usize| {
+            if played >= fade {
+                LoopPlay::Preroll { cursor: played }
+            } else {
+                LoopPlay::Fading { done: played }
+            }
+        };
+        match play {
+            LoopPlay::Rings if self.seam_at.is_some() => faded(self.pre_len),
+            LoopPlay::Rings => LoopPlay::Rings,
+            LoopPlay::Fading { done } if preroll_frames > 0 => faded(done + self.pre_len),
+            LoopPlay::Preroll { cursor } if cursor + self.pre_len < preroll_frames => {
+                LoopPlay::Preroll {
+                    cursor: cursor + self.pre_len,
+                }
+            }
+            _ => LoopPlay::Rings,
+        }
     }
 }
 
@@ -377,6 +613,10 @@ impl Engine {
             stretch_latency: AtomicU64::new(0),
             loop_range: AtomicU64::new(NO_LOOP),
             loop_pending: AtomicBool::new(false),
+            loop_resume_ms: AtomicU64::new(NO_LOOP),
+            loop_generation: AtomicU32::new(0),
+            loop_resume_generation: AtomicU32::new(0),
+            seek_lock: Mutex::new(()),
             loop_thread: OnceLock::new(),
             output_rate: AtomicU32::new(rate),
             latency_us: AtomicU64::new(0),
@@ -442,7 +682,7 @@ impl Engine {
             }
             let probe = probe_file(path)?;
             duration_ms = duration_ms.max(probe.duration_ms);
-            let source = Source::open(*kind, path, rate, RING_FRAMES)?;
+            let source = Arc::new(Source::open(*kind, path, rate, RING_FRAMES)?);
             if start_ms > 0 {
                 source.seek(start_ms)?;
             }
@@ -455,6 +695,7 @@ impl Engine {
             song_id: song_id.to_owned(),
             layout: Layout::for_kinds(&kinds),
             sources: opened,
+            paths: sources.iter().map(|(_, path)| path.clone()).collect(),
             kinds,
             duration_ms,
         };
@@ -467,6 +708,7 @@ impl Engine {
         // A loop belongs to the song it was set on.
         self.shared.loop_range.store(NO_LOOP, Ordering::Release);
         self.shared.loop_pending.store(false, Ordering::Release);
+        self.shared.clear_preroll();
         self.shared
             .stretch_generation
             .fetch_add(1, Ordering::AcqRel);
@@ -503,6 +745,7 @@ impl Engine {
         self.shared.completed.store(false, Ordering::Release);
         self.shared.loop_range.store(NO_LOOP, Ordering::Release);
         self.shared.loop_pending.store(false, Ordering::Release);
+        self.shared.clear_preroll();
         drop(previous);
     }
 
@@ -627,11 +870,13 @@ impl Engine {
     }
 
     /// Repeats `start_ms..end_ms` (song time) until cleared with `None`.
-    /// Reaching the end seeks back to the start, with a short gap at the
-    /// seam while the decoders refill.
+    /// The loop start is decoded ahead (`PREROLL_MS`), so at the end the
+    /// output crossfades into it while the decoders seek back; without a
+    /// preroll (it failed to decode) the seam is a short gap.
     pub fn set_loop(&self, range: Option<(u64, u64)>) -> Result<(), AudioError> {
         let Some((start, end)) = range else {
             self.shared.loop_range.store(NO_LOOP, Ordering::Release);
+            self.shared.clear_preroll();
             return Ok(());
         };
         if end < start + MIN_LOOP_MS || end > u64::from(u32::MAX) {
@@ -647,10 +892,39 @@ impl Engine {
                 .map_err(|error| AudioError::Output(error.to_string()))?;
             let _ = self.shared.loop_thread.set(thread.thread().clone());
         }
-        self.shared
-            .loop_range
-            .store(start << 32 | end, Ordering::Release);
+        self.shared.clear_preroll();
+        let packed = start << 32 | end;
+        self.shared.loop_range.store(packed, Ordering::Release);
+        if let Some(preroll) = self.build_preroll(start, end) {
+            let mut mixer = lock(&self.shared.mixer);
+            if self.shared.loop_range.load(Ordering::Acquire) == packed {
+                mixer.preroll = Some(preroll);
+                mixer.loop_play = LoopPlay::Rings;
+            }
+        }
         Ok(())
+    }
+
+    /// Decodes the first part of `start..end` for every source, at the output
+    /// rate. `None` when nothing is loaded or a source cannot be decoded.
+    fn build_preroll(&self, start: u64, end: u64) -> Option<Preroll> {
+        let paths = lock(&self.shared.session).as_ref()?.paths.clone();
+        let rate = self.shared.output_rate.load(Ordering::Acquire);
+        // Leave room before the end for the rings to play the fade.
+        let length_ms = PREROLL_MS.min((end - start).saturating_sub(2 * SEAM_FADE_MS));
+        let frames = (u64::from(rate) * length_ms / 1000) as usize;
+        let mut buffers = Vec::with_capacity(paths.len());
+        for path in &paths {
+            let mut buffer = source::decode_range(path, start, frames, rate).ok()?;
+            buffer.resize(frames * 2, 0.0);
+            buffers.push(buffer);
+        }
+        Some(Preroll {
+            range: (start, end),
+            frames,
+            buffers,
+            resume_ms: start + length_ms,
+        })
     }
 
     /// Song time of the frames handed to the output so far.

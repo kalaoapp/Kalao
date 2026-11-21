@@ -2,8 +2,12 @@
 // LGPL-3.0-only. Modified for Kalao.
 //! LRC lyrics parsing and helpers: timestamps, synced and plain text, and usability checks.
 
-use super::{LyricsLine, LyricsResponse};
+use super::LyricsLine;
+#[cfg(test)]
+use super::LyricsResponse;
+#[cfg(test)]
 use crate::matching::lowercase;
+#[cfg(test)]
 use base64::{Engine, engine::general_purpose::STANDARD};
 use regex::Regex;
 use std::sync::LazyLock;
@@ -156,7 +160,9 @@ pub fn timestamp(ms: i64) -> String {
     format!("[{}]", timestamp_inline(ms))
 }
 
-pub fn extract_source(raw: &str) -> String {
+/// The source credited in a `[by:…]` tag (tests check exports with it).
+#[cfg(test)]
+pub(crate) fn extract_source(raw: &str) -> String {
     for line in raw.split('\n').map(str::trim) {
         if !lowercase(line).starts_with("[by:") {
             continue;
@@ -171,7 +177,10 @@ pub fn extract_source(raw: &str) -> String {
     String::new()
 }
 
-pub fn with_metadata(lyrics: &LyricsResponse, track: &str, artist: &str) -> String {
+/// A provider response as LRC with `[ti:]`/`[ar:]`/`[by:]` tags. Only tests
+/// use it until lyric extensions save fetched lyrics (M5).
+#[cfg(test)]
+pub(crate) fn with_metadata(lyrics: &LyricsResponse, track: &str, artist: &str) -> String {
     if lyrics.lines().is_empty() {
         return String::new();
     }

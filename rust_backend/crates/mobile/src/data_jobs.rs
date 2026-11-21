@@ -30,16 +30,20 @@ pub fn run_native_data_job(
 }
 
 fn check_lease(lease: Option<&RequestLease>) -> Result<(), String> {
-    match lease.map(RequestLease::is_cancelled) {
-        Some(Ok(true)) => Err("data job cancelled".into()),
-        Some(Err(error)) => Err(error.to_string()),
-        _ => Ok(()),
+    if lease.is_some_and(RequestLease::is_cancelled) {
+        return Err("data job cancelled".into());
     }
+    Ok(())
 }
 
-fn execute(request: &Value, check: &dyn Fn() -> Result<(), String>) -> Result<Value, String> {
+/// Called between steps of a job; an error means it was cancelled.
+pub(crate) type Check<'a> = &'a dyn Fn() -> Result<(), String>;
+
+fn execute(request: &Value, check: Check) -> Result<Value, String> {
     match string(request, "operation")? {
         "hash_file" => Ok(json!({"sha256": hash_file(string(request, "path")?, check)?})),
+        "importInspect" => crate::media::inspect(request, check),
+        "importStore" => crate::media::store(request, check),
         "rebuildSearchKeys" => rebuild_search_keys(request, check),
         "backupWrite" => crate::native_backup::write(request, check),
         "backupInspect" => crate::native_backup::inspect(request, check),

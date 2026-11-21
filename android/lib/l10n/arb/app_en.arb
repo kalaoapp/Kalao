@@ -417,6 +417,14 @@
   "restorePlays": "Plays",
   "restoreMedia": "Audio files",
   "restoreMediaNone": "Not included",
+  "restoreMissingMedia": "{count, plural, =1{1 song has no audio in this backup or on this device; it will not play until you import its audio again.} other{{count} songs have no audio in this backup or on this device; they will not play until you import their audio again.}}",
+  "@restoreMissingMedia": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "restoreSize": "Size",
   "restoreMerge": "Merge",
   "restoreMergeSubtitle": "Add what is new. Songs already here are matched; newer lyrics win and your own readings are kept.",

@@ -92,6 +92,31 @@ impl Ramp {
     }
 }
 
+/// The first part of the loop, decoded ahead per source, so the seam plays
+/// from memory while the decoders seek back (IMPLEMENTATION.md §2 "Loops").
+pub struct Preroll {
+    /// The loop it belongs to, in ms.
+    pub range: (u64, u64),
+    /// Frames in every buffer.
+    pub frames: usize,
+    /// Interleaved stereo at the output rate, one per source in load order.
+    pub buffers: Vec<Vec<f32>>,
+    /// Where the decoders resume once the preroll is played, in ms.
+    pub resume_ms: u64,
+}
+
+/// Where the callback takes source frames from around a loop seam.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LoopPlay {
+    /// The decoders' rings, as outside loops.
+    Rings,
+    /// Crossfading the ring's last frames before the loop end into the
+    /// preroll; `done` frames of the fade have played.
+    Fading { done: usize },
+    /// The preroll after the fade; `cursor` frames of it have played.
+    Preroll { cursor: usize },
+}
+
 pub struct Mixer {
     pub vocal: Ramp,
     pub backing: Ramp,
@@ -113,6 +138,9 @@ pub struct Mixer {
     pub stretched: Vec<f32>,
     /// Fraction of a source frame owed to the next callback at tempo ≠ 1.
     pub carry: f64,
+    /// Installed and cleared by the control thread, never in the callback.
+    pub preroll: Option<Preroll>,
+    pub loop_play: LoopPlay,
 }
 
 impl Mixer {
@@ -130,6 +158,8 @@ impl Mixer {
             stretch_key: 0,
             stretched: Vec::new(),
             carry: 0.0,
+            preroll: None,
+            loop_play: LoopPlay::Rings,
         }
     }
 

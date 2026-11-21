@@ -293,6 +293,7 @@
   "restorePlays": "再生履歴",
   "restoreMedia": "音声ファイル",
   "restoreMediaNone": "含まれていません",
+  "restoreMissingMedia": "{count, plural, other{{count} 曲は音声がこのバックアップにもこの端末にもありません。音声を取り込み直すまで再生できません。}}",
   "restoreSize": "サイズ",
   "restoreMerge": "統合",
   "restoreMergeSubtitle": "新しいものを追加します。既存の曲は照合され、新しい歌詞が優先され、手動で直した読みは残ります。",

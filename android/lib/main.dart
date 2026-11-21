@@ -17,6 +17,7 @@ import 'package:kalao/providers/player_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
 import 'package:kalao/providers/update_provider.dart';
 import 'package:kalao/services/app_crash_service.dart';
+import 'package:kalao/services/app_state_database.dart';
 import 'package:kalao/services/app_storage.dart';
 import 'package:kalao/services/external_links.dart';
 import 'package:kalao/services/history_database.dart';

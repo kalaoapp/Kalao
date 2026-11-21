@@ -6,21 +6,19 @@ import 'package:kalao/providers/player_provider.dart';
 import 'package:kalao/theme/app_tokens.dart';
 import 'package:kalao/widgets/song_widgets.dart';
 
-/// The current song above the navigation bar; tap opens Now playing.
+/// The current song above the navigation bar; tap opens Now playing. Only
+/// the progress bar follows the position.
 class MiniPlayer extends ConsumerWidget {
   const MiniPlayer({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final now = ref.watch(playerProvider);
-    final song = now.song;
+    final (song, playing) = ref.watch(
+      playerProvider.select((now) => (now.song, now.engine.playing)),
+    );
     if (song == null) return const SizedBox.shrink();
     final theme = Theme.of(context);
-    final duration = now.engine.duration ?? song.duration;
-    final progress = duration == null || duration.inMilliseconds == 0
-        ? 0.0
-        : (now.engine.positionMs / duration.inMilliseconds).clamp(0.0, 1.0);
     return Material(
       color: theme.colorScheme.surfaceContainerHigh,
       child: InkWell(
@@ -28,7 +26,7 @@ class MiniPlayer extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            LinearProgressIndicator(value: progress, minHeight: 2),
+            const _MiniProgress(),
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppTokens.space12,
@@ -59,12 +57,8 @@ class MiniPlayer extends ConsumerWidget {
                     ),
                   ),
                   IconButton(
-                    tooltip: now.engine.playing
-                        ? l10n.playerPause
-                        : l10n.playerPlay,
-                    icon: Icon(
-                      now.engine.playing ? Icons.pause : Icons.play_arrow,
-                    ),
+                    tooltip: playing ? l10n.playerPause : l10n.playerPlay,
+                    icon: Icon(playing ? Icons.pause : Icons.play_arrow),
                     onPressed: () =>
                         ref.read(playerProvider.notifier).togglePlay(),
                   ),
@@ -75,5 +69,24 @@ class MiniPlayer extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+class _MiniProgress extends ConsumerWidget {
+  const _MiniProgress();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final progress = ref.watch(
+      playerProvider.select((now) {
+        final duration = now.engine.duration ?? now.song?.duration;
+        if (duration == null || duration.inMilliseconds == 0) return 0.0;
+        return (now.engine.positionMs / duration.inMilliseconds).clamp(
+          0.0,
+          1.0,
+        );
+      }),
+    );
+    return LinearProgressIndicator(value: progress, minHeight: 2);
   }
 }

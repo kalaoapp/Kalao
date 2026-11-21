@@ -6,21 +6,20 @@ The toolchain is pinned in `rust-toolchain.toml` (Rust 1.99.1 with rustfmt and c
 
 ## Crate map
 
-Dependencies point downward: `core`, `network` and `audio` depend on no other workspace crate.
+Dependencies point downward: `core` and `audio` depend on no other workspace crate.
 
 | Crate | Package | Depends on | Contents |
 | --- | --- | --- | --- |
-| `crates/core` | `kalao-core` | none | JSON helpers, text, XML depth check, matching, cancellation, lyrics (`lrc`, TTML payloads, matching, and `doc`: LRC/eLRC/TTML/plain import, LRC/eLRC export), section markers, annotation (pinyin, furigana and romaji, Chinese variants), search keys, import pairing |
-| `crates/audio` | `kalao-audio` | none | Playback engine (Symphonia → rubato → ring buffers → mixer → Signalsmith Stretch → cpal/AAudio), loops, clock, `probe_file` |
-| `crates/network` | `kalao-network` | none | Copied unchanged from Mornye (HTTP client, cookies, DNS, TLS roots, request policy); no crate uses it until extensions (M5) |
-| `crates/mobile` | `kalao-mobile` | core, audio | UniFFI API: `invoke_application` method table, `run_native_data_job`, cancellation registry, log buffer, backup archive codec |
+| `crates/core` | `kalao-core` | none | JSON helpers, text, XML depth check, matching, lyrics (`lrc`, TTML payloads, and `doc`: LRC/eLRC/TTML/plain import, LRC/eLRC export), section markers, annotation (pinyin, furigana and romaji, Chinese variants), search keys, import pairing |
+| `crates/audio` | `kalao-audio` | none | Playback engine (Symphonia → rubato → ring buffers → mixer → Signalsmith Stretch → cpal/AAudio), gapless loops, clock, `probe_file` |
+| `crates/mobile` | `kalao-mobile` | core, audio | UniFFI API: `invoke_application` method table, `run_native_data_job`, cancellation registry, player state publisher (`player_subscribe`), log buffer, backup archive codec |
 | `crates/bindgen` | `kalao-bindgen` | `uniffi` CLI | Generates the Kotlin bindings |
 
-Later milestones add `extensions`, `providers`, `stems`, `party`, `desktop` and `ext-cli` (see `android/docs/ARCHITECTURE.md`).
+Later milestones add `network` (Mornye's, copied unchanged), `extensions`, `providers`, `stems`, `party`, `desktop` and `ext-cli` (see `android/docs/ARCHITECTURE.md`).
 
 ## Method table
 
-`kalao-mobile/src/backend.rs` holds every method name Kotlin forwards (`METHODS`, kept sorted; a test checks each name is dispatched). Arguments arrive as a JSON object; replies are JSON text. Methods: lifecycle (`initBackend`, `getBackendInfo`, `getLogs`, `clearLogs`, `setLoggingEnabled`), player (`playerLoad` … `playerState`, including key, tempo and loops), import (`probeAudio`, `pairImportFiles`), lyrics (`parseLyrics`, `exportLyrics`, `detectSections`, `annotateLyrics`, `convertChinese`). Native data jobs (`run_native_data_job`): `hash_file`, `rebuildSearchKeys`, `backupWrite`, `backupInspect`.
+`kalao-mobile/src/backend.rs` holds every method name Kotlin forwards (`METHODS`, kept sorted; a test checks each name is dispatched). Arguments arrive as JSON text (an object); replies are JSON text. Methods: lifecycle (`initBackend`, `getBackendInfo`, `getLogs`, `clearLogs`, `setLoggingEnabled`), player (`playerLoad` … `playerState`, including key, tempo and loops), import (`probeAudio`, `pairImportFiles`), lyrics (`parseLyrics`, `exportLyrics`, `detectSections`, `annotateLyrics`, `convertChinese`). Native data jobs (`run_native_data_job`): `hash_file`, `importInspect`, `importStore`, `rebuildSearchKeys`, `backupWrite`, `backupInspect`.
 
 ## Building
 

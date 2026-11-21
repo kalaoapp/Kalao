@@ -100,8 +100,9 @@ class DocumentEntry {
 }
 
 /// The only caller of the backend. Every method is a typed wrapper over one
-/// channel call; JSON replies are decoded off the UI isolate when large, and
-/// `__json_file` spill replies are read and deleted here.
+/// channel call. Rust methods take their arguments as JSON text (Kotlin passes
+/// it through unchanged) and reply with JSON text, decoded off the UI isolate
+/// when large; `__json_file` spill replies are read and deleted here.
 class PlatformBridge {
   PlatformBridge._();
 
@@ -121,10 +122,10 @@ class PlatformBridge {
     ], (json['next_index'] as num?)?.toInt() ?? sinceIndex);
   }
 
-  static Future<void> clearLogs() => _invoke('clearLogs');
+  static Future<void> clearLogs() => _rust('clearLogs');
 
   static Future<void> setLoggingEnabled(bool enabled) =>
-      _invoke('setLoggingEnabled', {'enabled': enabled});
+      _rust('setLoggingEnabled', {'enabled': enabled});
 
   // Player (Rust engine)
 
@@ -230,12 +231,7 @@ class PlatformBridge {
     List<String> texts,
     String to,
   ) async {
-    final decoded = await decodeJsonResult(
-      await backendChannel.invokeMethod<Object?>('convertChinese', {
-        'texts': texts,
-        'to': to,
-      }),
-    );
+    final decoded = await _rust('convertChinese', {'texts': texts, 'to': to});
     if (decoded is! List) {
       throw FormatException(
         'Expected list result from convertChinese, got ${decoded.runtimeType}',
@@ -244,12 +240,65 @@ class PlatformBridge {
     return [for (final text in decoded) text as String];
   }
 
-  /// Layers `{lineIndex, kind, origin, segments}` for [lines] ([layers] from
-  /// `pinyin`, `furigana`, `romaji`).
-  static Future<List<Map<String, dynamic>>> annotateLyrics(
-    List<String> lines, {
-    List<String> layers = const ['pinyin'],
-  }) => _requiredList('annotateLyrics', {'lines': lines, 'layers': layers});
+  /// The lyrics' language (`ja` when a line has kana, `zh` when one has Han
+  /// characters, else null) and layers `{lineIndex, kind, origin, segments}`
+  /// for [lines]: [layers] (`pinyin`, `furigana`, `romaji`), or when null
+  /// the ones for that language.
+  static Future<({String? sourceLang, List<Map<String, dynamic>> layers})>
+  annotateLyrics(List<String> lines, {List<String>? layers}) async {
+    final reply = await _requiredMap('annotateLyrics', {
+      'lines': lines,
+      'layers': ?layers,
+    });
+    return (
+      sourceLang: reply['sourceLang'] as String?,
+      layers: [
+        for (final layer in reply['layers'] as List<dynamic>? ?? const [])
+          (layer as Map).cast<String, dynamic>(),
+      ],
+    );
+  }
+
+  /// Hashes and probes a staged import file in one job (`probe` is null when
+  /// Symphonia cannot read it).
+  static Future<({String sha256, Map<String, dynamic>? probe})> importInspect(
+    String path, {
+    required String requestId,
+  }) async {
+    final reply = await runNativeDataJob({
+      'operation': 'importInspect',
+      'path': path,
+    }, requestId: requestId);
+    return (
+      sha256: reply['sha256'] as String,
+      probe: (reply['probe'] as Map?)?.cast<String, dynamic>(),
+    );
+  }
+
+  /// Moves a staged file to `mediaDir/<sha256>.<ext>` (or drops it when the
+  /// library already has that file) and probes it there, writing its cover
+  /// to [coverBase] + extension when given.
+  static Future<({String path, int bytes, Map<String, dynamic>? probe})>
+  importStore({
+    required String path,
+    required String sha256,
+    required String mediaDir,
+    String? coverBase,
+    required String requestId,
+  }) async {
+    final reply = await runNativeDataJob({
+      'operation': 'importStore',
+      'path': path,
+      'sha256': sha256,
+      'mediaDir': mediaDir,
+      'coverBase': ?coverBase,
+    }, requestId: requestId);
+    return (
+      path: reply['path'] as String,
+      bytes: (reply['bytes'] as num?)?.toInt() ?? 0,
+      probe: (reply['probe'] as Map?)?.cast<String, dynamic>(),
+    );
+  }
 
   static Future<String> hashFile(
     String path, {
@@ -452,24 +501,27 @@ class PlatformBridge {
 
   // Decoding
 
-  static Future<void> _invoke(String method, [Map<String, Object?>? args]) =>
-      backendChannel.invokeMethod<Object?>(method, args);
+  /// Calls a Rust method with [args] as JSON text; the decoded reply.
+  static Future<Object?> _rust(
+    String method, [
+    Map<String, Object?>? args,
+  ]) async => decodeJsonResult(
+    await backendChannel.invokeMethod<Object?>(
+      method,
+      jsonEncode(args ?? const <String, Object?>{}),
+    ),
+  );
 
   static Future<Map<String, dynamic>> _requiredMap(
     String method, [
     Map<String, Object?>? args,
-  ]) async {
-    final result = await backendChannel.invokeMethod<Object?>(method, args);
-    return _asMap(await decodeJsonResult(result), method);
-  }
+  ]) async => _asMap(await _rust(method, args), method);
 
   static Future<List<Map<String, dynamic>>> _requiredList(
     String method, [
     Map<String, Object?>? args,
   ]) async {
-    final decoded = await decodeJsonResult(
-      await backendChannel.invokeMethod<Object?>(method, args),
-    );
+    final decoded = await _rust(method, args);
     if (decoded is! List) {
       throw FormatException(
         'Expected list result from $method, got ${decoded.runtimeType}',

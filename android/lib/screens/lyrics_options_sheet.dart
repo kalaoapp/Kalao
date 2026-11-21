@@ -80,13 +80,15 @@ class LyricsOptionsSheet extends ConsumerWidget {
     final hasLyrics = song != null && lyrics != null && !lyrics.isEmpty;
     final timed = hasLyrics && lyrics.timed;
     final player = ref.read(playerProvider.notifier);
-    final engine = ref.watch(playerProvider.select((now) => now.engine));
+    final (key, tempo) = ref.watch(
+      playerProvider.select((now) => (now.engine.key, now.engine.tempo)),
+    );
     final japanese = hasLyrics && lyrics.sourceLang == 'ja';
     final chinese = hasLyrics && lyrics.sourceLang == 'zh';
     final translated =
         hasLyrics && lyrics.lines.any((line) => line.translation != null);
-    final semitones = engine.key.round();
-    final percent = (engine.tempo * 100).round();
+    final semitones = key.round();
+    final percent = (tempo * 100).round();
     return SafeArea(
       child: SingleChildScrollView(
         child: Column(

@@ -479,7 +479,7 @@ void main() {
           startsWith('[ti:Moon]\n[ar:Teresa]\n[00:01.00]<00:01.00>你'),
         );
         final call = backend.calls.lastWhere((c) => c.method == 'exportLyrics');
-        final args = (call.arguments as Map).cast<String, Object?>();
+        final args = FakeBackend.argsOf(call);
         expect(args['format'], 'elrc');
         expect((args['doc']! as Map)['timed'], isTrue);
       },

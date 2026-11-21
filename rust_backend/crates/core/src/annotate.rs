@@ -17,6 +17,28 @@ pub struct RubySegment {
     pub reading: String,
 }
 
+/// The language the reading layers are generated for: `ja` when any line
+/// has kana (furigana and romaji), else `zh` when any has Han characters
+/// (pinyin), else none.
+pub fn source_language<S: AsRef<str>>(lines: &[S]) -> Option<&'static str> {
+    if lines.iter().any(|line| japanese::has_kana(line.as_ref())) {
+        Some("ja")
+    } else if lines.iter().any(|line| line.as_ref().chars().any(is_han)) {
+        Some("zh")
+    } else {
+        None
+    }
+}
+
+/// The layers generated for `language`.
+pub fn layers_for(language: Option<&str>) -> &'static [&'static str] {
+    match language {
+        Some("ja") => &["furigana", "romaji"],
+        Some("zh") => &["pinyin"],
+        _ => &[],
+    }
+}
+
 /// Whether `ch` is a Han ideograph (CJK Unified, Extension A–F, compatibility).
 pub fn is_han(ch: char) -> bool {
     matches!(ch as u32,

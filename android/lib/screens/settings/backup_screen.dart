@@ -10,6 +10,7 @@ import 'package:kalao/models/settings.dart';
 import 'package:kalao/providers/backup_provider.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
+import 'package:kalao/services/backup_runs.dart';
 import 'package:kalao/services/backup_service.dart';
 import 'package:kalao/services/platform_bridge.dart';
 import 'package:kalao/services/poc_import_service.dart';
@@ -409,6 +410,16 @@ class _RestorePreviewSheetState extends State<RestorePreviewSheet> {
                 leading: Icon(icon),
                 title: Text(label),
                 trailing: Text(value),
+              ),
+            if (preview.missingMedia > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: AppTokens.space8),
+                child: Text(
+                  l10n.restoreMissingMedia(preview.missingMedia),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
               ),
             const SizedBox(height: AppTokens.space8),
             RadioGroup<RestoreMode>(

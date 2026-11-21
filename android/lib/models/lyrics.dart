@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 
 /// Reading layers over lyric text (DATA_MODEL.md §1).
-enum LyricLayerKind { pinyin, furigana, romaji, traditional, simplified }
+/// The Chinese variant is applied for display, not stored as a layer
+/// (`LyricLine.variantText`).
+enum LyricLayerKind { pinyin, furigana, romaji }
 
 /// Who produced a layer. `human` layers are never regenerated.
 enum LayerOrigin { auto, human, translator }
@@ -69,6 +71,7 @@ class LyricWord {
     'timeMs': time.inMilliseconds,
     if (end != null) 'endMs': end!.inMilliseconds,
     'text': text,
+    'start': start,
   };
 
   @override
@@ -101,13 +104,19 @@ class LyricLine {
 
   factory LyricLine.fromJson(Map<String, dynamic> json) {
     final text = json['text'] as String? ?? '';
-    // Words are found in the text in order; one that is not there is dropped.
+    // `parseLyrics` gives each word's offset. Documents saved before it did
+    // find the words in the text in order; one that is not there is dropped.
     final words = <LyricWord>[];
     var cursor = 0;
     for (final item in json['words'] as List<dynamic>? ?? const []) {
       final word = (item as Map).cast<String, dynamic>();
       final wordText = word['text'] as String? ?? '';
-      final start = wordText.isEmpty ? -1 : text.indexOf(wordText, cursor);
+      final given = (word['start'] as num?)?.toInt();
+      final start = wordText.isEmpty
+          ? -1
+          : given != null && text.startsWith(wordText, given)
+          ? given
+          : text.indexOf(wordText, cursor);
       if (start < 0) continue;
       cursor = start + wordText.length;
       words.add(
@@ -235,13 +244,6 @@ class LyricDocument {
 
   bool get isEmpty => lines.isEmpty;
 
-  /// Whether any line contains Han characters (pinyin applies).
-  bool get hasHan => lines.any((line) => containsHan(line.text));
-
-  /// Whether any line has kana, which makes the lyrics Japanese (furigana
-  /// and romaji apply, not pinyin).
-  bool get hasKana => lines.any((line) => containsKana(line.text));
-
   bool get hasWordTiming => lines.any((line) => line.words.isNotEmpty);
 
   Map<String, dynamic> toJson() => {
@@ -287,17 +289,9 @@ class LyricDocument {
         high = mid - 1;
       }
     }
-    while (found > 0 && lines[found].isBacking) {
+    while (found >= 0 && lines[found].isBacking) {
       found--;
     }
     return found < 0 ? null : found;
   }
 }
-
-final _han = RegExp(r'[㐀-䶿一-鿿豈-﫿]');
-
-bool containsHan(String text) => _han.hasMatch(text);
-
-final _kana = RegExp(r'[\u3041-\u309f\u30a1-\u30fa]');
-
-bool containsKana(String text) => _kana.hasMatch(text);

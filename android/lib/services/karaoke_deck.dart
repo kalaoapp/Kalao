@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' show Timeline;
 
 import 'package:flutter/services.dart';
 import 'package:kalao/models/player_state.dart';
@@ -9,27 +10,28 @@ import 'package:kalao/utils/logger.dart';
 const _log = AppLogger('Deck');
 
 /// The playback deck over the Rust engine (IMPLEMENTATION.md §2): commands go
-/// through [PlatformBridge]; state arrives on `player_position_stream` at
-/// 30 Hz while playing, and [position] interpolates between events with a
-/// local clock so lyrics move smoothly at 60 fps.
-///
-/// Mornye's `music_player_service.dart` drives several deck types; Kalao has
-/// one engine, so this class is the deck and the player service talks to it
-/// directly.
+/// through [PlatformBridge]; the engine publishes its state on
+/// `player_position_stream` at 30 Hz while playing, stamped with the
+/// CLOCK_MONOTONIC instant it was taken, and [position] interpolates from
+/// that instant so lyrics move smoothly at 60 fps and channel delays do not
+/// shift them.
 class KaraokeDeck {
-  /// [now] is a monotonic clock (tests pass a simulated one).
+  /// [now] is the monotonic clock events are stamped with (tests pass a
+  /// simulated one).
   KaraokeDeck({Stream<Object?>? events, Duration Function()? now})
     : _events =
           events ??
           const EventChannel(
             'com.brinsley.kalao/player_position_stream',
           ).receiveBroadcastStream(),
-      _now = now ?? _stopwatchClock();
+      _now = now ?? _monotonicClock;
 
-  static Duration Function() _stopwatchClock() {
-    final stopwatch = Stopwatch()..start();
-    return () => stopwatch.elapsed;
-  }
+  /// CLOCK_MONOTONIC, the clock Kotlin's `System.nanoTime()` reads on Android.
+  static Duration _monotonicClock() => Duration(microseconds: Timeline.now);
+
+  /// An event older than this (or from the future) means the clocks do not
+  /// match; its arrival time is used instead.
+  static const _maxEventAge = Duration(milliseconds: 250);
 
   final Stream<Object?> _events;
   final Duration Function() _now;
@@ -54,18 +56,29 @@ class KaraokeDeck {
 
   void start() {
     _subscription ??= _events.listen((event) {
-      if (event is String) {
-        _apply(
-          EnginePlayerState.fromJson(
-            (jsonDecode(event) as Map).cast<String, dynamic>(),
-          ),
-        );
-      }
+      // `{state, atMicros}` from the host; plain JSON text in tests.
+      final (json, at) = switch (event) {
+        {'state': final String state, 'atMicros': final int at} => (
+          state,
+          Duration(microseconds: at),
+        ),
+        final String state => (state, null),
+        _ => (null, null),
+      };
+      if (json == null) return;
+      _apply(
+        EnginePlayerState.fromJson(
+          (jsonDecode(json) as Map).cast<String, dynamic>(),
+        ),
+        at: at,
+      );
     }, onError: (Object error) => _log.w('Position stream error', error));
   }
 
-  void _apply(EnginePlayerState next) {
-    _stateAt = _now();
+  void _apply(EnginePlayerState next, {Duration? at}) {
+    final now = _now();
+    final age = at == null ? null : now - at;
+    _stateAt = age != null && !age.isNegative && age < _maxEventAge ? at! : now;
     if (next == _state) return;
     _state = next;
     _states.add(next);

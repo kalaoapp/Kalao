@@ -54,20 +54,7 @@ impl Source {
         ring_frames: usize,
     ) -> Result<Self, AudioError> {
         let decoder = Decoder::open(path)?;
-        let resampler = if decoder.sample_rate == output_rate {
-            None
-        } else {
-            Some(
-                FastFixedIn::new(
-                    f64::from(output_rate) / f64::from(decoder.sample_rate),
-                    1.0,
-                    PolynomialDegree::Cubic,
-                    RESAMPLE_CHUNK,
-                    2,
-                )
-                .map_err(|error| AudioError::Unsupported(error.to_string()))?,
-            )
-        };
+        let resampler = resampler(decoder.sample_rate, output_rate)?;
         let (producer, consumer) = HeapRb::<f32>::new(ring_frames * 2).split();
         let shared = Arc::new(SourceShared {
             consumer: Mutex::new(consumer),
@@ -134,6 +121,52 @@ impl Source {
             .try_lock()
             .map_or(0, |consumer| consumer.occupied_len() / 2)
     }
+}
+
+/// `frames` stereo frames of `path` from `start_ms`, at `output_rate`, decoded
+/// off the audio thread (the loop start, played while the decoders seek back).
+/// Shorter when the file ends first.
+pub fn decode_range(
+    path: &Path,
+    start_ms: u64,
+    frames: usize,
+    output_rate: u32,
+) -> Result<Vec<f32>, AudioError> {
+    let decoder = Decoder::open(path)?;
+    let resampler = resampler(decoder.sample_rate, output_rate)?;
+    let (producer, mut consumer) = HeapRb::<f32>::new(frames.max(1) * 2).split();
+    let mut worker = Worker {
+        decoder,
+        resampler,
+        producer,
+        input: Vec::new(),
+        pending: Vec::new(),
+        decoder_done: false,
+    };
+    if !matches!(worker.decoder.seek(start_ms), Ok(true)) {
+        return Ok(Vec::new());
+    }
+    while consumer.occupied_len() < frames * 2 && !worker.finished() {
+        worker.step()?;
+    }
+    let mut out = vec![0.0; consumer.occupied_len()];
+    consumer.pop_slice(&mut out);
+    Ok(out)
+}
+
+fn resampler(source_rate: u32, output_rate: u32) -> Result<Option<FastFixedIn<f32>>, AudioError> {
+    if source_rate == output_rate {
+        return Ok(None);
+    }
+    FastFixedIn::new(
+        f64::from(output_rate) / f64::from(source_rate),
+        1.0,
+        PolynomialDegree::Cubic,
+        RESAMPLE_CHUNK,
+        2,
+    )
+    .map(Some)
+    .map_err(|error| AudioError::Unsupported(error.to_string()))
 }
 
 impl Drop for Source {
