@@ -128,8 +128,10 @@ class FolderEntry {
   final int modified;
 }
 
-/// A document opened for reading: [path] (`/proc/self/fd/<n>`) opens like a
-/// file until [handle] is closed with [PlatformBridge.closeDocuments].
+/// A document opened for reading: Rust reads [path] (`/proc/self/fd/<n>`)
+/// until [handle] is closed with [PlatformBridge.closeDocuments]. Dart cannot
+/// open it again (ADR-018); it reads documents with
+/// [PlatformBridge.readDocument].
 typedef OpenedDocument = ({String path, int handle});
 
 /// The only caller of the backend. Every method is a typed wrapper over one
@@ -809,6 +811,16 @@ class PlatformBridge {
       return (path: path, handle: handle);
     }
     throw StateError('openDocument returned no descriptor for $uri');
+  }
+
+  /// The bytes of the small document [uri] (a lyrics file, 4 MiB at most).
+  static Future<Uint8List> readDocument(String uri) async {
+    final bytes = await backendChannel.invokeMethod<Uint8List>('readDocument', {
+      'uri': uri,
+    });
+    if (bytes == null)
+      throw StateError('readDocument returned nothing for $uri');
+    return bytes;
   }
 
   static Future<void> closeDocuments(List<int> handles) => handles.isEmpty

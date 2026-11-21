@@ -523,6 +523,16 @@ class FakeBackend {
           }
         }
         throw PlatformException(code: 'ERROR', message: 'No document $uri');
+      case 'readDocument':
+        final uri = args['uri'] as String;
+        for (final MapEntry(key: tree, value: files) in musicFolders.entries) {
+          for (final MapEntry(key: path, value: file) in files.entries) {
+            if (folderUri(tree, path) == uri && file.existsSync()) {
+              return file.readAsBytesSync();
+            }
+          }
+        }
+        throw PlatformException(code: 'ERROR', message: 'No document $uri');
       case 'closeDocuments':
         for (final handle in (args['handles'] as List).cast<int>()) {
           openDocuments.remove(handle);
