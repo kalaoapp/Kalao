@@ -10,6 +10,7 @@ import 'package:ffmpeg_kit_flutter_new_audio/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new_audio/return_code.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kalao/app.dart';
 import 'package:kalao/providers/library_provider.dart';
@@ -26,6 +27,7 @@ import 'package:kalao/services/library_database.dart';
 import 'package:kalao/services/platform_bridge.dart';
 import 'package:kalao/services/playback_handler.dart';
 import 'package:kalao/utils/logger.dart';
+import 'package:kalao/widgets/player_orientation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -33,6 +35,8 @@ const _log = AppLogger('App');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Portrait everywhere but the player (`AnyOrientation`).
+  await SystemChrome.setPreferredOrientations(appOrientations);
 
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
