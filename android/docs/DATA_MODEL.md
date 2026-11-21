@@ -39,18 +39,17 @@ Annotation layers per line:
 
 | Table | Main columns | Notes |
 | --- | --- | --- |
-| `song` | id, title, artist, album, language, duration_ms, isrc, cover_path, origin (`local`/`extension`), ext_ref, song_key, added_at, last_mode | `song_key` = ISRC, or normalised title + artist + rounded duration; matches songs across backups |
-| `media_file` | id, song_id, kind (`original`/`instrumental`/`vocals`), path, sha256, bytes, codec, sample_rate, source (`import`/`extension`/`folder`/`stems_local`/`stems_remote`), pinned | Imported files live in `media/<sha256>.<ext>`, stems in `stems/<sha256>/`. `folder` files are music-folder documents: `path` is the document URI and `sha256` is empty |
+| `song` | id, title, artist, album, language, duration_ms, isrc, cover_path, origin (`local`/`extension`), ext_ref, song_key, added_at, last_mode; v4: album_artist, track_no, disc_no, year, genre, composer | `song_key` = ISRC, or normalised title + artist + rounded duration; matches songs across backups |
+| `media_file` | id, song_id, kind (`original`/`instrumental`/`vocals`), path, sha256, bytes, codec, sample_rate, source (`import`/`extension`/`folder`/`stems_local`/`stems_remote`), pinned; v4: available (0 while a folder file is gone or offline), decodable (0 for a folder file converted on first play) | Imported files live in `media/<sha256>.<ext>`, stems in `stems/<sha256>/`. `folder` files are music-folder documents: `path` is the document URI and `sha256` is empty |
 | `lyric_doc` | song_id, version, json, source_kind, updated_at | Latest version is current; older versions kept (last 5) for undo |
 | `lyric_annotation` | song_id, doc_version, line_index, kind, json, origin | |
 | `song_search` | song_id, key_kind (`title`/`artist`/`pinyin`/`initials`/`romaji`), key | Rebuilt by the `rebuildSearchKeys` job |
 | `favorite` | song_id, created_at | Library v2 |
 | `backup_run` | id, started_at, finished_at, target (`folder`/`file`), bytes, status, error | Library v2; backup log |
-| `library_folder` | id, tree_uri (unique), name, added_at, scanned_at, error (`access` when the folder could not be read) | Library v3; music folders (FEATURES 6.8) |
-| `folder_file` | uri (PK), folder_id, dir, name, role (`original`/`instrumental`/`lyrics`/`skipped`), song_id (null once the song is deleted), bytes, modified, error (`format`/`unreadable` for skipped files) | Library v3; what the scans have seen, for change detection |
-| *Library v4 (planned, M5B)* | `song` + album_artist, track_no, disc_no, year, genre, composer; `media_file` + available (0 when the folder file is gone or offline); `folder_file` + scan_version; `library_folder` + state (`online`/`offline`/`access`), auto-scan due time in settings | MORNYE_REUSE.md §7; folder songs are kept while unavailable and relinked by `song_key` |
-| `playlist`, `playlist_item` *(planned, M5B)* | playlist: id, name, created_at, updated_at; item: playlist_id, position, song_id | Local playlists; backups carry them, restore merges by name |
-| `album_artwork` *(planned, M5B)* | album_key, state (`found`/`none`/`removed`), cover_path, checked_at | Find Missing Artwork memory |
+| `library_folder` | id, tree_uri (unique), name, added_at, scanned_at, error (`access` when the folder could not be read, `offline` when its storage was not mounted) | Library v3; music folders (FEATURES 6.8) |
+| `folder_file` | uri (PK), folder_id, dir, name, role (`original`/`instrumental`/`lyrics`/`skipped`), song_id (null once the song is deleted), bytes, modified, error (`format`/`unreadable` for skipped files); v4: scan_version (the reader that recorded it) | Library v3; what the scans have seen, for change detection |
+| `playlist`, `playlist_item` | playlist: id, name, created_at, updated_at; item: id, playlist_id, position, song_id | Library v4; local playlists (FEATURES 6.14); backups carry them, Merge joins by name |
+| `album_artwork` | album_key (`name|artist` in lower case), state (`found`/`none`/`removed`), checked_at | Library v4; what Find Missing Artwork found or the user removed |
 | `melody` *(planned, M7)* | sha256, path, frames, created_at | Reference pitch track for scoring |
 | `stem_job` *(planned, M6)* | id, song_id, sha256, mode (`local`/`remote`), model, status, progress, remote_job_id, error, created_at | Mirror of Rust job state for UI; checkpoints are Rust files |
 
@@ -79,6 +78,8 @@ Songs added from an extension have `origin = extension` and `ext_ref` (`{extensi
 | `backups/`, `backup_work/` | `backup_service.dart` | Safety backups before a Replace (newest three), scratch space for export and restore |
 | `flutter_secure_storage` | Dart (`secure_storage_options.dart`) | Extension `secret` settings (`ext:<id>:<key>`); later the stem API key, install ID and MyMemory contact email |
 | `extensions/` | `kalao-extensions` | `registry.json` (enabled, plain settings, priority, repositories), `<id>/package.kalaoext`, `<id>/storage.json`, `repositories/` (last indexes). Cookies stay in memory |
+| `converted/` | `library_folder_service.dart` | FLAC copies of music-folder files the engine cannot decode, made on first play (newest 1 GiB kept; never backed up) |
+| `folder_scratch/` | `library_folder_service.dart` | Lyrics files copied from a music folder while a scan reads them |
 | `stream_cache/` | `kalao-mobile` stream | Streamed extension audio: `<key>.part` while it downloads, `<key>.data` when finished (newest 1 GiB kept) |
 | `models/` *(M6)* | `kalao-stems` | User-installed ONNX models (verified by SHA-256), plus partial downloads |
 | `stems/<sha256>/` *(M6)* | `kalao-stems` | `vocals.flac`, `instrumental.flac`, `job.json` checkpoints |
