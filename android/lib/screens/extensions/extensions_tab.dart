@@ -1,6 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:kalao/constants/app_info.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/models/extension.dart';
@@ -109,16 +110,18 @@ class ExtensionsTab extends ConsumerWidget {
                       .read(settingsProvider.notifier)
                       .setAutoFetchLyrics,
                 ),
-                SwitchListTile(
-                  secondary: const Icon(Icons.developer_mode_outlined),
-                  title: Text(l10n.extensionDeveloperMode),
-                  subtitle: Text(l10n.extensionDeveloperModeBody),
-                  value: settings.extensionDeveloperMode,
-                  onChanged: ref
-                      .read(settingsProvider.notifier)
-                      .setExtensionDeveloperMode,
-                ),
-                if (settings.extensionDeveloperMode)
+                if (AppInfo.developerModeAvailable)
+                  SwitchListTile(
+                    secondary: const Icon(Icons.developer_mode_outlined),
+                    title: Text(l10n.extensionDeveloperMode),
+                    subtitle: Text(l10n.extensionDeveloperModeBody),
+                    value: settings.extensionDeveloperMode,
+                    onChanged: ref
+                        .read(settingsProvider.notifier)
+                        .setExtensionDeveloperMode,
+                  ),
+                if (AppInfo.developerModeAvailable &&
+                    settings.extensionDeveloperMode)
                   ListTile(
                     leading: const Icon(Icons.folder_open_outlined),
                     title: Text(l10n.extensionLoadFolder),
