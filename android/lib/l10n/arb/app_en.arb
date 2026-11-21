@@ -886,5 +886,15 @@
         "type": "int"
       }
     }
-  }
+  },
+  "extensionPrioritySubtitle": "Which extension is asked first",
+  "settingsRepositoriesCount": "{count, plural, =0{None added} =1{1 repository} other{{count} repositories}}",
+  "@settingsRepositoriesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsExtensionsSubtitle": "Install from a file, order, repositories and options"
 }

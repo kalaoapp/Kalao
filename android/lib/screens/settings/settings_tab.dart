@@ -68,6 +68,18 @@ class SettingsTab extends ConsumerWidget {
             ],
           ),
           SettingsGroup(
+            title: l10n.navExtensions,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.extension_outlined),
+                title: Text(l10n.navExtensions),
+                subtitle: Text(l10n.settingsExtensionsSubtitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/settings/extensions'),
+              ),
+            ],
+          ),
+          SettingsGroup(
             title: l10n.settingsData,
             children: [
               ListTile(

@@ -454,5 +454,8 @@
   "foldersSkipFormat": "无法原地播放的格式",
   "foldersSkipUnreadable": "无法读取",
   "foldersOverlap": "此文件夹与音乐文件夹 {name} 重叠。",
-  "foldersScanResult": "新增 {added}，更新 {updated}，移除 {removed}"
+  "foldersScanResult": "新增 {added}，更新 {updated}，移除 {removed}",
+  "extensionPrioritySubtitle": "优先询问哪个扩展",
+  "settingsRepositoriesCount": "{count, plural, =0{尚未添加} other{{count} 个仓库}}",
+  "settingsExtensionsSubtitle": "从文件安装、顺序、仓库和选项"
 }
