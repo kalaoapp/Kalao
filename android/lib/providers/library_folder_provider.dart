@@ -5,10 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/l10n/supported_locales.dart';
 import 'package:kalao/models/library_folder.dart';
+import 'package:kalao/models/settings.dart';
+import 'package:kalao/models/song.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
 import 'package:kalao/services/library_folder_service.dart';
 import 'package:kalao/services/platform_bridge.dart';
+import 'package:kalao/utils/document_tree.dart';
 import 'package:kalao/utils/logger.dart';
 
 const _log = AppLogger('Folders');
@@ -91,9 +94,50 @@ class LibraryFoldersController extends Notifier<LibraryFoldersState> {
   Future<FolderScanResult?> pickAndAdd() async {
     final uri = await PlatformBridge.pickDocumentTree();
     if (uri == null) return null;
+    // Instrumentals written to the separate folder must not be scanned as
+    // songs.
+    final instrumentals = ref.read(settingsProvider).instrumentalFolderUri;
+    if (instrumentals != null && treesOverlap(instrumentals, uri)) {
+      throw FolderOverlapException(treeFolderName(instrumentals));
+    }
     final folder = await _service.addFolder(uri);
     await _reload();
     return scan(folder);
+  }
+
+  /// Adds the picked audio file [name] ([bytes]) as [song]'s instrumental.
+  /// A music-folder song's file is written where the user chose
+  /// ([LibraryFolderService.addInstrumental]); others go to app storage as
+  /// imports do. Throws [InstrumentalPlacementUndecided] for a folder song
+  /// before the user chose.
+  Future<void> addInstrumental(
+    Song song, {
+    required String name,
+    required Stream<List<int>> bytes,
+  }) async {
+    final services = ref.read(libraryServicesProvider);
+    final settings = ref.read(settingsProvider);
+    final inFolder = song.file(MediaKind.original)?.inFolder ?? false;
+    if (inFolder &&
+        settings.instrumentalPlacement == InstrumentalPlacement.undecided) {
+      throw const InstrumentalPlacementUndecided();
+    }
+    final staged = await services.importer.stage(name, bytes);
+    try {
+      if (inFolder) {
+        await _service.addInstrumental(
+          song,
+          path: staged.path,
+          name: name,
+          settings: settings,
+        );
+      } else {
+        await services.importer.setInstrumental(song.id, staged);
+      }
+    } finally {
+      await services.importer.discardStaging();
+    }
+    ref.read(libraryRevisionProvider.notifier).bump();
   }
 
   /// Removes [folder] and its songs; the files stay where they are.

@@ -886,5 +886,44 @@
         "type": "int"
       }
     }
+  },
+  "placementTitle": "Where should instrumentals go?",
+  "placementBody": "When Kalao adds an instrumental to a song from your music folders, it writes a new audio file. Choose once where those files go; Kalao follows your choice for every instrumental from now on.",
+  "placementChangeNote": "A change applies to instrumentals added from now on; files already written stay where they are.",
+  "placementSeparate": "In a separate folder",
+  "placementSeparateBody": "Your music folders stay as they are. Pick a folder outside them, for example Music/Kalao Instrumentals.",
+  "placementBeside": "Inside my music folder",
+  "placementBesideBody": "Next to each original, as “<song> (Instrumental)”. Other music apps will see these files too.",
+  "placementFolder": "Folder: {name}",
+  "@placementFolder": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "placementOverlap": "Pick a folder outside your music folders (this one is part of “{name}”).",
+  "@placementOverlap": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "placementContinue": "Continue",
+  "placementSetting": "New instrumentals",
+  "placementSettingBeside": "Next to the original",
+  "placementSettingUndecided": "Not chosen yet",
+  "songAddInstrumental": "Add instrumental",
+  "songReplaceInstrumental": "Replace instrumental",
+  "songInstrumentalBody": "Pick the backing track for this song",
+  "songInstrumentalAdded": "Instrumental added",
+  "songInstrumentalFailed": "Could not add the instrumental: {error}",
+  "@songInstrumentalFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
   }
 }
