@@ -6,6 +6,7 @@ import 'package:kalao/models/song.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/services/history_database.dart';
 import 'package:kalao/theme/app_tokens.dart';
+import 'package:kalao/widgets/app_page.dart';
 import 'package:kalao/widgets/empty_state.dart';
 import 'package:kalao/widgets/settings_group.dart';
 import 'package:kalao/widgets/song_widgets.dart';
@@ -33,8 +34,8 @@ class StatsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final view = ref.watch(playStatsProvider);
-    return Scaffold(
-      appBar: AppBar(title: Text(l10n.statsTitle)),
+    return AppScrollPage(
+      title: l10n.statsTitle,
       body: switch (view) {
         AsyncData(:final value) when value.stats.plays == 0 => EmptyState(
           icon: Icons.insights_outlined,

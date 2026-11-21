@@ -16,6 +16,7 @@ import 'package:kalao/services/custom_font_service.dart';
 import 'package:kalao/services/external_links.dart';
 import 'package:kalao/services/platform_bridge.dart';
 import 'package:kalao/theme/app_tokens.dart';
+import 'package:kalao/widgets/app_page.dart';
 import 'package:kalao/widgets/settings_group.dart';
 import 'package:kalao/widgets/update_dialog.dart';
 
@@ -36,141 +37,132 @@ class SettingsTab extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final settings = ref.watch(settingsProvider);
     final notifier = ref.read(settingsProvider.notifier);
-    return Scaffold(
-      appBar: AppBar(title: Text(l10n.settingsTitle)),
-      body: ListView(
-        padding: const EdgeInsets.only(bottom: AppTokens.space24),
-        children: [
-          SettingsGroup(
-            title: l10n.settingsAppearance,
-            children: [
-              const ThemeModeTile(),
-              SwitchListTile(
-                secondary: const Icon(Icons.palette_outlined),
-                title: Text(l10n.settingsDynamicColor),
-                subtitle: Text(l10n.settingsDynamicColorSubtitle),
-                value: settings.dynamicColor,
-                onChanged: notifier.setDynamicColor,
+    return AppPage.tab(
+      title: l10n.settingsTitle,
+      padding: const EdgeInsets.only(bottom: AppTokens.space24),
+      children: [
+        SettingsGroup(
+          title: l10n.settingsAppearance,
+          children: [
+            const ThemeModeTile(),
+            SettingsSwitchItem(
+              icon: Icons.palette_outlined,
+              title: l10n.settingsDynamicColor,
+              subtitle: l10n.settingsDynamicColorSubtitle,
+              value: settings.dynamicColor,
+              onChanged: notifier.setDynamicColor,
+            ),
+            const LanguageTile(),
+          ],
+        ),
+        SettingsGroup(
+          title: l10n.settingsLyrics,
+          children: [
+            const LyricsSizeTile(),
+            const _CustomFontTile(),
+            SettingsSwitchItem(
+              icon: Icons.translate,
+              title: l10n.lyricsShowPinyin,
+              value: settings.showPinyin,
+              onChanged: notifier.setShowPinyin,
+            ),
+          ],
+        ),
+        SettingsGroup(
+          title: l10n.navExtensions,
+          children: [
+            SettingsItem(
+              icon: Icons.extension_outlined,
+              title: l10n.navExtensions,
+              subtitle: l10n.settingsExtensionsSubtitle,
+              onTap: () => context.push('/settings/extensions'),
+            ),
+          ],
+        ),
+        SettingsGroup(
+          title: l10n.settingsData,
+          children: [
+            SettingsItem(
+              icon: Icons.file_upload_outlined,
+              title: l10n.importSettingsTitle,
+              subtitle: l10n.importSettingsSubtitle,
+              onTap: () => pickAndImport(context, ref),
+            ),
+            SettingsItem(
+              icon: Icons.folder_outlined,
+              title: l10n.foldersTitle,
+              subtitle: l10n.foldersSettingsSubtitle,
+              onTap: () => context.push('/settings/folders'),
+            ),
+            SettingsItem(
+              icon: Icons.backup_outlined,
+              title: l10n.backupTitle,
+              subtitle: l10n.backupSettingsSubtitle,
+              onTap: () => context.push('/settings/backup'),
+            ),
+          ],
+        ),
+        SettingsGroup(
+          title: l10n.settingsDiagnostics,
+          children: [
+            SettingsSwitchItem(
+              icon: Icons.bug_report_outlined,
+              title: l10n.settingsVerboseLogging,
+              subtitle: l10n.settingsVerboseLoggingSubtitle,
+              value: settings.verboseLogging,
+              onChanged: notifier.setVerboseLogging,
+            ),
+            SettingsItem(
+              icon: Icons.article_outlined,
+              title: l10n.settingsViewLogs,
+              onTap: () => context.push('/settings/logs'),
+            ),
+          ],
+        ),
+        SettingsGroup(
+          title: l10n.settingsAbout,
+          children: [
+            SettingsItem(
+              icon: Icons.info_outline,
+              title: l10n.aboutVersion,
+              subtitle: AppInfo.version,
+            ),
+            SettingsSwitchItem(
+              icon: Icons.update,
+              title: l10n.updateCheckSetting,
+              subtitle: l10n.updateCheckSettingSubtitle,
+              value: settings.checkUpdates,
+              onChanged: notifier.setCheckUpdates,
+            ),
+            const _CheckUpdateTile(),
+            const _EngineTile(),
+            SettingsItem(
+              icon: Icons.code,
+              title: l10n.aboutSource,
+              subtitle: AppInfo.githubUrl,
+              trailing: const Icon(Icons.open_in_new),
+              onTap: () => openExternalUrl(Uri.parse(AppInfo.githubUrl)),
+            ),
+            SettingsItem(
+              icon: Icons.privacy_tip_outlined,
+              title: l10n.privacyTitle,
+              onTap: () => context.push('/settings/privacy'),
+            ),
+            SettingsItem(
+              icon: Icons.gavel_outlined,
+              title: l10n.aboutLicenses,
+              subtitle: l10n.aboutCredits,
+              onTap: () => showLicensePage(
+                context: context,
+                applicationName: AppInfo.appName,
+                applicationVersion: AppInfo.version,
+                applicationLegalese:
+                    '${AppInfo.copyright}\n${AppInfo.license}\n\n${AppInfo.mornyeCredit}',
               ),
-              const LanguageTile(),
-            ],
-          ),
-          SettingsGroup(
-            title: l10n.settingsLyrics,
-            children: [
-              const LyricsSizeTile(),
-              const _CustomFontTile(),
-              SwitchListTile(
-                secondary: const Icon(Icons.translate),
-                title: Text(l10n.lyricsShowPinyin),
-                value: settings.showPinyin,
-                onChanged: notifier.setShowPinyin,
-              ),
-            ],
-          ),
-          SettingsGroup(
-            title: l10n.navExtensions,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.extension_outlined),
-                title: Text(l10n.navExtensions),
-                subtitle: Text(l10n.settingsExtensionsSubtitle),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push('/settings/extensions'),
-              ),
-            ],
-          ),
-          SettingsGroup(
-            title: l10n.settingsData,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.file_upload_outlined),
-                title: Text(l10n.importSettingsTitle),
-                subtitle: Text(l10n.importSettingsSubtitle),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => pickAndImport(context, ref),
-              ),
-              ListTile(
-                leading: const Icon(Icons.folder_outlined),
-                title: Text(l10n.foldersTitle),
-                subtitle: Text(l10n.foldersSettingsSubtitle),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push('/settings/folders'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.backup_outlined),
-                title: Text(l10n.backupTitle),
-                subtitle: Text(l10n.backupSettingsSubtitle),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push('/settings/backup'),
-              ),
-            ],
-          ),
-          SettingsGroup(
-            title: l10n.settingsDiagnostics,
-            children: [
-              SwitchListTile(
-                secondary: const Icon(Icons.bug_report_outlined),
-                title: Text(l10n.settingsVerboseLogging),
-                subtitle: Text(l10n.settingsVerboseLoggingSubtitle),
-                value: settings.verboseLogging,
-                onChanged: notifier.setVerboseLogging,
-              ),
-              ListTile(
-                leading: const Icon(Icons.article_outlined),
-                title: Text(l10n.settingsViewLogs),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push('/settings/logs'),
-              ),
-            ],
-          ),
-          SettingsGroup(
-            title: l10n.settingsAbout,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.info_outline),
-                title: Text(l10n.aboutVersion),
-                subtitle: const Text(AppInfo.version),
-              ),
-              SwitchListTile(
-                secondary: const Icon(Icons.update),
-                title: Text(l10n.updateCheckSetting),
-                subtitle: Text(l10n.updateCheckSettingSubtitle),
-                value: settings.checkUpdates,
-                onChanged: notifier.setCheckUpdates,
-              ),
-              const _CheckUpdateTile(),
-              const _EngineTile(),
-              ListTile(
-                leading: const Icon(Icons.code),
-                title: Text(l10n.aboutSource),
-                subtitle: const Text(AppInfo.githubUrl),
-                trailing: const Icon(Icons.open_in_new),
-                onTap: () => openExternalUrl(Uri.parse(AppInfo.githubUrl)),
-              ),
-              ListTile(
-                leading: const Icon(Icons.privacy_tip_outlined),
-                title: Text(l10n.privacyTitle),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push('/settings/privacy'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.gavel_outlined),
-                title: Text(l10n.aboutLicenses),
-                subtitle: Text(l10n.aboutCredits),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => showLicensePage(
-                  context: context,
-                  applicationName: AppInfo.appName,
-                  applicationVersion: AppInfo.version,
-                  applicationLegalese:
-                      '${AppInfo.copyright}\n${AppInfo.license}\n\n${AppInfo.mornyeCredit}',
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -255,9 +247,9 @@ class _CheckUpdateTileState extends ConsumerState<_CheckUpdateTile> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return ListTile(
-      leading: const Icon(Icons.system_update_outlined),
-      title: Text(l10n.updateCheckNow),
+    return SettingsItem(
+      icon: Icons.system_update_outlined,
+      title: l10n.updateCheckNow,
       trailing: _checking
           ? const SizedBox.square(
               dimension: 20,
@@ -282,10 +274,10 @@ class _EngineTile extends ConsumerWidget {
       AsyncLoading() => '…',
       _ => l10n.aboutEngineUnavailable,
     };
-    return ListTile(
-      leading: const Icon(Icons.memory),
-      title: Text(l10n.aboutEngine),
-      subtitle: Text(subtitle),
+    return SettingsItem(
+      icon: Icons.memory,
+      title: l10n.aboutEngine,
+      subtitle: subtitle,
     );
   }
 }
@@ -330,12 +322,12 @@ class LanguageTile extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final tag = ref.watch(settingsProvider.select((s) => s.localeTag));
     final current = localeForTag(tag);
-    return ListTile(
-      leading: const Icon(Icons.translate),
-      title: Text(l10n.settingsLanguage),
-      subtitle: Text(
-        current == null ? l10n.languageSystem : localeDisplayName(current),
-      ),
+    return SettingsItem(
+      icon: Icons.translate,
+      title: l10n.settingsLanguage,
+      subtitle: current == null
+          ? l10n.languageSystem
+          : localeDisplayName(current),
       onTap: () async {
         final picked = await showDialog<_LanguageChoice>(
           context: context,
