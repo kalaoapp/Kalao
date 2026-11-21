@@ -1,7 +1,8 @@
 // Music folders (FEATURES 6.8): list a folder the user granted with
-// Storage Access Framework and hand its files to Rust and Dart as
-// `/proc/self/fd/<n>` paths, so songs play in place without a copy. The
-// walk follows Mornye's SAF scan (`MainActivitySafScan.kt`): one
+// Storage Access Framework and hand its audio files to Rust as
+// `/proc/self/fd/<n>` paths (Rust duplicates them, never reopens them:
+// ADR-018), so songs play in place without a copy. Lyrics files are read
+// here (`readDocument`). The walk follows Mornye's SAF scan (`MainActivitySafScan.kt`): one
 // DocumentsContract query per directory, change detection by size and
 // modification time in Dart.
 package com.brinsley.kalao
@@ -14,6 +15,7 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.FileNotFoundException
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -102,8 +104,8 @@ private fun MainActivity.listTree(tree: Uri): List<Map<String, Any?>> {
 
 /**
  * Opens a document for reading and returns `{path, handle}`: `path` is
- * `/proc/self/fd/<handle>`, which Rust and Dart open like a file while the
- * descriptor stays open. Dart closes it with `closeDocuments`.
+ * `/proc/self/fd/<handle>`, which Rust duplicates (never reopens: ADR-018)
+ * while the descriptor stays open. Dart closes it with `closeDocuments`.
  */
 internal suspend fun MainActivity.handleOpenDocument(call: MethodCall, result: MethodChannel.Result) {
     val uri = Uri.parse(call.argument<String>("uri") ?: throw IllegalArgumentException("uri"))
@@ -113,6 +115,34 @@ internal suspend fun MainActivity.handleOpenDocument(call: MethodCall, result: M
         OpenDocuments.add(descriptor)
     }
     result.success(mapOf("path" to "/proc/self/fd/$fd", "handle" to fd))
+}
+
+/** Larger lyrics files are not lyrics. */
+private const val MAX_READ_DOCUMENT_BYTES = 4 * 1024 * 1024
+
+/**
+ * The bytes of a small document (a lyrics file), read through the content
+ * resolver. Dart cannot read a lent `/proc/self/fd` path: opening it again is
+ * refused for SAF documents (ADR-018).
+ */
+internal suspend fun MainActivity.handleReadDocument(call: MethodCall, result: MethodChannel.Result) {
+    val uri = Uri.parse(call.argument<String>("uri") ?: throw IllegalArgumentException("uri"))
+    val bytes = withContext(Dispatchers.IO) {
+        val stream = contentResolver.openInputStream(uri)
+            ?: throw FileNotFoundException("Cannot open $uri")
+        stream.use {
+            val out = ByteArrayOutputStream()
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val read = it.read(buffer)
+                if (read < 0) break
+                out.write(buffer, 0, read)
+                require(out.size() <= MAX_READ_DOCUMENT_BYTES) { "Document too large: $uri" }
+            }
+            out.toByteArray()
+        }
+    }
+    result.success(bytes)
 }
 
 internal fun handleCloseDocuments(call: MethodCall, result: MethodChannel.Result) {
