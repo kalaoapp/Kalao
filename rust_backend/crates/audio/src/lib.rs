@@ -19,7 +19,9 @@ use source::Source;
 use std::f32::consts::FRAC_PI_2;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError, Weak};
+use std::sync::{
+    Arc, Mutex, MutexGuard, OnceLock, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak,
+};
 use std::time::{Duration, Instant};
 
 /// Ring size per source: about 0.5 s at 48 kHz.
@@ -43,6 +45,11 @@ const MIN_LOOP_MS: u64 = 250;
 const PREROLL_MS: u64 = 500;
 /// The crossfade from the loop end into the loop start.
 const SEAM_FADE_MS: u64 = 10;
+/// `loop_request` when nothing is pending. Never a real request: a resume
+/// point is past the loop start, so it is never 0 ms.
+const NO_LOOP_REQUEST: u64 = 0;
+/// `loop_request`'s low half when there is no preroll: seek to the start.
+const LOOP_TO_START: u64 = 0xffff_ffff;
 
 /// Opens a byte stream the decoders read, e.g. a cached HTTP stream. Each
 /// call returns a fresh reader (one per decoder, plus loop prerolls).
@@ -118,7 +125,9 @@ struct Session {
 
 /// State shared by the control thread and the audio callback.
 struct Shared {
-    session: Mutex<Option<Session>>,
+    /// Written only by load and stop. Readers never block the callback's
+    /// `try_read`, so polling state or serving a loop seam drops no block.
+    session: RwLock<Option<Session>>,
     mixer: Mutex<Mixer>,
     playing: AtomicBool,
     seeking: AtomicBool,
@@ -142,15 +151,15 @@ struct Shared {
     stretch_latency: AtomicU64,
     /// Loop start and end in ms (start in the high half), or `NO_LOOP`.
     loop_range: AtomicU64,
-    /// The callback reached the loop end; the loop thread seeks to the start
-    /// or, with a preroll, to `loop_resume_ms`.
-    loop_pending: AtomicBool,
-    /// Where the decoders resume after the preroll, or `NO_LOOP`.
-    loop_resume_ms: AtomicU64,
-    /// Bumped by every seek, load, stop and loop change, so a resume
-    /// requested before one of them is dropped.
+    /// The callback reached the loop end: the loop generation of the request
+    /// in the high half, and in the low half where the decoders resume after
+    /// the preroll (ms) or `LOOP_TO_START` to seek back without one.
+    /// `NO_LOOP_REQUEST` when nothing is pending. One word, so the loop
+    /// thread clears only the request it served.
+    loop_request: AtomicU64,
+    /// Bumped by every loop request, seek, load, stop and loop change, so a
+    /// request made before a later one of them is dropped.
     loop_generation: AtomicU32,
-    loop_resume_generation: AtomicU32,
     /// Serialises seeks with the loop thread's resume.
     seek_lock: Mutex<()>,
     loop_thread: OnceLock<std::thread::Thread>,
@@ -165,6 +174,14 @@ struct Shared {
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+fn read<T>(lock: &RwLock<T>) -> RwLockReadGuard<'_, T> {
+    lock.read().unwrap_or_else(PoisonError::into_inner)
+}
+
+fn write<T>(lock: &RwLock<T>) -> RwLockWriteGuard<'_, T> {
+    lock.write().unwrap_or_else(PoisonError::into_inner)
 }
 
 fn store_f32(atomic: &AtomicU32, value: f32) {
@@ -184,8 +201,8 @@ impl Shared {
         let frames = out.len() / channels;
         // Without a preroll the seam is silent until the loop thread has
         // sought back to the loop start.
-        let silent_seam = self.loop_pending.load(Ordering::Acquire)
-            && self.loop_resume_ms.load(Ordering::Acquire) == NO_LOOP;
+        let request = self.loop_request.load(Ordering::Acquire);
+        let silent_seam = request != NO_LOOP_REQUEST && request & 0xffff_ffff == LOOP_TO_START;
         if frames == 0
             || !self.playing.load(Ordering::Acquire)
             || self.seeking.load(Ordering::Acquire)
@@ -193,7 +210,7 @@ impl Shared {
         {
             return;
         }
-        let Ok(session) = self.session.try_lock() else {
+        let Ok(session) = self.session.try_read() else {
             return;
         };
         let Some(session) = session.as_ref() else {
@@ -232,7 +249,7 @@ impl Shared {
         );
         if block.ring_len > 0
             && matches!(mixer.loop_play, LoopPlay::Preroll { .. })
-            && self.loop_pending.load(Ordering::Acquire)
+            && self.loop_request.load(Ordering::Acquire) != NO_LOOP_REQUEST
         {
             // The preroll is used up before the decoders resumed after it.
             self.buffering.store(true, Ordering::Release);
@@ -340,25 +357,26 @@ impl Shared {
         {
             // The fade is done and the rings hold the loop end: move the
             // decoders to where the preroll stops.
-            self.loop_resume_generation.store(
-                self.loop_generation.load(Ordering::Acquire),
-                Ordering::Release,
-            );
-            self.loop_resume_ms.store(resume_ms, Ordering::Release);
-            self.request_loop_seek();
+            self.request_loop_seek(resume_ms);
         }
         mixer.loop_play = next;
 
         if range != NO_LOOP && !block.preroll && position / rate >= range & 0xffff_ffff {
             // No preroll: hand over to the loop thread and stay silent until
             // it has sought back.
-            self.loop_resume_ms.store(NO_LOOP, Ordering::Release);
-            self.request_loop_seek();
+            self.request_loop_seek(LOOP_TO_START);
         }
     }
 
-    fn request_loop_seek(&self) {
-        self.loop_pending.store(true, Ordering::Release);
+    /// Asks the loop thread to move the decoders to `target` (ms, or
+    /// `LOOP_TO_START`). Called with the mixer locked.
+    fn request_loop_seek(&self, target: u64) {
+        let generation = self
+            .loop_generation
+            .fetch_add(1, Ordering::AcqRel)
+            .wrapping_add(1);
+        self.loop_request
+            .store(u64::from(generation) << 32 | target, Ordering::Release);
         if let Some(thread) = self.loop_thread.get() {
             thread.unpark();
         }
@@ -367,8 +385,13 @@ impl Shared {
     /// Moves every source to `ms` together.
     fn seek(&self, ms: u64) -> Result<(), AudioError> {
         let _seeking = lock(&self.seek_lock);
+        self.seek_locked(ms)
+    }
+
+    /// `seek` with `seek_lock` held.
+    fn seek_locked(&self, ms: u64) -> Result<(), AudioError> {
         self.loop_generation.fetch_add(1, Ordering::AcqRel);
-        let session = lock(&self.session);
+        let session = read(&self.session);
         let Some(current) = session.as_ref() else {
             return Err(AudioError::Invalid("nothing is loaded".into()));
         };
@@ -386,25 +409,38 @@ impl Shared {
         self.clock_epoch.fetch_add(1, Ordering::AcqRel);
         self.stretch_generation.fetch_add(1, Ordering::AcqRel);
         self.completed.store(false, Ordering::Release);
-        lock(&self.mixer).loop_play = LoopPlay::Rings;
+        let mut mixer = lock(&self.mixer);
+        mixer.loop_play = LoopPlay::Rings;
+        // A loop request made before the seek is obsolete.
+        self.loop_request.store(NO_LOOP_REQUEST, Ordering::Release);
+        drop(mixer);
         self.seeking.store(false, Ordering::Release);
         result
     }
 
-    /// Moves the decoders to `ms` without touching the position: the callback
-    /// is playing the preroll meanwhile. Dropped when a seek, load or loop
-    /// change came after the request.
-    fn resume_after_preroll(&self, ms: u64, generation: u32) {
+    /// Serves a loop request: seeks back to the loop start, or moves the
+    /// decoders to the resume point without touching the position (the
+    /// callback is playing the preroll meanwhile). Dropped when a seek, load,
+    /// loop change or newer request came after it.
+    fn serve_loop_request(&self, request: u64) {
         let _seeking = lock(&self.seek_lock);
-        if self.loop_generation.load(Ordering::Acquire) != generation {
+        if u64::from(self.loop_generation.load(Ordering::Acquire)) != request >> 32 {
             return;
         }
-        let sources = lock(&self.session)
+        let target = request & 0xffff_ffff;
+        if target == LOOP_TO_START {
+            let range = self.loop_range.load(Ordering::Acquire);
+            if range != NO_LOOP {
+                let _ = self.seek_locked(range >> 32);
+            }
+            return;
+        }
+        let sources = read(&self.session)
             .as_ref()
             .map(|session| session.sources.clone())
             .unwrap_or_default();
         for source in &sources {
-            let _ = source.seek(ms);
+            let _ = source.seek(target);
         }
     }
 
@@ -415,6 +451,7 @@ impl Shared {
         let mut mixer = lock(&self.mixer);
         let old = mixer.preroll.take();
         mixer.loop_play = LoopPlay::Rings;
+        self.loop_request.store(NO_LOOP_REQUEST, Ordering::Release);
         drop(mixer);
         drop(old);
     }
@@ -427,17 +464,16 @@ impl Shared {
             let Some(shared) = shared.upgrade() else {
                 return;
             };
-            if shared.loop_pending.load(Ordering::Acquire) {
-                let resume = shared.loop_resume_ms.load(Ordering::Acquire);
-                let range = shared.loop_range.load(Ordering::Acquire);
-                if resume != NO_LOOP {
-                    let generation = shared.loop_resume_generation.load(Ordering::Acquire);
-                    shared.resume_after_preroll(resume, generation);
-                } else if range != NO_LOOP {
-                    let _ = shared.seek(range >> 32);
-                }
-                shared.loop_pending.store(false, Ordering::Release);
-                shared.loop_resume_ms.store(NO_LOOP, Ordering::Release);
+            let request = shared.loop_request.load(Ordering::Acquire);
+            if request != NO_LOOP_REQUEST {
+                shared.serve_loop_request(request);
+                // A newer request stays pending; its unpark wakes us again.
+                let _ = shared.loop_request.compare_exchange(
+                    request,
+                    NO_LOOP_REQUEST,
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                );
             }
         }
     }
@@ -621,7 +657,7 @@ impl Engine {
             Output::Manual { sample_rate } => (sample_rate, true),
         };
         let shared = Arc::new(Shared {
-            session: Mutex::new(None),
+            session: RwLock::new(None),
             mixer: Mutex::new(Mixer::new(1.0, 1.0, 1.0)),
             playing: AtomicBool::new(false),
             seeking: AtomicBool::new(false),
@@ -634,10 +670,8 @@ impl Engine {
             stretch_generation: AtomicU32::new(0),
             stretch_latency: AtomicU64::new(0),
             loop_range: AtomicU64::new(NO_LOOP),
-            loop_pending: AtomicBool::new(false),
-            loop_resume_ms: AtomicU64::new(NO_LOOP),
+            loop_request: AtomicU64::new(NO_LOOP_REQUEST),
             loop_generation: AtomicU32::new(0),
-            loop_resume_generation: AtomicU32::new(0),
             seek_lock: Mutex::new(()),
             loop_thread: OnceLock::new(),
             output_rate: AtomicU32::new(rate),
@@ -725,7 +759,7 @@ impl Engine {
             kinds,
             duration_ms,
         };
-        let previous = lock(&self.shared.session).replace(session);
+        let previous = write(&self.shared.session).replace(session);
         self.shared
             .position
             .store(ms_to_position(start_ms, rate), Ordering::Release);
@@ -733,7 +767,6 @@ impl Engine {
         self.shared.completed.store(false, Ordering::Release);
         // A loop belongs to the song it was set on.
         self.shared.loop_range.store(NO_LOOP, Ordering::Release);
-        self.shared.loop_pending.store(false, Ordering::Release);
         self.shared.clear_preroll();
         self.shared
             .stretch_generation
@@ -745,7 +778,7 @@ impl Engine {
     }
 
     pub fn play(&self) -> Result<(), AudioError> {
-        if lock(&self.shared.session).is_none() {
+        if read(&self.shared.session).is_none() {
             return Err(AudioError::Invalid("nothing is loaded".into()));
         }
         if self.shared.completed.swap(false, Ordering::AcqRel) {
@@ -765,12 +798,11 @@ impl Engine {
 
     pub fn stop(&self) {
         self.pause();
-        let previous = lock(&self.shared.session).take();
+        let previous = write(&self.shared.session).take();
         self.shared.position.store(0, Ordering::Release);
         self.shared.clock_epoch.fetch_add(1, Ordering::AcqRel);
         self.shared.completed.store(false, Ordering::Release);
         self.shared.loop_range.store(NO_LOOP, Ordering::Release);
-        self.shared.loop_pending.store(false, Ordering::Release);
         self.shared.clear_preroll();
         drop(previous);
     }
@@ -934,7 +966,7 @@ impl Engine {
     /// Decodes the first part of `start..end` for every source, at the output
     /// rate. `None` when nothing is loaded or a source cannot be decoded.
     fn build_preroll(&self, start: u64, end: u64) -> Option<Preroll> {
-        let media = lock(&self.shared.session).as_ref()?.media.clone();
+        let media = read(&self.shared.session).as_ref()?.media.clone();
         let rate = self.shared.output_rate.load(Ordering::Acquire);
         // Leave room before the end for the rings to play the fade.
         let length_ms = PREROLL_MS.min((end - start).saturating_sub(2 * SEAM_FADE_MS));
@@ -991,7 +1023,7 @@ impl Engine {
 
     /// The state Dart reads for `playerState` and the position stream.
     pub fn state(&self) -> Value {
-        let session = lock(&self.shared.session);
+        let session = read(&self.shared.session);
         let errors: Vec<String> = session
             .as_ref()
             .map(|session| {
@@ -1035,7 +1067,7 @@ impl Engine {
 
     /// Frames buffered by the slowest source (tests wait on this to prefill).
     pub fn min_buffered_frames(&self) -> usize {
-        lock(&self.shared.session).as_ref().map_or(0, |session| {
+        read(&self.shared.session).as_ref().map_or(0, |session| {
             session
                 .sources
                 .iter()
