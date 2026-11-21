@@ -288,8 +288,9 @@ class ImportService {
         if (!(await library.usedShas([sha])).contains(sha)) {
           await _deleteFile(target);
         }
-        if (probe['coverPath'] case final String cover)
+        if (probe['coverPath'] case final String cover) {
           await _deleteFile(cover);
+        }
         throw ImportException(
           'Cannot convert ${file.name} to a playable format',
         );
