@@ -100,6 +100,38 @@ class DocumentEntry {
   final DateTime? modified;
 }
 
+/// A file under a music folder, as `listLibraryFolder` reports it. [dir] is
+/// its folder below the granted one (`''` at the top); [modified] is the
+/// provider's modification time in milliseconds (0 when unknown).
+@immutable
+class FolderEntry {
+  const FolderEntry({
+    required this.uri,
+    required this.name,
+    this.dir = '',
+    this.bytes = 0,
+    this.modified = 0,
+  });
+
+  factory FolderEntry.fromMap(Map<String, Object?> map) => FolderEntry(
+    uri: map['uri'] as String? ?? '',
+    name: map['name'] as String? ?? '',
+    dir: map['dir'] as String? ?? '',
+    bytes: (map['bytes'] as num?)?.toInt() ?? 0,
+    modified: (map['modified'] as num?)?.toInt() ?? 0,
+  );
+
+  final String uri;
+  final String name;
+  final String dir;
+  final int bytes;
+  final int modified;
+}
+
+/// A document opened for reading: [path] (`/proc/self/fd/<n>`) opens like a
+/// file until [handle] is closed with [PlatformBridge.closeDocuments].
+typedef OpenedDocument = ({String path, int handle});
+
 /// The only caller of the backend. Every method is a typed wrapper over one
 /// channel call. Rust methods take their arguments as JSON text (Kotlin passes
 /// it through unchanged) and reply with JSON text, decoded off the UI isolate
@@ -751,6 +783,43 @@ class PlatformBridge {
   static Future<bool> deleteDocument(String uri) async =>
       await backendChannel.invokeMethod<bool>('deleteDocument', {'uri': uri}) ??
       false;
+
+  /// Every audio and lyrics file under the music folder [treeUri], or null
+  /// when Kalao no longer has access to it.
+  static Future<List<FolderEntry>?> listLibraryFolder(String treeUri) async {
+    final rows = await backendChannel.invokeMethod<List<Object?>>(
+      'listLibraryFolder',
+      {'treeUri': treeUri},
+    );
+    return rows == null
+        ? null
+        : [
+            for (final row in rows)
+              FolderEntry.fromMap((row! as Map).cast<String, Object?>()),
+          ];
+  }
+
+  /// Opens the document [uri] for reading (a music-folder file).
+  static Future<OpenedDocument> openDocument(String uri) async {
+    final reply = await backendChannel.invokeMethod<Map<Object?, Object?>>(
+      'openDocument',
+      {'uri': uri},
+    );
+    if (reply case {'path': final String path, 'handle': final int handle}) {
+      return (path: path, handle: handle);
+    }
+    throw StateError('openDocument returned no descriptor for $uri');
+  }
+
+  static Future<void> closeDocuments(List<int> handles) => handles.isEmpty
+      ? Future.value()
+      : backendChannel.invokeMethod<void>('closeDocuments', {
+          'handles': handles,
+        });
+
+  /// Gives up the persisted access to [treeUri].
+  static Future<void> releaseDocumentTree(String treeUri) => backendChannel
+      .invokeMethod<void>('releaseDocumentTree', {'treeUri': treeUri});
 
   /// Files opened with or shared to Kalao since the last call, as cache
   /// copies `{path, name}` (the caller deletes them).

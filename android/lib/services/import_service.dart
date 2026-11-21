@@ -346,16 +346,22 @@ class ImportService {
     }
   }
 
-  /// Deletes songs and the media files no other song uses.
+  /// Deletes songs and the media files no other song uses. Music-folder
+  /// files are the user's own and are never deleted.
   Future<void> deleteSongs(List<Song> songs) async {
     await library.deleteSongs([for (final song in songs) song.id]);
-    final used = await library.usedShas([
+    final stored = [
       for (final song in songs)
-        for (final file in song.media) file.sha256,
+        for (final file in song.media)
+          if (!file.inFolder) file,
+    ];
+    final used = await library.usedShas([
+      for (final file in stored) file.sha256,
     ]);
     for (final song in songs) {
       for (final file in song.media) {
-        if (!used.contains(file.sha256)) await _deleteFile(file.path);
+        if (file.inFolder || used.contains(file.sha256)) continue;
+        await _deleteFile(file.path);
       }
       if (song.coverPath case final cover?) await _deleteFile(cover);
     }

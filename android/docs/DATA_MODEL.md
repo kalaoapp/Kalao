@@ -40,12 +40,14 @@ Annotation layers per line:
 | Table | Main columns | Notes |
 | --- | --- | --- |
 | `song` | id, title, artist, album, language, duration_ms, isrc, cover_path, origin (`local`/`extension`), ext_ref, song_key, added_at, last_mode | `song_key` = ISRC, or normalised title + artist + rounded duration; matches songs across backups |
-| `media_file` | id, song_id, kind (`original`/`instrumental`/`vocals`), path, sha256, bytes, codec, sample_rate, source (`import`/`extension`/`stems_local`/`stems_remote`), pinned | Imported files live in `media/<sha256>.<ext>`, stems in `stems/<sha256>/` |
+| `media_file` | id, song_id, kind (`original`/`instrumental`/`vocals`), path, sha256, bytes, codec, sample_rate, source (`import`/`extension`/`folder`/`stems_local`/`stems_remote`), pinned | Imported files live in `media/<sha256>.<ext>`, stems in `stems/<sha256>/`. `folder` files are music-folder documents: `path` is the document URI and `sha256` is empty |
 | `lyric_doc` | song_id, version, json, source_kind, updated_at | Latest version is current; older versions kept (last 5) for undo |
 | `lyric_annotation` | song_id, doc_version, line_index, kind, json, origin | |
 | `song_search` | song_id, key_kind (`title`/`artist`/`pinyin`/`initials`/`romaji`), key | Rebuilt by the `rebuildSearchKeys` job |
 | `favorite` | song_id, created_at | Library v2 |
 | `backup_run` | id, started_at, finished_at, target (`folder`/`file`), bytes, status, error | Library v2; backup log |
+| `library_folder` | id, tree_uri (unique), name, added_at, scanned_at, error (`access` when the folder could not be read) | Library v3; music folders (FEATURES 6.8) |
+| `folder_file` | uri (PK), folder_id, dir, name, role (`original`/`instrumental`/`lyrics`/`skipped`), song_id (null once the song is deleted), bytes, modified, error (`format`/`unreadable` for skipped files) | Library v3; what the scans have seen, for change detection |
 | `melody` *(planned, M7)* | sha256, path, frames, created_at | Reference pitch track for scoring |
 | `stem_job` *(planned, M6)* | id, song_id, sha256, mode (`local`/`remote`), model, status, progress, remote_job_id, error, created_at | Mirror of Rust job state for UI; checkpoints are Rust files |
 
@@ -70,7 +72,7 @@ Songs added from an extension have `origin = extension` and `ext_ref` (`{extensi
 | Store | Owner | Contents |
 | --- | --- | --- |
 | `shared_preferences` | `settings_provider` | `AppSettings` JSON (IMPLEMENTATION.md §16), `update_checked_at`; later the daily MyMemory character counter |
-| `media/`, `covers/` | `import_service.dart` | Imported audio as `<sha256>.<ext>`, embedded cover art |
+| `media/`, `covers/` | `import_service.dart` | Imported audio as `<sha256>.<ext>`, embedded cover art (music-folder songs keep their audio in the folder; only their covers are here) |
 | `backups/`, `backup_work/` | `backup_service.dart` | Safety backups before a Replace (newest three), scratch space for export and restore |
 | `flutter_secure_storage` | Dart (`secure_storage_options.dart`) | Extension `secret` settings (`ext:<id>:<key>`); later the stem API key, install ID and MyMemory contact email |
 | `extensions/` | `kalao-extensions` | `registry.json` (enabled, plain settings, priority, repositories), `<id>/package.kalaoext`, `<id>/storage.json`, `repositories/` (last indexes). Cookies stay in memory |
@@ -93,7 +95,7 @@ kalao-2026-11-15-2105.kalaobackup
 ├── app_state.db
 ├── settings.json        # AppSettings without secrets
 ├── covers/              # cover art, by file name
-├── media/               # optional: imported audio, by sha256
+├── media/               # optional: imported audio, by sha256 (never music-folder files)
 ├── extensions.json      # ids, versions, enabled, plain settings, priority, repositories (with keys)
 ├── extensions/*.kalaoext # the installed packages
 └── stems/               # (M6) optional: stems, by sha256

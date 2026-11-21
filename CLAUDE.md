@@ -69,6 +69,8 @@ Crate dependencies point downward: `core`, `network` and `audio` depend on no ot
 
 **Queue.** `QueueStore` (`services/library_queue_store.dart`) persists the singing queue; `queueProvider`/`QueueActions` expose it; `PlayerController.playNextInQueue` advances it when a song ends.
 
+**Music folders.** `LibraryFolderService` (`services/library_folder_service.dart`) scans SAF folders incrementally (`library_folder`, `folder_file`); their songs keep `content://` document URIs in `media_file.path` (`source = folder`, empty `sha256`) and play in place through `/proc/self/fd` descriptors that `KaraokeDeck` opens. Never copy, move or delete those files (`isDocumentUri` in `models/song.dart`).
+
 **Playback.** `KaraokeDeck` (`services/karaoke_deck.dart`) drives `kalao-audio` through `PlatformBridge`; `PlayerController` (`providers/player_provider.dart`) owns player state; `KalaoAudioHandler` (`services/playback_handler.dart`) is the `audio_service` media session. The engine clock is the single source of truth for lyric sync.
 
 ## Commands

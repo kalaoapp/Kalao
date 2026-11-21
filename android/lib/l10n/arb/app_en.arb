@@ -808,5 +808,83 @@
         "type": "String"
       }
     }
+  },
+  "foldersTitle": "Music folders",
+  "foldersSettingsSubtitle": "Songs from folders on this device, played where they are",
+  "foldersIntro": "Add a folder of songs and Kalao keeps the library in step with it: new files are added (with an instrumental and lyrics file from the same folder), changed ones updated and removed ones dropped. Kalao only reads the files; it never moves or deletes them.",
+  "foldersAdd": "Add folder",
+  "foldersScanAll": "Scan all folders",
+  "foldersScan": "Scan now",
+  "foldersRemove": "Remove folder",
+  "foldersRemoveConfirm": "Remove {name} and its songs from the library? Their lyrics edits, favorites and plays go too. The files stay in the folder.",
+  "@foldersRemoveConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "foldersScanning": "Scanning music folders",
+  "foldersProgress": "Reading {done} of {total}",
+  "@foldersProgress": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "foldersSongs": "{count, plural, =1{1 song} other{{count} songs}}",
+  "@foldersSongs": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "foldersScannedAt": "Scanned {date}",
+  "@foldersScannedAt": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "foldersNotScanned": "Not scanned yet",
+  "foldersAccessLost": "Kalao can no longer read this folder. Add it again to give access back.",
+  "foldersSkipped": "{count, plural, =1{1 file skipped} other{{count} files skipped}}",
+  "@foldersSkipped": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "foldersSkippedTitle": "Skipped files",
+  "foldersSkipFormat": "A format Kalao cannot play in place",
+  "foldersSkipUnreadable": "Could not be read",
+  "foldersOverlap": "This folder is inside or around the music folder {name}.",
+  "@foldersOverlap": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "foldersScanResult": "{added} added, {updated} updated, {removed} removed",
+  "@foldersScanResult": {
+    "placeholders": {
+      "added": {
+        "type": "int"
+      },
+      "updated": {
+        "type": "int"
+      },
+      "removed": {
+        "type": "int"
+      }
+    }
   }
 }

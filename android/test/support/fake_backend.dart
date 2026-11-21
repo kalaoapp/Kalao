@@ -20,6 +20,20 @@ class FakeBackend {
   String? nextTreeUri = 'content://tree/primary%3ABackups';
   Directory? documentRoot;
 
+  /// Music folders by tree URI: path below the folder (`dir/name`) → file.
+  /// A tree that is not here has lost its access (`listLibraryFolder`
+  /// returns null).
+  final musicFolders = <String, Map<String, File>>{};
+
+  /// Descriptors `openDocument` handed out and not closed yet.
+  final openDocuments = <int, String>{};
+  var _nextHandle = 3;
+  final releasedTrees = <String>[];
+
+  /// The document URI of [path] in the music folder [tree].
+  static String folderUri(String tree, String path) =>
+      '$tree/document/${Uri.encodeComponent(path)}';
+
   /// Files the host hands to `takeSharedFiles` once.
   final shared = <Map<String, String>>[];
 
@@ -480,6 +494,43 @@ class FakeBackend {
         ];
       case 'deleteDocument':
         return documents.remove(args['uri'] as String)?.existsSync() ?? false;
+      case 'listLibraryFolder':
+        final tree = args['treeUri'] as String;
+        final files = musicFolders[tree];
+        if (files == null) return null;
+        return [
+          for (final MapEntry(key: path, value: file) in files.entries)
+            if (file.existsSync())
+              {
+                'uri': folderUri(tree, path),
+                'name': path.split('/').last,
+                'dir': path.contains('/')
+                    ? path.substring(0, path.lastIndexOf('/'))
+                    : '',
+                'bytes': file.lengthSync(),
+                'modified': file.lastModifiedSync().millisecondsSinceEpoch,
+              },
+        ];
+      case 'openDocument':
+        final uri = args['uri'] as String;
+        for (final MapEntry(key: tree, value: files) in musicFolders.entries) {
+          for (final MapEntry(key: path, value: file) in files.entries) {
+            if (folderUri(tree, path) == uri && file.existsSync()) {
+              final handle = _nextHandle++;
+              openDocuments[handle] = uri;
+              return {'path': file.path, 'handle': handle};
+            }
+          }
+        }
+        throw PlatformException(code: 'ERROR', message: 'No document $uri');
+      case 'closeDocuments':
+        for (final handle in (args['handles'] as List).cast<int>()) {
+          openDocuments.remove(handle);
+        }
+        return null;
+      case 'releaseDocumentTree':
+        releasedTrees.add(args['treeUri'] as String);
+        return null;
       case 'runNativeDataJob':
         final request = jsonDecode(args['request_json'] as String) as Map;
         return jsonEncode(_job(request.cast<String, Object?>()));

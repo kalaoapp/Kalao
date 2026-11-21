@@ -81,7 +81,8 @@ class NewMediaFile {
   final String codec;
   final int? sampleRate;
 
-  /// `media_file.source`: `import`, or `extension` for offline downloads.
+  /// `media_file.source`: `import`, `extension` for offline downloads, or
+  /// `folder` for a music-folder file played in place (FEATURES 6.8).
   final String source;
 }
 
@@ -148,6 +149,27 @@ class LibraryDatabase {
 
   Future<void> setMedia(int songId, NewMediaFile file) =>
       _insertMedia(db, songId, file);
+
+  Future<void> removeMedia(int songId, MediaKind kind) => db.delete(
+    'media_file',
+    where: 'song_id = ? AND kind = ?',
+    whereArgs: [songId, kind.name],
+  );
+
+  /// Records what a changed file now holds (a music-folder file edited in
+  /// place keeps its path).
+  Future<void> updateMediaDetails(
+    int songId,
+    MediaKind kind, {
+    required int bytes,
+    required String codec,
+    int? sampleRate,
+  }) => db.update(
+    'media_file',
+    {'bytes': bytes, 'codec': codec, 'sample_rate': sampleRate},
+    where: 'song_id = ? AND kind = ?',
+    whereArgs: [songId, kind.name],
+  );
 
   Future<void> _insertMedia(
     DatabaseExecutor executor,
@@ -453,6 +475,20 @@ class LibraryDatabase {
           whereArgs: [songId, docs.first['version']],
         );
       });
+
+  /// `source_kind` of the current lyric document (`file`, `embedded`,
+  /// `extension`, an edit…), or null when the song has none.
+  Future<String?> lyricsSourceKind(int songId) async {
+    final rows = await db.query(
+      'lyric_doc',
+      columns: ['source_kind'],
+      where: 'song_id = ?',
+      whereArgs: [songId],
+      orderBy: 'version DESC',
+      limit: 1,
+    );
+    return rows.firstOrNull?['source_kind'] as String?;
+  }
 
   /// The current lyric document with its layers merged into the lines.
   Future<LyricDocument?> lyrics(int songId) async {

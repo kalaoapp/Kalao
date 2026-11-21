@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/providers/backup_provider.dart';
 import 'package:kalao/providers/extension_provider.dart';
+import 'package:kalao/providers/library_folder_provider.dart';
 import 'package:kalao/providers/player_provider.dart';
 import 'package:kalao/providers/update_provider.dart';
 import 'package:kalao/screens/extensions/extensions_tab.dart';
@@ -45,6 +46,8 @@ class _MainShellState extends ConsumerState<MainShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _onForeground();
       unawaited(_offerUpdate());
+      // Music folders catch up with what changed while Kalao was closed.
+      unawaited(ref.read(libraryFoldersProvider.notifier).scanAll());
     });
   }
 

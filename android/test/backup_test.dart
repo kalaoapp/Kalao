@@ -9,6 +9,7 @@ import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/services/backup_service.dart';
 import 'package:kalao/services/history_database.dart';
 import 'package:kalao/services/library_database.dart';
+import 'package:kalao/services/library_folder_store.dart';
 import 'package:kalao/services/library_queue_store.dart';
 import 'package:kalao/services/library_schema.dart';
 import 'package:path/path.dart' as p;
@@ -187,6 +188,51 @@ void main() {
       tablet.storage.safetyBackups.listSync().whereType<File>(),
       hasLength(1),
     );
+  });
+
+  test('music-folder songs keep their documents and are not copied', () async {
+    const uri = 'content://docs/tree/primary%3AMusic/document/Sun.mp3';
+    final folder = await phone.folders.addFolder(
+      'content://docs/tree/primary%3AMusic',
+    );
+    final sun = await phone.library.insertSong(
+      const NewSong(
+        title: 'Sun',
+        media: [
+          NewMediaFile(
+            kind: MediaKind.original,
+            path: uri,
+            sha256: '',
+            source: 'folder',
+          ),
+        ],
+      ),
+    );
+    await phone.folders.store.putFile(
+      FolderFile(
+        uri: uri,
+        folderId: folder.id,
+        name: 'Sun.mp3',
+        role: FolderFileRole.original,
+        songId: sun,
+      ),
+    );
+    await addSong(phone, 'Moon');
+    final backup = await backUp(phone);
+
+    final service = backupOf(tablet);
+    final staged = await service.inspect(backup);
+    expect(staged.preview.mediaFiles, 1);
+    expect(staged.preview.missingMedia, 0);
+    await service.restore(
+      staged,
+      RestoreMode.replace,
+      current: const AppSettings(),
+    );
+    final restored = (await tablet.library.songs(sort: SongSort.title)).last;
+    expect(restored.title, 'Sun');
+    expect(restored.media.single.path, uri);
+    expect((await tablet.folders.folders()).single.songs, 1);
   });
 
   test('Merge matches songs, keeps human layers and unions plays', () async {

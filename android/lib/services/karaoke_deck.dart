@@ -5,6 +5,7 @@ import 'dart:developer' show Timeline;
 import 'package:flutter/services.dart';
 import 'package:kalao/models/extension.dart';
 import 'package:kalao/models/player_state.dart';
+import 'package:kalao/models/song.dart';
 import 'package:kalao/services/platform_bridge.dart';
 import 'package:kalao/utils/logger.dart';
 
@@ -91,20 +92,55 @@ class KaraokeDeck {
     return next;
   }
 
-  /// Loads files ([sources], kind → path) and extension [streams].
+  /// Descriptors of the loaded song's music-folder files (FEATURES 6.8):
+  /// the engine reopens a file to seek and loop, so they stay open until
+  /// another song loads.
+  var _documents = const <int>[];
+
+  /// Loads files ([sources], kind → path or music-folder document URI) and
+  /// extension [streams].
   Future<EnginePlayerState> load({
     required String songId,
     Map<String, String> sources = const {},
     List<StreamSource> streams = const [],
     Duration start = Duration.zero,
-  }) => _run(
-    PlatformBridge.playerLoad(
-      songId: songId,
-      sources: sources,
-      streams: streams,
-      start: start,
-    ),
-  );
+  }) async {
+    final opened = <int>[];
+    try {
+      final paths = <String, String>{};
+      for (final MapEntry(key: kind, value: path) in sources.entries) {
+        if (!isDocumentUri(path)) {
+          paths[kind] = path;
+          continue;
+        }
+        final document = await PlatformBridge.openDocument(path);
+        opened.add(document.handle);
+        paths[kind] = document.path;
+      }
+      final state = await _run(
+        PlatformBridge.playerLoad(
+          songId: songId,
+          sources: paths,
+          streams: streams,
+          start: start,
+        ),
+      );
+      await _closeDocuments(_documents);
+      _documents = opened;
+      return state;
+    } catch (_) {
+      await _closeDocuments(opened);
+      rethrow;
+    }
+  }
+
+  static Future<void> _closeDocuments(List<int> handles) async {
+    try {
+      await PlatformBridge.closeDocuments(handles);
+    } catch (error) {
+      _log.w('Could not close documents', error);
+    }
+  }
 
   Future<EnginePlayerState> play() => _run(PlatformBridge.playerPlay());
 

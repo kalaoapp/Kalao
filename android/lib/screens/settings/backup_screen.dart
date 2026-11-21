@@ -15,6 +15,7 @@ import 'package:kalao/services/backup_service.dart';
 import 'package:kalao/services/platform_bridge.dart';
 import 'package:kalao/services/poc_import_service.dart';
 import 'package:kalao/theme/app_tokens.dart';
+import 'package:kalao/utils/document_tree.dart';
 import 'package:kalao/widgets/settings_group.dart';
 import 'package:kalao/widgets/stepper_tile.dart';
 
@@ -183,7 +184,9 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
                 leading: const Icon(Icons.folder_outlined),
                 title: Text(l10n.backupFolder),
                 subtitle: Text(
-                  folder == null ? l10n.backupFolderNone : folderLabel(folder),
+                  folder == null
+                      ? l10n.backupFolderNone
+                      : treeFolderName(folder),
                 ),
                 onTap: () async {
                   final uri = await PlatformBridge.pickDocumentTree();
@@ -266,15 +269,6 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
       _ => l10n.backupLastFailed(when, run.error ?? ''),
     };
   }
-}
-
-/// The readable end of a SAF tree URI (`primary:Backups/Kalao` →
-/// `Backups/Kalao`).
-String folderLabel(String treeUri) {
-  final id = Uri.decodeComponent(treeUri.split('/').last);
-  final colon = id.indexOf(':');
-  final path = colon < 0 ? id : id.substring(colon + 1);
-  return path.isEmpty ? id : path;
 }
 
 String formatBytes(int bytes) {

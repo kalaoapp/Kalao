@@ -50,6 +50,10 @@ class MainActivity : AudioServiceFragmentActivity() {
         "writeFileToTree",
         "listDocumentTree",
         "deleteDocument",
+        "listLibraryFolder",
+        "openDocument",
+        "closeDocuments",
+        "releaseDocumentTree",
         "takeSharedFiles",
         "takeExtensionCallbacks",
         "getSupportedAbis",
@@ -143,6 +147,10 @@ class MainActivity : AudioServiceFragmentActivity() {
                         "writeFileToTree" -> handleWriteFileToTree(call, result)
                         "listDocumentTree" -> handleListDocumentTree(call, result)
                         "deleteDocument" -> handleDeleteDocument(call, result)
+                        "listLibraryFolder" -> handleListLibraryFolder(call, result)
+                        "openDocument" -> handleOpenDocument(call, result)
+                        "closeDocuments" -> handleCloseDocuments(call, result)
+                        "releaseDocumentTree" -> handleReleaseDocumentTree(call, result)
                         "getSupportedAbis" -> handleGetSupportedAbis(result)
                         "installApk" -> handleInstallApk(call, result)
                         "takeExtensionCallbacks" -> result.success(ExtensionAuthCallbacks.take())

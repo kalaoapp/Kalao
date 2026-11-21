@@ -23,12 +23,29 @@ pub struct Decoder {
     skip_frames: u64,
 }
 
+/// The format hint for `path`: its extension, or, for a path without one,
+/// the extension of the file it links to. A file from a music folder is
+/// opened as `/proc/self/fd/<n>` (a descriptor the Android host holds), whose
+/// link names the real file.
+pub(crate) fn file_extension(path: &Path) -> Option<String> {
+    let own = |path: &Path| {
+        path.extension()
+            .and_then(|value| value.to_str())
+            .map(str::to_owned)
+    };
+    own(path).or_else(|| {
+        std::fs::read_link(path)
+            .ok()
+            .and_then(|target| own(&target))
+    })
+}
+
 fn probe(media: &Media) -> Result<ProbeResult, AudioError> {
     let mut hint = Hint::new();
     let source: Box<dyn symphonia::core::io::MediaSource> = match media {
         Media::File(path) => {
-            if let Some(extension) = path.extension().and_then(|value| value.to_str()) {
-                hint.with_extension(extension);
+            if let Some(extension) = file_extension(path) {
+                hint.with_extension(&extension);
             }
             Box::new(File::open(path).map_err(|error| AudioError::Open(error.to_string()))?)
         }

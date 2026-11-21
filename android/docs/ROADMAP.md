@@ -110,8 +110,9 @@ Status: ✅ built and tested locally (Rust: fmt, clippy, all workspace tests inc
 | M4.10 | Support Kalao row → `https://ko-fi.com/brinsley` | 9.7 | ✅ | `settings_tab.dart` |
 | M4.11 | Update check + user-started APK download, SHA-256 verify, installer hand-off | 9.8 | ✅ (needs a published release to try end to end) | `update_service.dart`, `update_dialog.dart`, §14 |
 | M4.12 | Opening and sharing `.kalaobackup`, `.lrc`/`.ttml`/`.txt` and audio files | 7.3, 1.7 | ✅ (native `SharedFiles.kt` instead of `receive_sharing_intent`; `.kalaoext` joins in M5) | `shared_files.dart` |
+| M4.13 | Music folders (Mornye's local library, added 2026-11-21): `library_folder` + `folder_file` (library v3); SAF tree walk and descriptors in `MainActivityLibraryFolderCalls.kt` (`listLibraryFolder`, `openDocument`, `closeDocuments`, `releaseDocumentTree`); incremental scan by size and modification time in `LibraryFolderService` (pairing per directory, lyrics files, removed and renamed files, skipped formats); Music folders screen (Settings → Data, Library app bar) with progress, cancel, skipped files and remove; scan on app start; folder songs play through `/proc/self/fd` paths held by `KaraokeDeck`; deletes and backups never touch the files | 6.8 | ✅ (Kalao-sized: no tag cache, CUE sheets, network sources, checkpoints or pause; formats the engine cannot decode are listed as skipped instead of converted; ⏳ a scan of a real SAF folder needs a device) | `library_folder_service.dart`, `library_folders_screen.dart`, §3 |
 
-Tests added: Rust `native_backup` (round trip, newer format, damaged/unlisted/missing/unsafe entries, cancellation); Dart `stats_test` (favorites, library v1→v2, stats buckets, stats screen), `backup_test` (device keys, Replace to another device, Merge with human layers and play de-duplication, newer lyrics win, backup without media, newer schema refused), `backup_controller_test` (save to document, scheduled due check and pruning, failure retry, Backup screen save and restore), `shared_files_test`, `update_test` (versions, ABI asset, check, verified download, daily check, install), `poc_import_test`.
+Tests added: Rust `native_backup` (round trip, newer format, damaged/unlisted/missing/unsafe entries, cancellation); Dart `stats_test` (favorites, library v1→v2, stats buckets, stats screen), `backup_test` (device keys, Replace to another device, Merge with human layers and play de-duplication, newer lyrics win, backup without media, newer schema refused), `backup_controller_test` (save to document, scheduled due check and pruning, failure retry, Backup screen save and restore), `shared_files_test`, `update_test` (versions, ABI asset, check, verified download, daily check, install), `poc_import_test`; M4.13: Rust `kalao-audio` (format hint through a descriptor link), Dart `library_folder_test` (tree names and overlap, pairing per directory, unchanged rescans read nothing, changed lyrics vs edited ones, joining songs, removed and renamed files, deleted songs stay out with their files, lost access keeps songs, skipped files, cancel, remove folder, controller, deck descriptors), `backup_test` (folder songs keep their URIs and are not copied).
 
 **Exit:** a backup made on one device restores on another (both modes) with no secrets inside; scheduled backup runs when due; the update flow installs a newer test release.
 
@@ -201,6 +202,7 @@ Tests added: Rust `kalao-extensions` (manifest, package limits and packing, semv
 | 2.8 | M2.2 | 5.3 | M5.3 | 9.6 | M4.9 |
 | 2.9 | M2.4 | 5.4 | M5.4 | 9.7 | M4.10 |
 | — | — | 5.5 | M5.5 | 9.8 | M4.11 |
+| — | — | — | — | 6.8 | M4.13 |
 
 **Distribution:** GitHub Releases only, from M3 (v0.1.0). Each release: per-ABI and universal signed APKs, SHA-256 checksums, changelog. No store builds.
 ---
@@ -327,6 +329,7 @@ What it achieves:
 - Provide an About page with version, privacy information and licences.
 - Check for updates and download new APK versions directly.
 - Open shared audio and lyrics files directly in Kalao.
+- Add music folders from the phone: their songs join the library and play where they are, and the library follows the folder as files are added, changed or removed.
 
 **What the user gets:** Peace of mind that their music library, lyrics and settings can be backed up and recovered if they change phones or lose data.
 

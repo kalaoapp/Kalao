@@ -320,6 +320,24 @@ fn probe_reports_wav_details() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// A file from a music folder arrives as `/proc/self/fd/<n>`: a path with no
+/// extension whose link names the real file, which gives the format hint.
+#[cfg(unix)]
+#[test]
+fn probe_takes_the_format_hint_from_a_link_without_extension() {
+    let dir = temp_dir("probe-link");
+    let path = dir.join("song.wav");
+    write_wav(&path, 44_100, 44_100, |f| sine(f, 44_100));
+    let link = dir.join("7");
+    std::os::unix::fs::symlink(&path, &link).unwrap();
+    assert_eq!(
+        crate::decoder::file_extension(&link).as_deref(),
+        Some("wav")
+    );
+    assert_eq!(probe_file(&link).unwrap().duration_ms, Some(1000));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// Sign changes of the left channel in `out` (two per cycle of a tone).
 fn zero_crossings(out: &[f32]) -> usize {
     let left: Vec<f32> = out

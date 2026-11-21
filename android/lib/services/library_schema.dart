@@ -3,7 +3,7 @@
 
 /// `kalao_library.db`. Bump [libraryVersion] and add a step to
 /// [libraryMigrations] for every change; never edit a released step.
-const libraryVersion = 2;
+const libraryVersion = 3;
 
 const libraryMigrations = <int, List<String>>{
   1: [
@@ -84,6 +84,32 @@ CREATE TABLE backup_run (
   status TEXT NOT NULL,
   error TEXT
 )''',
+  ],
+  // v3: music folders scanned in place (FEATURES 6.8).
+  3: [
+    '''
+CREATE TABLE library_folder (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tree_uri TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  added_at INTEGER NOT NULL,
+  scanned_at INTEGER,
+  error TEXT
+)''',
+    '''
+CREATE TABLE folder_file (
+  uri TEXT PRIMARY KEY,
+  folder_id INTEGER NOT NULL REFERENCES library_folder(id) ON DELETE CASCADE,
+  dir TEXT NOT NULL DEFAULT '',
+  name TEXT NOT NULL,
+  role TEXT NOT NULL,
+  song_id INTEGER REFERENCES song(id) ON DELETE SET NULL,
+  bytes INTEGER NOT NULL DEFAULT 0,
+  modified INTEGER NOT NULL DEFAULT 0,
+  error TEXT
+)''',
+    'CREATE INDEX folder_file_folder_idx ON folder_file(folder_id)',
+    'CREATE INDEX folder_file_song_idx ON folder_file(song_id)',
   ],
 };
 

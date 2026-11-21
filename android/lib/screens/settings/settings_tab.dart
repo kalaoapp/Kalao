@@ -71,6 +71,13 @@ class SettingsTab extends ConsumerWidget {
             title: l10n.settingsData,
             children: [
               ListTile(
+                leading: const Icon(Icons.folder_outlined),
+                title: Text(l10n.foldersTitle),
+                subtitle: Text(l10n.foldersSettingsSubtitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/settings/folders'),
+              ),
+              ListTile(
                 leading: const Icon(Icons.backup_outlined),
                 title: Text(l10n.backupTitle),
                 subtitle: Text(l10n.backupSettingsSubtitle),

@@ -3,6 +3,10 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:kalao/models/extension.dart';
 
+/// A music-folder file (FEATURES 6.8) is stored by its document URI: Kalao
+/// plays it in place and never copies, moves or deletes it.
+bool isDocumentUri(String path) => path.startsWith('content://');
+
 /// `media_file.kind`: which part of a song a file plays.
 enum MediaKind { original, instrumental, vocals }
 
@@ -142,9 +146,15 @@ class MediaFile {
   });
 
   final MediaKind kind;
+
+  /// A file in app storage, or a music-folder document URI ([inFolder]).
   final String path;
+
+  /// Empty for music-folder files, which are not hashed.
   final String sha256;
   final String codec;
+
+  bool get inFolder => isDocumentUri(path);
 
   @override
   bool operator ==(Object other) =>

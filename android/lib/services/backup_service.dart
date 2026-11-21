@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:kalao/constants/app_info.dart';
 import 'package:kalao/models/lyrics.dart';
 import 'package:kalao/models/settings.dart';
+import 'package:kalao/models/song.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/services/library_database.dart';
 import 'package:kalao/services/library_schema.dart';
@@ -169,8 +170,9 @@ class BackupService {
       }
       var mediaFiles = 0;
       if (includeMedia) {
+        // Music-folder files stay in their folder (FEATURES 6.8).
         final media = await library.rawQuery(
-          'SELECT DISTINCT path FROM media_file',
+          "SELECT DISTINCT path FROM media_file WHERE path NOT LIKE 'content://%'",
         );
         for (final row in media) {
           if (_addFile(entries, 'media', row['path']! as String)) mediaFiles++;
@@ -354,7 +356,8 @@ class BackupService {
           'media_file',
           columns: ['song_id', 'path'],
         ))
-          if (!entries.containsKey(
+          if (!isDocumentUri(row['path']! as String) &&
+              !entries.containsKey(
                 'media/${p.basename(row['path']! as String)}',
               ) &&
               !File(_mediaPath(row['path']! as String)).existsSync())
@@ -518,6 +521,8 @@ class BackupService {
     'lyric_annotation',
     'song_search',
     'favorite',
+    'library_folder',
+    'folder_file',
   ];
 
   Future<T> _withAttached<T>(
@@ -580,8 +585,10 @@ class BackupService {
     await batch.commit(noResult: true);
   });
 
-  String _mediaPath(String path) =>
-      p.join(services.storage.media.path, p.basename(path));
+  /// A music-folder file keeps its document URI.
+  String _mediaPath(String path) => isDocumentUri(path)
+      ? path
+      : p.join(services.storage.media.path, p.basename(path));
 
   String _coverPath(String path) =>
       p.join(services.storage.covers.path, p.basename(path));

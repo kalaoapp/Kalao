@@ -16,6 +16,7 @@ import 'package:kalao/screens/lyrics_sync_screen.dart';
 import 'package:kalao/screens/main_shell.dart';
 import 'package:kalao/screens/now_playing_screen.dart';
 import 'package:kalao/screens/settings/backup_screen.dart';
+import 'package:kalao/screens/settings/library_folders_screen.dart';
 import 'package:kalao/screens/settings/log_screen.dart';
 import 'package:kalao/screens/settings/privacy_screen.dart';
 import 'package:kalao/screens/stats_screen.dart';
@@ -79,6 +80,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings/backup',
         builder: (context, state) => const BackupScreen(),
+      ),
+      GoRoute(
+        path: '/settings/folders',
+        builder: (context, state) => const LibraryFoldersScreen(),
       ),
       GoRoute(
         path: '/settings/privacy',

@@ -77,6 +77,7 @@ Each feature lists its milestone (see ROADMAP.md). **Source:** P = in the POC, R
 | 6.5 | Song queue (add, reorder, remove; per-singer in parties) | R | M3 |
 | 6.6 | Offline downloads: tracks, stems, lyrics and annotations | N | M5 |
 | 6.7 | Stats screen: recent activity, play counts, top songs, scores (replaces the POC dashboard and public-profile stats; local only) | P | M4 |
+| 6.8 | **Music folders** (Mornye's local library): folders granted once with SAF are scanned and kept in step with the library — new audio becomes songs (paired with an instrumental and a lyrics file from the same directory), changed files are read again, removed files leave the library. Songs play in place: Kalao only reads the files and never copies, moves or deletes them | N (Mornye) | M4 |
 
 ## 7. Backup and restore (replaces accounts and sync)
 
