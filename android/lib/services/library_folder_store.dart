@@ -137,6 +137,26 @@ FROM library_folder f''';
       row['uri']! as String: FolderFile.fromRow(row),
   };
 
+  /// The row of the file [uri], in any music folder.
+  Future<FolderFile?> file(String uri) async {
+    final rows = await db.query(
+      'folder_file',
+      where: 'uri = ?',
+      whereArgs: [uri],
+    );
+    return rows.isEmpty ? null : FolderFile.fromRow(rows.first);
+  }
+
+  /// The instrumental rows linked to [songId].
+  Future<List<FolderFile>> instrumentalsOf(int songId) async => [
+    for (final row in await db.query(
+      'folder_file',
+      where: "song_id = ? AND role = 'instrumental'",
+      whereArgs: [songId],
+    ))
+      FolderFile.fromRow(row),
+  ];
+
   Future<void> putFile(FolderFile file) => db.insert(
     'folder_file',
     file.toRow(),

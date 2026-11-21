@@ -3,9 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/models/library_folder.dart';
+import 'package:kalao/models/settings.dart';
 import 'package:kalao/providers/library_folder_provider.dart';
+import 'package:kalao/providers/settings_provider.dart';
+import 'package:kalao/screens/settings/instrumental_placement_screen.dart';
 import 'package:kalao/services/library_folder_service.dart';
 import 'package:kalao/theme/app_tokens.dart';
+import 'package:kalao/utils/document_tree.dart';
 
 /// Music folders (FEATURES 6.8): add, scan and remove folders whose songs
 /// play in place.
@@ -34,6 +38,9 @@ class LibraryFoldersScreen extends ConsumerWidget {
 
   Future<void> _add(BuildContext context, WidgetRef ref) async {
     final l10n = AppLocalizations.of(context);
+    // Before the first folder: where new instrumentals will go.
+    if (!await ensureInstrumentalPlacement(context, ref)) return;
+    if (!context.mounted) return;
     try {
       final result = await ref
           .read(libraryFoldersProvider.notifier)
@@ -127,6 +134,7 @@ class LibraryFoldersScreen extends ConsumerWidget {
               ),
             ),
           ),
+          const _PlacementTile(),
           for (final folder in state.folders)
             _FolderTile(
               folder: folder,
@@ -140,6 +148,36 @@ class LibraryFoldersScreen extends ConsumerWidget {
               onRemove: () => _remove(context, ref, folder),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// Where new instrumentals go; opens the choice again.
+class _PlacementTile extends ConsumerWidget {
+  const _PlacementTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final settings = ref.watch(settingsProvider);
+    final folder = settings.instrumentalFolderUri;
+    return ListTile(
+      leading: const Icon(Icons.music_note_outlined),
+      title: Text(l10n.placementSetting),
+      subtitle: Text(switch (settings.instrumentalPlacement) {
+        InstrumentalPlacement.undecided => l10n.placementSettingUndecided,
+        InstrumentalPlacement.besideOriginal => l10n.placementSettingBeside,
+        InstrumentalPlacement.separateFolder => l10n.placementFolder(
+          folder == null ? '' : treeFolderName(folder),
+        ),
+      }),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => const InstrumentalPlacementScreen(),
+        ),
       ),
     );
   }

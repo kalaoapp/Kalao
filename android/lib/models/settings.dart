@@ -43,6 +43,11 @@ enum BackupSchedule {
   final Duration? interval;
 }
 
+/// Where new instrumentals of music-folder songs are written (FEATURES
+/// 6.8). Chosen once, before the first music folder is added, and followed
+/// by every later write; [undecided] until then.
+enum InstrumentalPlacement { undecided, separateFolder, besideOriginal }
+
 /// App preferences, stored as one JSON object in shared_preferences.
 /// Unknown or missing keys fall back to defaults, so adding a field never
 /// breaks an existing install. Secrets never go here (secure storage).
@@ -74,6 +79,8 @@ class AppSettings {
     this.checkUpdates = true,
     this.autoFetchLyrics = true,
     this.extensionDeveloperMode = false,
+    this.instrumentalPlacement = InstrumentalPlacement.undecided,
+    this.instrumentalFolderUri,
   });
 
   factory AppSettings.fromJson(Map<String, dynamic> json) => AppSettings(
@@ -108,6 +115,11 @@ class AppSettings {
     checkUpdates: json['checkUpdates'] as bool? ?? true,
     autoFetchLyrics: json['autoFetchLyrics'] as bool? ?? true,
     extensionDeveloperMode: json['extensionDeveloperMode'] as bool? ?? false,
+    instrumentalPlacement:
+        InstrumentalPlacement.values
+            .asNameMap()[json['instrumentalPlacement']] ??
+        InstrumentalPlacement.undecided,
+    instrumentalFolderUri: json['instrumentalFolderUri'] as String?,
   );
 
   /// Keys that describe this device or this install rather than the user's
@@ -122,6 +134,9 @@ class AppSettings {
     'backupKeep',
     'backupIncludeMedia',
     'extensionDeveloperMode',
+    // Folder grants belong to this device; another device asks again.
+    'instrumentalPlacement',
+    'instrumentalFolderUri',
   };
 
   /// `settings.json` in a backup (DATA_MODEL.md §3).
@@ -216,6 +231,11 @@ class AppSettings {
   /// installs from a folder.
   final bool extensionDeveloperMode;
 
+  final InstrumentalPlacement instrumentalPlacement;
+
+  /// The SAF folder (tree URI) for [InstrumentalPlacement.separateFolder].
+  final String? instrumentalFolderUri;
+
   Map<String, dynamic> toJson() => {
     'setupCompleted': setupCompleted,
     'themeMode': themeMode.name,
@@ -242,6 +262,8 @@ class AppSettings {
     'checkUpdates': checkUpdates,
     'autoFetchLyrics': autoFetchLyrics,
     'extensionDeveloperMode': extensionDeveloperMode,
+    'instrumentalPlacement': instrumentalPlacement.name,
+    'instrumentalFolderUri': instrumentalFolderUri,
   };
 
   AppSettings copyWith({
@@ -270,6 +292,8 @@ class AppSettings {
     bool? checkUpdates,
     bool? autoFetchLyrics,
     bool? extensionDeveloperMode,
+    InstrumentalPlacement? instrumentalPlacement,
+    String? Function()? instrumentalFolderUri,
   }) => AppSettings(
     setupCompleted: setupCompleted ?? this.setupCompleted,
     themeMode: themeMode ?? this.themeMode,
@@ -303,6 +327,10 @@ class AppSettings {
     autoFetchLyrics: autoFetchLyrics ?? this.autoFetchLyrics,
     extensionDeveloperMode:
         extensionDeveloperMode ?? this.extensionDeveloperMode,
+    instrumentalPlacement: instrumentalPlacement ?? this.instrumentalPlacement,
+    instrumentalFolderUri: instrumentalFolderUri != null
+        ? instrumentalFolderUri()
+        : this.instrumentalFolderUri,
   );
 
   @override
@@ -332,7 +360,9 @@ class AppSettings {
       other.backupIncludeMedia == backupIncludeMedia &&
       other.checkUpdates == checkUpdates &&
       other.autoFetchLyrics == autoFetchLyrics &&
-      other.extensionDeveloperMode == extensionDeveloperMode;
+      other.extensionDeveloperMode == extensionDeveloperMode &&
+      other.instrumentalPlacement == instrumentalPlacement &&
+      other.instrumentalFolderUri == instrumentalFolderUri;
 
   @override
   int get hashCode => Object.hashAll([
@@ -361,5 +391,7 @@ class AppSettings {
     checkUpdates,
     autoFetchLyrics,
     extensionDeveloperMode,
+    instrumentalPlacement,
+    instrumentalFolderUri,
   ]);
 }

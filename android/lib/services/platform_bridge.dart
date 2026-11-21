@@ -755,15 +755,21 @@ class PlatformBridge {
       });
 
   /// Copies [path] into the folder [treeUri] as [name]; the new document URI.
+  /// [dir] is a folder below [treeUri] ("a/b", created when missing). The
+  /// provider may change [name] when the folder already has one.
   static Future<String> writeFileToTree({
     required String treeUri,
     required String name,
     required String path,
+    String dir = '',
+    String? mimeType,
   }) async =>
       await backendChannel.invokeMethod<String>('writeFileToTree', {
         'treeUri': treeUri,
         'name': name,
         'path': path,
+        'dir': dir,
+        'mimeType': ?mimeType,
       }) ??
       '';
 
