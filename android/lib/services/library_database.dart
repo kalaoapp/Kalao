@@ -554,11 +554,23 @@ class LibraryDatabase {
     await batch.commit(noResult: true);
   });
 
+  /// Shortest query that a `likelyOnly` [search] matches inside a key.
+  static const likelyMinLength = 3;
+
   /// Songs whose title, artist, pinyin, initials or romaji key contains the
   /// normalised [query], best matches first (prefix before substring).
-  Future<List<Song>> search(String query, {int limit = 100}) async {
+  ///
+  /// With [likelyOnly], a query shorter than [likelyMinLength] matches only
+  /// at the start of a key: one or two letters inside a word say little about
+  /// what someone is looking for (Home then shows extension results alone).
+  Future<List<Song>> search(
+    String query, {
+    int limit = 100,
+    bool likelyOnly = false,
+  }) async {
     final key = normalizeSearchText(query);
     if (key.isEmpty) return const [];
+    final anywhere = !likelyOnly || key.length >= likelyMinLength;
     final escaped = key
         .replaceAll(r'\', r'\\')
         .replaceAll('%', r'\%')
@@ -571,7 +583,7 @@ WHERE key LIKE ? ESCAPE '\\'
 GROUP BY song_id
 ORDER BY rank, song_id DESC
 LIMIT ?''',
-      ['$escaped%', '%$escaped%', limit],
+      ['$escaped%', anywhere ? '%$escaped%' : '$escaped%', limit],
     );
     return songsByIds([for (final row in rows) row['song_id'] as int]);
   }

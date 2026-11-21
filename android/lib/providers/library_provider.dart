@@ -110,12 +110,16 @@ final continueSingingProvider =
       return (song: song, position: position);
     });
 
-final librarySearchProvider = FutureProvider.family<List<Song>, String>((
+/// Home's library results: likely matches only, best first.
+final homeSearchProvider = FutureProvider.family<List<Song>, String>((
   ref,
   query,
 ) {
   ref.watch(libraryRevisionProvider);
-  return ref.watch(libraryServicesProvider).library.search(query);
+  return ref
+      .watch(libraryServicesProvider)
+      .library
+      .search(query, likelyOnly: true);
 });
 
 final songLyricsProvider = FutureProvider.family<LyricDocument?, int>((

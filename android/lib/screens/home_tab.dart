@@ -3,15 +3,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:kalao/screens/queue_tab.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/models/extension.dart';
 import 'package:kalao/models/song.dart';
 import 'package:kalao/providers/extension_provider.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/player_provider.dart';
+import 'package:kalao/providers/queue_provider.dart';
 import 'package:kalao/screens/import_sheet.dart';
+import 'package:kalao/screens/queue_tab.dart';
 import 'package:kalao/screens/song_detail_screen.dart';
+import 'package:kalao/services/library_database.dart';
 import 'package:kalao/theme/app_tokens.dart';
 import 'package:kalao/widgets/empty_state.dart';
 import 'package:kalao/widgets/song_widgets.dart';
@@ -33,7 +35,10 @@ Future<void> openSong(
   if (context.mounted) await context.push('/player');
 }
 
-/// Home: search, Continue singing, Recently played, Recently added.
+/// Home, with the library in it: search (library matches first, then the
+/// extensions'), stats, Continue singing, Recently played, Recently added
+/// and every song, as a list or a grid, with sort, favourites and a
+/// selection mode (long press).
 class HomeTab extends ConsumerStatefulWidget {
   const HomeTab({super.key});
 
@@ -44,6 +49,12 @@ class HomeTab extends ConsumerStatefulWidget {
 class _HomeTabState extends ConsumerState<HomeTab> {
   final _search = TextEditingController();
   String _query = '';
+  SongSort _sort = SongSort.recentlyAdded;
+  bool _grid = false;
+  bool _favoritesOnly = false;
+  final _selected = <int>{};
+
+  bool get _selecting => _selected.isNotEmpty;
 
   @override
   void dispose() {
@@ -51,77 +62,348 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     super.dispose();
   }
 
+  void _toggle(Song song) => setState(() {
+    if (!_selected.remove(song.id)) _selected.add(song.id);
+  });
+
+  void _open(Song song) {
+    if (_selecting) {
+      _toggle(song);
+    } else {
+      openSong(context, ref, song);
+    }
+  }
+
+  Future<void> _deleteSelected(List<Song> songs) async {
+    final l10n = AppLocalizations.of(context);
+    final chosen = songs.where((song) => _selected.contains(song.id)).toList();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.libraryDeleteTitle(chosen.length)),
+        content: Text(l10n.libraryDeleteBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l10n.actionCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(l10n.actionDelete),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final player = ref.read(playerProvider);
+    if (chosen.any((song) => song.id == player.song?.id)) {
+      await ref.read(playerProvider.notifier).stop();
+    }
+    final services = ref.read(libraryServicesProvider);
+    await services.importer.deleteSongs(chosen);
+    await services.history.forgetSongs([for (final song in chosen) song.id]);
+    await services.queue.removeSongs([for (final song in chosen) song.id]);
+    final session = await services.appState.session();
+    if (chosen.any((song) => '${song.id}' == session['songId'])) {
+      await services.appState.clearSession();
+    }
+    setState(_selected.clear);
+    ref.read(libraryRevisionProvider.notifier).bump();
+  }
+
+  /// Queues the selected songs in list order, for Karaoke, no singer named.
+  Future<void> _queueSelected(List<Song> songs) async {
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final actions = ref.read(queueActionsProvider);
+    final chosen = [
+      for (final song in songs)
+        if (_selected.contains(song.id)) song,
+    ];
+    setState(_selected.clear);
+    for (final song in chosen) {
+      await actions.add(song);
+    }
+    messenger.showSnackBar(SnackBar(content: Text(l10n.queueAdded)));
+  }
+
+  Future<void> _favoriteSelected() async {
+    final library = ref.read(libraryServicesProvider).library;
+    final chosen = [..._selected];
+    setState(_selected.clear);
+    for (final id in chosen) {
+      await library.setFavorite(id, true);
+    }
+    ref.read(libraryRevisionProvider.notifier).bump();
+  }
+
+  PreferredSizeWidget _selectionBar(List<Song> songs) {
+    final l10n = AppLocalizations.of(context);
+    return AppBar(
+      leading: IconButton(
+        tooltip: l10n.actionCancel,
+        icon: const Icon(Icons.close),
+        onPressed: () => setState(_selected.clear),
+      ),
+      title: Text(l10n.librarySelected(_selected.length)),
+      actions: [
+        IconButton(
+          tooltip: l10n.librarySelectAll,
+          icon: const Icon(Icons.select_all),
+          onPressed: () =>
+              setState(() => _selected.addAll(songs.map((s) => s.id))),
+        ),
+        IconButton(
+          tooltip: l10n.queueAdd,
+          icon: const Icon(Icons.playlist_add),
+          onPressed: () => _queueSelected(songs),
+        ),
+        IconButton(
+          tooltip: l10n.favoriteAdd,
+          icon: const Icon(Icons.favorite_border),
+          onPressed: _favoriteSelected,
+        ),
+        IconButton(
+          tooltip: l10n.actionDelete,
+          icon: const Icon(Icons.delete_outline),
+          onPressed: () => _deleteSelected(songs),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final added = ref.watch(recentlyAddedProvider);
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.navHome),
-        actions: [
-          IconButton(
-            tooltip: l10n.statsTitle,
-            icon: const Icon(Icons.insights_outlined),
-            onPressed: () => context.push('/stats'),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'import-home',
-        onPressed: () => pickAndImport(context, ref),
-        icon: const Icon(Icons.add),
-        label: Text(l10n.importAction),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.only(bottom: 96),
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppTokens.space16,
-              0,
-              AppTokens.space16,
-              AppTokens.space8,
-            ),
-            child: SearchBar(
-              controller: _search,
-              hintText: l10n.searchHint,
-              leading: const Icon(Icons.search),
-              trailing: [
-                if (_query.isNotEmpty)
+    final songs = ref.watch(
+      librarySongsProvider((sort: _sort, favoritesOnly: _favoritesOnly)),
+    );
+    final list = songs.asData?.value ?? const <Song>[];
+    final libraryEmpty = added.asData?.value.isEmpty ?? false;
+    return PopScope(
+      canPop: !_selecting,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) setState(_selected.clear);
+      },
+      child: Scaffold(
+        appBar: _selecting
+            ? _selectionBar(list)
+            : AppBar(
+                title: Text(l10n.navHome),
+                actions: [
                   IconButton(
-                    tooltip: l10n.searchClear,
-                    icon: const Icon(Icons.close),
-                    onPressed: () => setState(() {
-                      _search.clear();
-                      _query = '';
-                    }),
+                    tooltip: l10n.statsTitle,
+                    icon: const Icon(Icons.insights_outlined),
+                    onPressed: () => context.push('/stats'),
                   ),
+                ],
+              ),
+        floatingActionButton: _selecting
+            ? null
+            : FloatingActionButton.extended(
+                heroTag: 'import-home',
+                onPressed: () => pickAndImport(context, ref),
+                icon: const Icon(Icons.add),
+                label: Text(l10n.importAction),
+              ),
+        body: CustomScrollView(
+          slivers: [
+            if (!_selecting)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppTokens.space16,
+                    0,
+                    AppTokens.space16,
+                    AppTokens.space8,
+                  ),
+                  child: SearchBar(
+                    controller: _search,
+                    hintText: l10n.searchHint,
+                    leading: const Icon(Icons.search),
+                    trailing: [
+                      if (_query.isNotEmpty)
+                        IconButton(
+                          tooltip: l10n.searchClear,
+                          icon: const Icon(Icons.close),
+                          onPressed: () => setState(() {
+                            _search.clear();
+                            _query = '';
+                          }),
+                        ),
+                    ],
+                    onChanged: (value) => setState(() => _query = value.trim()),
+                  ),
+                ),
+              ),
+            if (_query.isNotEmpty && !_selecting)
+              SliverToBoxAdapter(child: _SearchResults(query: _query))
+            else if (libraryEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: EmptyState(
+                  icon: Icons.mic_none,
+                  title: l10n.homeEmptyTitle,
+                  body: l10n.homeEmptyBody,
+                ),
+              )
+            else ...[
+              if (!_selecting) ...[
+                const SliverToBoxAdapter(child: _ContinueSinging()),
+                SliverToBoxAdapter(
+                  child: _Shelf(
+                    title: l10n.homeRecentlyPlayed,
+                    songs: ref.watch(recentlyPlayedProvider),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: _Shelf(title: l10n.homeRecentlyAdded, songs: added),
+                ),
               ],
-              onChanged: (value) => setState(() => _query = value.trim()),
-            ),
-          ),
-          if (_query.isNotEmpty)
-            _SearchResults(query: _query)
-          else if (added.asData?.value.isEmpty ?? false)
-            EmptyState(
-              icon: Icons.mic_none,
-              title: l10n.homeEmptyTitle,
-              body: l10n.homeEmptyBody,
-            )
-          else ...[
-            const _ContinueSinging(),
-            _Shelf(
-              title: l10n.homeRecentlyPlayed,
-              songs: ref.watch(recentlyPlayedProvider),
-            ),
-            _Shelf(title: l10n.homeRecentlyAdded, songs: added),
+              SliverToBoxAdapter(child: _libraryHeader(l10n)),
+              ..._librarySlivers(l10n, songs),
+            ],
+            const SliverToBoxAdapter(child: SizedBox(height: 96)),
           ],
-        ],
+        ),
       ),
     );
   }
+
+  Widget _libraryHeader(AppLocalizations l10n) => Padding(
+    padding: const EdgeInsets.fromLTRB(
+      AppTokens.space16,
+      AppTokens.space16,
+      AppTokens.space4,
+      0,
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: Semantics(
+            header: true,
+            child: Text(
+              l10n.navLibrary,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+        ),
+        IconButton(
+          tooltip: l10n.libraryFavoritesOnly,
+          isSelected: _favoritesOnly,
+          icon: const Icon(Icons.favorite_border),
+          selectedIcon: const Icon(Icons.favorite),
+          onPressed: () => setState(() => _favoritesOnly = !_favoritesOnly),
+        ),
+        PopupMenuButton<SongSort>(
+          tooltip: l10n.librarySort,
+          icon: const Icon(Icons.sort),
+          initialValue: _sort,
+          onSelected: (sort) => setState(() => _sort = sort),
+          itemBuilder: (context) => [
+            PopupMenuItem(
+              value: SongSort.recentlyAdded,
+              child: Text(l10n.sortRecentlyAdded),
+            ),
+            PopupMenuItem(value: SongSort.title, child: Text(l10n.sortTitle)),
+            PopupMenuItem(value: SongSort.artist, child: Text(l10n.sortArtist)),
+          ],
+        ),
+        IconButton(
+          tooltip: _grid ? l10n.libraryShowList : l10n.libraryShowGrid,
+          icon: Icon(_grid ? Icons.view_list : Icons.grid_view),
+          onPressed: () => setState(() => _grid = !_grid),
+        ),
+      ],
+    ),
+  );
+
+  List<Widget> _librarySlivers(
+    AppLocalizations l10n,
+    AsyncValue<List<Song>> songs,
+  ) => switch (songs) {
+    AsyncData(:final value) when value.isEmpty && _favoritesOnly => [
+      SliverToBoxAdapter(
+        child: EmptyState(
+          icon: Icons.favorite_border,
+          title: l10n.favoritesEmptyTitle,
+          body: l10n.favoritesEmptyBody,
+        ),
+      ),
+    ],
+    AsyncData(:final value) when value.isEmpty => [
+      SliverToBoxAdapter(
+        child: EmptyState(
+          icon: Icons.library_music_outlined,
+          title: l10n.libraryEmptyTitle,
+          body: l10n.libraryEmptyBody,
+        ),
+      ),
+    ],
+    AsyncError(:final error) => [
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.all(AppTokens.space16),
+          child: Text('$error'),
+        ),
+      ),
+    ],
+    AsyncData(:final value) when _grid => [
+      SliverPadding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppTokens.space12,
+          vertical: AppTokens.space8,
+        ),
+        sliver: SliverGrid.builder(
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 180,
+            childAspectRatio: 0.72,
+          ),
+          itemCount: value.length,
+          itemBuilder: (context, index) {
+            final song = value[index];
+            return LayoutBuilder(
+              builder: (context, constraints) => SongCard(
+                song: song,
+                width: constraints.maxWidth - AppTokens.space8,
+                selected: _selected.contains(song.id),
+                onTap: () => _open(song),
+                onLongPress: () => _toggle(song),
+              ),
+            );
+          },
+        ),
+      ),
+    ],
+    AsyncData(:final value) => [
+      SliverList.builder(
+        itemCount: value.length,
+        itemBuilder: (context, index) {
+          final song = value[index];
+          return SongListTile(
+            song: song,
+            selectionMode: _selecting,
+            selected: _selected.contains(song.id),
+            onTap: () => _open(song),
+            onLongPress: () => _toggle(song),
+          );
+        },
+      ),
+    ],
+    _ => [
+      const SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.all(AppTokens.space24),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ),
+    ],
+  };
 }
 
+/// Library matches first, best first; none when nothing in the library is
+/// a likely match. Then the extensions' results.
 class _SearchResults extends ConsumerWidget {
   const _SearchResults({required this.query});
 
@@ -130,23 +412,30 @@ class _SearchResults extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final results = ref.watch(librarySearchProvider(query));
+    final results = ref.watch(homeSearchProvider(query));
+    final online = ref
+        .watch(extensionsProvider)
+        .has(ExtensionCapability.metadata);
     return switch (results) {
       AsyncData(:final value) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (value.isEmpty)
+          if (value.isNotEmpty) ...[
+            _SectionTitle(l10n.navLibrary),
+            for (final song in value)
+              SongListTile(
+                song: song,
+                onTap: () => openSong(context, ref, song),
+                onLongPress: () => showAddToQueueSheet(context, ref, song),
+              ),
+          ],
+          if (online)
+            _OnlineResults(query: query)
+          else if (value.isEmpty)
             Padding(
               padding: const EdgeInsets.all(AppTokens.space24),
               child: Text(l10n.searchNoResults, textAlign: TextAlign.center),
             ),
-          for (final song in value)
-            SongListTile(
-              song: song,
-              onTap: () => openSong(context, ref, song),
-              onLongPress: () => showAddToQueueSheet(context, ref, song),
-            ),
-          if (ref.watch(extensionsProvider).has(ExtensionCapability.metadata))
-            _OnlineResults(query: query),
         ],
       ),
       AsyncError(:final error) => Padding(
@@ -159,6 +448,26 @@ class _SearchResults extends ConsumerWidget {
       ),
     };
   }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle(this.title);
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(
+      AppTokens.space16,
+      AppTokens.space16,
+      AppTokens.space16,
+      AppTokens.space4,
+    ),
+    child: Semantics(
+      header: true,
+      child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+    ),
+  );
 }
 
 final _onlineSearchProvider = FutureProvider.autoDispose
@@ -221,21 +530,7 @@ class _OnlineResultsState extends ConsumerState<_OnlineResults> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppTokens.space16,
-            AppTokens.space16,
-            AppTokens.space16,
-            AppTokens.space4,
-          ),
-          child: Semantics(
-            header: true,
-            child: Text(
-              l10n.searchOnline,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-          ),
-        ),
+        _SectionTitle(l10n.searchOnline),
         switch (results) {
           null || AsyncLoading() => const Padding(
             padding: EdgeInsets.all(AppTokens.space16),

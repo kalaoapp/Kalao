@@ -16,6 +16,7 @@ import 'package:kalao/providers/settings_provider.dart';
 import 'package:kalao/screens/extensions/extension_detail_screen.dart';
 import 'package:kalao/screens/extensions/extension_install.dart';
 import 'package:kalao/screens/extensions/extensions_tab.dart';
+import 'package:kalao/screens/home_tab.dart';
 import 'package:kalao/screens/settings/extension_settings_screen.dart';
 import 'package:kalao/screens/settings/repository_settings_screen.dart';
 import 'package:kalao/screens/shared_files.dart';
@@ -471,6 +472,54 @@ void main() {
     await _settle(tester);
     expect(backend.repositoryListings, isEmpty);
     expect(find.text('https://repo.example.org/index.json'), findsNothing);
+  });
+
+  testWidgets('Home lists the library and searches it before extensions', (
+    tester,
+  ) async {
+    backend.addExtension(
+      FakeBackend.extensionInfo('dev.test.music', capabilities: ['metadata']),
+    );
+    backend.tracks.add({
+      'extensionId': 'dev.test.music',
+      'extensionName': 'Music',
+      'id': 't9',
+      'title': 'Moonlight Online',
+      'artists': ['Someone'],
+    });
+    final id = (await tester.runAsync(() async {
+      final id = await services.library.insertSong(
+        const NewSong(title: 'Blue Moon', media: []),
+      );
+      await services.library.replaceSearchKeys(
+        [id],
+        [
+          {'songId': id, 'keyKind': 'title', 'key': 'bluemoon'},
+        ],
+      );
+      return id;
+    }))!;
+    await _pump(tester, services, secrets, const HomeTab());
+    expect(find.text('Library'), findsOneWidget);
+    expect(find.text('Blue Moon'), findsWidgets);
+
+    await tester.enterText(find.byType(SearchBar), 'moo');
+    await _settle(tester);
+    await _settle(tester);
+    expect(find.text('Library'), findsOneWidget);
+    expect(find.text('Blue Moon'), findsOneWidget);
+    expect(find.text('Moonlight Online'), findsOneWidget);
+    final library = tester.getTopLeft(find.text('Blue Moon')).dy;
+    final online = tester.getTopLeft(find.text('Moonlight Online')).dy;
+    expect(library, lessThan(online));
+
+    // Nothing likely in the library: extension results alone.
+    await tester.enterText(find.byType(SearchBar), 'oo');
+    await _settle(tester);
+    await _settle(tester);
+    expect(find.text('Library'), findsNothing);
+    expect(find.text('From extensions'), findsOneWidget);
+    expect(id, isPositive);
   });
 
   testWidgets('the settings form saves a secret to secure storage', (
