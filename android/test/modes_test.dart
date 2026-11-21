@@ -331,6 +331,10 @@ void main() {
   testWidgets('Karaoke mode shows two lines, a countdown and the next singer', (
     tester,
   ) async {
+    // A phone in portrait: landscape has only the compact controls.
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
     final (track, next) = (await tester.runAsync(() async {
       final track = await addSong('track');
       await services.lyrics.save(track.id, song(), source: 'file');

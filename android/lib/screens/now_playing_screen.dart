@@ -153,22 +153,13 @@ class NowPlayingScreen extends ConsumerWidget {
                 final awake = ScreenAwake(
                   enabled: karaoke && playing && keepOn,
                 );
-                // Landscape: stacked controls would take most of the short
-                // height, so they move to a scrolling side panel and the
-                // lyrics keep the full height.
+                // Landscape: the lyrics keep the whole screen; tapping
+                // beside the text shows or hides compact floating controls.
                 if (constraints.maxWidth > constraints.maxHeight) {
                   return Row(
                     children: [
                       awake,
-                      Expanded(child: lyricsPane),
-                      Container(
-                        width: (constraints.maxWidth * 0.4).clamp(280, 400),
-                        color: Theme.of(context).colorScheme.surfaceContainer,
-                        alignment: Alignment.center,
-                        child: const SingleChildScrollView(
-                          child: PlayerControls(),
-                        ),
-                      ),
+                      Expanded(child: LandscapePlayer(lyrics: lyricsPane)),
                     ],
                   );
                 }
@@ -698,10 +689,126 @@ class _PlayerControlsState extends ConsumerState<PlayerControls> {
   }
 }
 
+/// Landscape Now playing: [lyrics] fill the screen, and a tap outside the
+/// lyric text shows or hides the controls: the Learn | Karaoke toggle
+/// floating at the left, and at the bottom centre compact back-10 and
+/// play/pause buttons above a short progress bar.
+class LandscapePlayer extends ConsumerStatefulWidget {
+  const LandscapePlayer({super.key, required this.lyrics});
+
+  final Widget lyrics;
+
+  @override
+  ConsumerState<LandscapePlayer> createState() => _LandscapePlayerState();
+}
+
+class _LandscapePlayerState extends ConsumerState<LandscapePlayer> {
+  bool _controls = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final (:mode, :playing) = ref.watch(
+      playerProvider.select(
+        (now) => (mode: now.mode, playing: now.engine.playing),
+      ),
+    );
+    final controller = ref.read(playerProvider.notifier);
+    final panel = scheme.surfaceContainerHigh.withValues(alpha: 0.92);
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(AppTokens.radiusLarge),
+    );
+    return Stack(
+      children: [
+        // Lyric lines take their own taps (seek, loop); everything around
+        // them toggles the controls.
+        Positioned.fill(
+          child: GestureDetector(
+            key: const ValueKey('player-toggle-controls'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(() => _controls = !_controls),
+            child: widget.lyrics,
+          ),
+        ),
+        if (_controls) ...[
+          Positioned(
+            left: AppTokens.space16,
+            top: 0,
+            bottom: 0,
+            child: Center(
+              child: Material(
+                color: panel,
+                shape: shape,
+                child: Padding(
+                  padding: const EdgeInsets.all(AppTokens.space8),
+                  child: PlayModeButton(
+                    mode: mode,
+                    onChanged: controller.setMode,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: AppTokens.space12,
+            child: Center(
+              child: Material(
+                color: panel,
+                shape: shape,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppTokens.space8,
+                    vertical: AppTokens.space4,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            tooltip: l10n.playerBack10,
+                            icon: const Icon(Icons.replay_10),
+                            onPressed: () => controller.seekRelative(
+                              const Duration(seconds: -10),
+                            ),
+                          ),
+                          const SizedBox(width: AppTokens.space4),
+                          IconButton.filled(
+                            visualDensity: VisualDensity.compact,
+                            tooltip: playing
+                                ? l10n.playerPause
+                                : l10n.playerPlay,
+                            icon: Icon(
+                              playing ? Icons.pause : Icons.play_arrow,
+                            ),
+                            onPressed: controller.togglePlay,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 320, child: SeekBar(compact: true)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 /// The seek slider and times: the only part of the controls that follows
-/// the position.
+/// the position. [compact] puts the times beside a shorter slider.
 class SeekBar extends ConsumerStatefulWidget {
-  const SeekBar({super.key});
+  const SeekBar({super.key, this.compact = false});
+
+  final bool compact;
 
   @override
   ConsumerState<SeekBar> createState() => _SeekBarState();
@@ -723,24 +830,38 @@ class _SeekBarState extends ConsumerState<SeekBar> {
     );
     final total = duration.inMilliseconds.toDouble();
     final position = _dragging ?? positionMs.clamp(0, total).toDouble();
+    final slider = Slider(
+      value: total <= 0 ? 0 : position.clamp(0, total),
+      max: total <= 0 ? 1 : total,
+      semanticFormatterCallback: (value) =>
+          '${l10n.playerSeek} ${formatDuration(Duration(milliseconds: value.round()))}',
+      onChanged: total <= 0
+          ? null
+          : (value) => setState(() => _dragging = value),
+      onChangeEnd: (value) {
+        setState(() => _dragging = null);
+        ref
+            .read(playerProvider.notifier)
+            .seek(Duration(milliseconds: value.round()));
+      },
+    );
+    if (widget.compact) {
+      final small = Theme.of(context).textTheme.labelSmall;
+      return Row(
+        children: [
+          Text(
+            formatDuration(Duration(milliseconds: position.round())),
+            style: small,
+          ),
+          Expanded(child: slider),
+          Text(formatDuration(duration), style: small),
+        ],
+      );
+    }
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Slider(
-          value: total <= 0 ? 0 : position.clamp(0, total),
-          max: total <= 0 ? 1 : total,
-          semanticFormatterCallback: (value) =>
-              '${l10n.playerSeek} ${formatDuration(Duration(milliseconds: value.round()))}',
-          onChanged: total <= 0
-              ? null
-              : (value) => setState(() => _dragging = value),
-          onChangeEnd: (value) {
-            setState(() => _dragging = null);
-            ref
-                .read(playerProvider.notifier)
-                .seek(Duration(milliseconds: value.round()));
-          },
-        ),
+        slider,
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppTokens.space16),
           child: Row(
