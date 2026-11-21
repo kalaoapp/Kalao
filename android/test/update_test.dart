@@ -80,12 +80,12 @@ void main() {
     expect(isNewerVersion('0.1.0', '0.2.0'), isFalse);
     expect(isNewerVersion('0.2.0', '0.2.0-beta'), isTrue);
     expect(isNewerVersion('0.2.0-beta', '0.2.0'), isFalse);
-    expect(isNewerVersion('0.1.05-alpha', '0.1.04-alpha'), isTrue);
+    expect(isNewerVersion('0.2.0-alpha', '0.1.1-alpha'), isTrue);
   });
 
-  test('the app version has a strict semver form for extensions', () {
+  test('the app version is strict semver', () {
     expect(
-      AppInfo.semver,
+      AppInfo.version,
       matches(RegExp(r'^(0|[1-9]\d*)(\.(0|[1-9]\d*)){2}(-[0-9A-Za-z.-]+)?$')),
     );
   });

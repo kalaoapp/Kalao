@@ -98,7 +98,7 @@ class ExtensionService {
     final installed = await PlatformBridge.extensionsInit(
       root: storage.extensions.path,
       streamCache: storage.streamCache.path,
-      appVersion: AppInfo.semver,
+      appVersion: AppInfo.version,
       developerMode: developerMode,
     );
     for (final extension in installed) {

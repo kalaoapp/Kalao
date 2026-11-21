@@ -4,7 +4,7 @@
 #   android/lib/constants/app_info.dart AppInfo.version          (shown in the app)
 # Tests read AppInfo.version, and release.yml checks the tag matches both files.
 #
-# Usage: bash scripts/bump_version.sh 0.1.06-alpha [build-number]
+# Usage: bash scripts/bump_version.sh 0.2.1-alpha [build-number]
 # The build number (versionCode) defaults to the current one plus one; it must
 # keep rising or Android refuses to install the update over the old APK.
 
@@ -16,13 +16,13 @@ PUBSPEC="$REPO_DIR/android/pubspec.yaml"
 APP_INFO="$REPO_DIR/android/lib/constants/app_info.dart"
 
 if [[ $# -lt 1 || $# -gt 2 ]]; then
-  echo "Usage: $0 <version, e.g. 0.1.06-alpha> [build-number]" >&2
+  echo "Usage: $0 <version, e.g. 0.2.1-alpha> [build-number]" >&2
   exit 1
 fi
 
 version="${1#v}"
-if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-  echo "Error: '$version' is not X.Y.Z or X.Y.Z-pre" >&2
+if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+  echo "Error: '$version' is not strict semver X.Y.Z[-pre] (no leading zeros)" >&2
   exit 1
 fi
 
