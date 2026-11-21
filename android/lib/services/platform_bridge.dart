@@ -824,8 +824,9 @@ class PlatformBridge {
     final bytes = await backendChannel.invokeMethod<Uint8List>('readDocument', {
       'uri': uri,
     });
-    if (bytes == null)
+    if (bytes == null) {
       throw StateError('readDocument returned nothing for $uri');
+    }
     return bytes;
   }
 
