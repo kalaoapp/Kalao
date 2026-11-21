@@ -1,12 +1,14 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalao/constants/app_info.dart';
 import 'package:kalao/app.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
+import 'package:kalao/widgets/player_orientation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fake_backend.dart';
@@ -35,6 +37,29 @@ Future<void> pumpApp(WidgetTester tester, Map<String, Object> prefs) async {
 }
 
 void main() {
+  testWidgets('only the player may rotate', (tester) async {
+    final requested = <List<Object?>>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'SystemChrome.setPreferredOrientations') {
+          requested.add(call.arguments as List<Object?>);
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await tester.pumpWidget(const AnyOrientation(child: SizedBox()));
+    expect(requested.single, hasLength(DeviceOrientation.values.length));
+    await tester.pumpWidget(const SizedBox());
+    expect(requested.last, ['DeviceOrientation.portraitUp']);
+  });
+
   late FakeBackend backend;
 
   setUp(() => backend = FakeBackend()..install());

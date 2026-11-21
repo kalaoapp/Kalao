@@ -60,7 +60,7 @@ Kalao keeps one Flutter project per platform folder (Q6): `desktop/` will be a s
 | `providers/` | Riverpod `Notifier`s and providers, thin over services: `settings_provider`, `library_provider`, `player_provider`, `queue_provider`, `backup_provider`, `update_provider` |
 | `controllers/` | Multi-step flows without widgets: `lyrics_sync_editor_controller.dart` |
 | `screens/` | `main_shell` (Home with the library, Queue, Extensions, Settings), `extensions/*` (tab, detail and settings form, install prompt, repositories, priority), `song_detail_screen` (song and track pages), `home_tab`, `library_screen`, `queue_tab`, `now_playing_screen` (Learn / Karaoke layouts), `lyrics_sync_screen`, import and lyrics sheets, `setup_screen`, `tutorial_screen`, `whats_new_screen`, `stats_screen`, `shared_files`, `settings/*` |
-| `widgets/` | `ruby_lyric_line` (ruby layout + `SweepText`), `lyric_line_view`, `screen_awake`, `karaoke_lyrics_view`, `mini_player`, `song_widgets`, `stepper_tile`, `update_dialog`, `settings_group`, `empty_state`, `app_crash_banner` |
+| `widgets/` | `ruby_lyric_line` (ruby layout + `SweepText`), `lyric_line_view`, `screen_awake`, `player_orientation` (the app is portrait-only; `AnyOrientation` lets the player route rotate), `karaoke_lyrics_view`, `mini_player`, `song_widgets`, `stepper_tile`, `update_dialog`, `settings_group`, `empty_state`, `app_crash_banner` |
 | `theme/` | `app_tokens`, `app_theme` (Material 3, brand palette, Material You through `dynamic_color`) |
 | `l10n/` | `arb/app_{en,zh,zh_Hant,ja}.arb`, generated `app_localizations*.dart` (git-ignored), `supported_locales.dart` |
 | `utils/` | `logger.dart` (`AppLogger`, `LogBuffer`), `lyrics_timeline.dart` (sweep and line timing maths) |
