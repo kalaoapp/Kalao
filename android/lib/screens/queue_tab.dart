@@ -6,6 +6,7 @@ import 'package:kalao/models/song.dart';
 import 'package:kalao/providers/queue_provider.dart';
 import 'package:kalao/services/history_database.dart';
 import 'package:kalao/theme/app_tokens.dart';
+import 'package:kalao/widgets/app_page.dart';
 import 'package:kalao/widgets/empty_state.dart';
 import 'package:kalao/widgets/song_widgets.dart';
 
@@ -148,18 +149,16 @@ class QueueTab extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final entries = ref.watch(queueProvider).asData?.value ?? const [];
     final actions = ref.read(queueActionsProvider);
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.navQueue),
-        actions: [
-          if (entries.isNotEmpty)
-            IconButton(
-              tooltip: l10n.queueClear,
-              icon: const Icon(Icons.clear_all),
-              onPressed: actions.clear,
-            ),
-        ],
-      ),
+    return AppScrollPage.tab(
+      title: l10n.navQueue,
+      actions: [
+        if (entries.isNotEmpty)
+          IconButton(
+            tooltip: l10n.queueClear,
+            icon: const Icon(Icons.clear_all),
+            onPressed: actions.clear,
+          ),
+      ],
       body: entries.isEmpty
           ? EmptyState(
               icon: Icons.queue_music,

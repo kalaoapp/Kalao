@@ -43,6 +43,13 @@ class AppTokens {
   /// `radiusCard`). Rows inside a connected group keep [radiusRowInner]
   /// between them.
   static const double radiusCard = 20;
+
+  /// Buttons, fields, list tiles, menus and snack bars (Mornye's
+  /// `radiusControl`).
+  static const double radiusControl = 16;
+
+  /// Bottom sheets and dialogs (Mornye's `radiusSheet`).
+  static const double radiusSheet = 28;
   static const double radiusRowInner = 4;
 
   /// Mornye's settings rows (`AppTokens.standard`).

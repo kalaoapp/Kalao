@@ -13,6 +13,8 @@ import 'package:kalao/screens/home_tab.dart';
 import 'package:kalao/screens/queue_tab.dart';
 import 'package:kalao/services/extension_service.dart';
 import 'package:kalao/theme/app_tokens.dart';
+import 'package:kalao/widgets/settings_group.dart';
+import 'package:kalao/widgets/app_page.dart';
 import 'package:kalao/widgets/lyrics_provider_picker.dart';
 import 'package:kalao/widgets/song_widgets.dart';
 
@@ -113,111 +115,107 @@ class _SongDetailScreenState extends ConsumerState<SongDetailScreen> {
         ? null
         : extensions.byId(song.extRef!.extensionId)?.manifest.name ??
               song.extRef!.extensionId;
-    return Scaffold(
-      appBar: AppBar(title: Text(l10n.songDetails)),
-      body: ListView(
-        padding: const EdgeInsets.all(AppTokens.space16),
-        children: [
-          Center(
-            child: SongCover(
-              song: song,
-              size: 180,
-              radius: AppTokens.radiusLarge,
-            ),
+    return AppPage(
+      title: l10n.songDetails,
+      padding: const EdgeInsets.all(AppTokens.space16),
+      children: [
+        Center(
+          child: SongCover(
+            song: song,
+            size: 180,
+            radius: AppTokens.radiusLarge,
           ),
-          const SizedBox(height: AppTokens.space16),
+        ),
+        const SizedBox(height: AppTokens.space16),
+        Text(
+          song.title,
+          style: theme.textTheme.headlineSmall,
+          textAlign: TextAlign.center,
+        ),
+        if (song.artist.isNotEmpty)
           Text(
-            song.title,
-            style: theme.textTheme.headlineSmall,
+            song.artist,
+            style: theme.textTheme.titleMedium,
             textAlign: TextAlign.center,
           ),
-          if (song.artist.isNotEmpty)
-            Text(
-              song.artist,
-              style: theme.textTheme.titleMedium,
-              textAlign: TextAlign.center,
+        const SizedBox(height: AppTokens.space16),
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: AppTokens.space8,
+          children: [
+            FilledButton.icon(
+              onPressed: song.playable
+                  ? () => openSong(context, ref, song)
+                  : null,
+              icon: const Icon(Icons.play_arrow),
+              label: Text(l10n.songPlay),
             ),
-          const SizedBox(height: AppTokens.space16),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: AppTokens.space8,
-            children: [
-              FilledButton.icon(
-                onPressed: song.playable
-                    ? () => openSong(context, ref, song)
-                    : null,
-                icon: const Icon(Icons.play_arrow),
-                label: Text(l10n.songPlay),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => showAddToQueueSheet(context, ref, song),
-                icon: const Icon(Icons.playlist_add),
-                label: Text(l10n.queueAdd),
-              ),
-            ],
+            OutlinedButton.icon(
+              onPressed: () => showAddToQueueSheet(context, ref, song),
+              icon: const Icon(Icons.playlist_add),
+              label: Text(l10n.queueAdd),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppTokens.space16),
+        _Fact(l10n.songAlbum, song.album),
+        _Fact(l10n.songDuration, formatDuration(song.duration)),
+        _Fact('ISRC', song.isrc ?? ''),
+        _Fact(l10n.songLanguage, song.language ?? ''),
+        _Fact(
+          l10n.songSource,
+          source == null
+              ? l10n.songSourceLocal
+              : song.streams
+              ? l10n.songSourceStream(source)
+              : l10n.songSourceDownloaded(source),
+        ),
+        const Divider(),
+        if (song.file(MediaKind.original) != null)
+          SettingsItem(
+            icon: Icons.music_note_outlined,
+            title: song.file(MediaKind.instrumental) == null
+                ? l10n.songAddInstrumental
+                : l10n.songReplaceInstrumental,
+            subtitle: l10n.songInstrumentalBody,
+            onTap: () => _addInstrumental(song),
           ),
-          const SizedBox(height: AppTokens.space16),
-          _Fact(l10n.songAlbum, song.album),
-          _Fact(l10n.songDuration, formatDuration(song.duration)),
-          _Fact('ISRC', song.isrc ?? ''),
-          _Fact(l10n.songLanguage, song.language ?? ''),
-          _Fact(
-            l10n.songSource,
-            source == null
-                ? l10n.songSourceLocal
-                : song.streams
-                ? l10n.songSourceStream(source)
-                : l10n.songSourceDownloaded(source),
+        if (extensions.has(ExtensionCapability.metadata))
+          SettingsItem(
+            icon: Icons.manage_search,
+            title: l10n.detailsFind,
+            subtitle: l10n.detailsFindBody,
+            onTap: () => _findDetails(song),
           ),
-          const Divider(),
-          if (song.file(MediaKind.original) != null)
-            ListTile(
-              leading: const Icon(Icons.music_note_outlined),
-              title: Text(
-                song.file(MediaKind.instrumental) == null
-                    ? l10n.songAddInstrumental
-                    : l10n.songReplaceInstrumental,
-              ),
-              subtitle: Text(l10n.songInstrumentalBody),
-              onTap: () => _addInstrumental(song),
-            ),
-          if (extensions.has(ExtensionCapability.metadata))
-            ListTile(
-              leading: const Icon(Icons.manage_search),
-              title: Text(l10n.detailsFind),
-              subtitle: Text(l10n.detailsFindBody),
-              onTap: () => _findDetails(song),
-            ),
-          if (extensions.has(ExtensionCapability.lyrics))
-            ListTile(
-              leading: const Icon(Icons.lyrics_outlined),
-              title: Text(l10n.lyricsSearchOnline),
-              subtitle: Text(
-                song.hasLyrics ? l10n.lyricsSearchReplace : l10n.lyricsNone,
-              ),
-              onTap: () => showLyricsProviderPicker(context, ref, song),
-            ),
-          if (song.streams)
-            ListTile(
-              leading: _downloading
-                  ? const SizedBox.square(
-                      dimension: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.download_outlined),
-              title: Text(l10n.downloadOffline),
-              subtitle: Text(l10n.downloadOfflineBody),
-              onTap: _downloading ? null : () => _download(song),
-            ),
-          if (!extensions.has(ExtensionCapability.metadata) &&
-              !extensions.has(ExtensionCapability.lyrics))
-            ListTile(
-              leading: const Icon(Icons.extension_outlined),
-              title: Text(l10n.detailsNoExtensions),
-              onTap: () => context.go('/'),
-            ),
-        ],
-      ),
+        if (extensions.has(ExtensionCapability.lyrics))
+          SettingsItem(
+            icon: Icons.lyrics_outlined,
+            title: l10n.lyricsSearchOnline,
+            subtitle: song.hasLyrics
+                ? l10n.lyricsSearchReplace
+                : l10n.lyricsNone,
+            onTap: () => showLyricsProviderPicker(context, ref, song),
+          ),
+        if (song.streams)
+          ListTile(
+            leading: _downloading
+                ? const SizedBox.square(
+                    dimension: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.download_outlined),
+            title: Text(l10n.downloadOffline),
+            subtitle: Text(l10n.downloadOfflineBody),
+            onTap: _downloading ? null : () => _download(song),
+          ),
+        if (!extensions.has(ExtensionCapability.metadata) &&
+            !extensions.has(ExtensionCapability.lyrics))
+          SettingsItem(
+            icon: Icons.extension_outlined,
+            title: l10n.detailsNoExtensions,
+            onTap: () => context.go('/'),
+          ),
+      ],
     );
   }
 }
