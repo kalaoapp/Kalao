@@ -5,9 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:kalao/l10n/app_localizations.dart';
+import 'package:kalao/models/extension.dart';
 import 'package:kalao/models/lyrics.dart';
 import 'package:kalao/models/settings.dart';
+import 'package:kalao/providers/extension_provider.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/player_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
@@ -21,6 +24,7 @@ import 'package:kalao/utils/lyrics_timeline.dart';
 import 'package:kalao/widgets/empty_state.dart';
 import 'package:kalao/widgets/karaoke_lyrics_view.dart';
 import 'package:kalao/widgets/lyric_line_view.dart';
+import 'package:kalao/widgets/lyrics_provider_picker.dart';
 import 'package:kalao/widgets/screen_awake.dart';
 import 'package:kalao/widgets/song_widgets.dart';
 
@@ -108,6 +112,11 @@ class NowPlayingScreen extends ConsumerWidget {
             ),
             actions: [
               _FavoriteButton(songId: song.id),
+              IconButton(
+                tooltip: l10n.songDetails,
+                icon: const Icon(Icons.info_outline),
+                onPressed: () => context.push('/song/${song.id}'),
+              ),
               IconButton(
                 tooltip: l10n.queueAdd,
                 icon: const Icon(Icons.playlist_add),
@@ -199,10 +208,24 @@ class _NoLyrics extends ConsumerWidget {
             title: l10n.lyricsNone,
             body: l10n.lyricsNoneBody,
           ),
-          FilledButton.tonalIcon(
-            onPressed: onImport,
-            icon: const Icon(Icons.add),
-            label: Text(l10n.lyricsImport),
+          Wrap(
+            spacing: AppTokens.space8,
+            runSpacing: AppTokens.space8,
+            alignment: WrapAlignment.center,
+            children: [
+              FilledButton.tonalIcon(
+                onPressed: onImport,
+                icon: const Icon(Icons.add),
+                label: Text(l10n.lyricsImport),
+              ),
+              if (song != null &&
+                  ref.watch(extensionsProvider).has(ExtensionCapability.lyrics))
+                FilledButton.tonalIcon(
+                  onPressed: () => showLyricsProviderPicker(context, ref, song),
+                  icon: const Icon(Icons.travel_explore),
+                  label: Text(l10n.lyricsSearchOnline),
+                ),
+            ],
           ),
         ],
       ),

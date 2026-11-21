@@ -89,7 +89,9 @@ if [[ "$PLATFORM" == "android" ]]; then
     # so the APK carries no libc++_shared.so, and the NDK headers for bindgen.
     export "CXX_${LOWER}=$NDK_BIN/${CLANG}++$EXE"
     export "CXXSTDLIB_${LOWER}=c++_static"
-    export "BINDGEN_EXTRA_CLANG_ARGS_${LOWER}=${BINDGEN_EXTRA_CLANG_ARGS:-} --sysroot=$NDK_SYSROOT"
+    # bindgen's default --target has no API level, which the NDK headers
+    # refuse (rquickjs-sys); pass the versioned triple as Mornye does.
+    export "BINDGEN_EXTRA_CLANG_ARGS_${LOWER}=${BINDGEN_EXTRA_CLANG_ARGS:-} --sysroot=$NDK_SYSROOT --target=${CLANG%-clang}"
     export "AR_${LOWER}=$NDK_BIN/llvm-ar"
     ANDROID_TARGETS+=("$TARGET")
   done

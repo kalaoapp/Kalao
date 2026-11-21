@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_riverpod/misc.dart' show Override;
+import 'package:kalao/providers/extension_provider.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -9,6 +10,7 @@ import 'package:kalao/providers/update_provider.dart';
 import 'package:kalao/services/app_state_database.dart';
 import 'package:kalao/services/update_service.dart';
 import 'package:kalao/services/app_storage.dart';
+import 'package:kalao/services/extension_service.dart';
 import 'package:kalao/services/history_database.dart';
 import 'package:kalao/services/import_service.dart';
 import 'package:kalao/services/karaoke_deck.dart';
@@ -60,8 +62,11 @@ Future<void> closeTestServices(LibraryServices services) async {
 List<Override> testOverrides(
   LibraryServices services, {
   Stream<Object?>? events,
+  SecretStore? secrets,
 }) => [
   libraryServicesProvider.overrideWithValue(services),
+  // No Keystore in tests.
+  secretStoreProvider.overrideWithValue(secrets ?? MemorySecretStore()),
   // GitHub has no release yet: the startup update check finds nothing.
   updateServiceProvider.overrideWithValue(
     UpdateService(

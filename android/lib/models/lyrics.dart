@@ -204,6 +204,35 @@ class LyricLine {
   };
 }
 
+/// Where extension lyrics came from (DATA_MODEL.md §1 `source`).
+@immutable
+class LyricSource {
+  const LyricSource({required this.extensionId, required this.itemId});
+
+  static LyricSource? fromJson(Object? json) => switch (json) {
+    {'extensionId': final String id, 'itemId': final String item} =>
+      LyricSource(extensionId: id, itemId: item),
+    _ => null,
+  };
+
+  final String extensionId;
+  final String itemId;
+
+  Map<String, dynamic> toJson() => {
+    'extensionId': extensionId,
+    'itemId': itemId,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is LyricSource &&
+      other.extensionId == extensionId &&
+      other.itemId == itemId;
+
+  @override
+  int get hashCode => Object.hash(extensionId, itemId);
+}
+
 /// A lyric document: text and timing. Layers are stored separately
 /// (`lyric_annotation`) and merged into [lines] when loaded.
 @immutable
@@ -214,6 +243,7 @@ class LyricDocument {
     this.offsetMs = 0,
     this.format = 'plain',
     this.sourceLang,
+    this.source,
   });
 
   factory LyricDocument.fromJson(Map<String, dynamic> json) => LyricDocument(
@@ -225,6 +255,7 @@ class LyricDocument {
     offsetMs: (json['offsetMs'] as num?)?.toInt() ?? 0,
     format: json['format'] as String? ?? 'plain',
     sourceLang: json['sourceLang'] as String?,
+    source: LyricSource.fromJson(json['source']),
   );
 
   /// The per-song offset range and step (IMPLEMENTATION.md §4).
@@ -242,6 +273,9 @@ class LyricDocument {
   final String format;
   final String? sourceLang;
 
+  /// The extension and item the lyrics were fetched from, if any.
+  final LyricSource? source;
+
   bool get isEmpty => lines.isEmpty;
 
   bool get hasWordTiming => lines.any((line) => line.words.isNotEmpty);
@@ -252,6 +286,7 @@ class LyricDocument {
     'timed': timed,
     'offsetMs': offsetMs,
     if (sourceLang != null) 'sourceLang': sourceLang,
+    if (source != null) 'source': source!.toJson(),
     'lines': [for (final line in lines) line.toJson()],
   };
 
@@ -261,12 +296,14 @@ class LyricDocument {
     int? offsetMs,
     String? format,
     String? Function()? sourceLang,
+    LyricSource? Function()? source,
   }) => LyricDocument(
     lines: lines ?? this.lines,
     timed: timed ?? this.timed,
     offsetMs: offsetMs ?? this.offsetMs,
     format: format ?? this.format,
     sourceLang: sourceLang != null ? sourceLang() : this.sourceLang,
+    source: source != null ? source() : this.source,
   );
 
   LyricDocument withLines(List<LyricLine> next) => copyWith(lines: next);

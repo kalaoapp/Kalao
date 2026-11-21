@@ -37,7 +37,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- M4.12: open or share a .kalaobackup, lyrics or audio. Backups
+            <!-- M4.12, M5.2: open or share a .kalaobackup, .kalaoext, lyrics or audio. Backups and extensions
                  have no registered MIME type, so file managers send them as
                  octet-stream or zip; Dart decides by the file name. -->
             <intent-filter>
@@ -49,6 +49,13 @@
                 <data android:mimeType="application/ttml+xml" />
                 <data android:mimeType="text/plain" />
                 <data android:mimeType="audio/*" />
+            </intent-filter>
+            <!-- M5.4: login redirects to kalao://ext/<extension id>/<path> -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="kalao" android:host="ext" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />

@@ -1,0 +1,35 @@
+[package]
+name = "kalao-extensions"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+kalao-core.workspace = true
+kalao-network.workspace = true
+rquickjs.workspace = true
+scraper.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+regex.workspace = true
+base64.workspace = true
+sha2.workspace = true
+sha1.workspace = true
+md-5.workspace = true
+hmac.workspace = true
+aes-gcm.workspace = true
+ed25519-dalek.workspace = true
+getrandom.workspace = true
+zip.workspace = true
+chrono.workspace = true
+
+# rquickjs-sys ships bindings for x86_64 and aarch64 Windows MSVC, so Windows
+# builds need no libclang. Android generates its own.
+[target.'cfg(not(windows))'.dependencies]
+rquickjs = { workspace = true, features = ["bindgen"] }
+
+[lints]
+workspace = true

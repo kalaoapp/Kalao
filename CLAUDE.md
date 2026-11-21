@@ -27,8 +27,11 @@ Versions follow Mornye's pins; `android/docs/LIBRARIES.md` lists every dependenc
 ```
 rust_backend/            Cargo workspace (the engine)
   crates/core            kalao-core: JSON/text helpers, lyrics (LRC, eLRC, TTML, doc), sections, annotate (pinyin, furigana/romaji, Chinese variants), pairing, search keys
-  crates/audio           kalao-audio: playback engine (Symphonia → rubato → ring buffers → mixer → cpal/AAudio)
-  crates/mobile          kalao-mobile: UniFFI API, method table, native data jobs, log buffer (builds libkalao_mobile.so)
+  crates/audio           kalao-audio: playback engine (Symphonia → rubato → ring buffers → mixer → cpal/AAudio), files or streams
+  crates/network         kalao-network: HTTP client, cookies, DNS, TLS — copied unchanged from Mornye
+  crates/extensions      kalao-extensions: QuickJS sandbox, manifest, packages, signed repositories, manager, capability calls
+  crates/ext-cli         kalao-ext: extension author CLI (validate, test, pack, keygen, sign, index)
+  crates/mobile          kalao-mobile: UniFFI API, method table, native data jobs, log buffer, stream cache (builds libkalao_mobile.so)
   crates/bindgen         kalao-bindgen: UniFFI CLI that generates the Kotlin bindings
 android/                 Flutter project (package name `kalao`)
   lib/                   main.dart, app.dart, constants/ controllers/ models/ providers/ screens/ services/ theme/ utils/ widgets/ l10n/
@@ -36,12 +39,13 @@ android/                 Flutter project (package name `kalao`)
   test/                  Dart tests; test/support/ holds fakes
   android/               Gradle host; Kotlin in app/src/main/kotlin/com/brinsley/kalao/ and app/src/rust/kotlin/
   docs/                  design docs
+examples/extensions/     public sample extension (LRCLIB), tested by kalao-ext
 scripts/                 build_rust_backend.sh, check_rust_backend.sh, build_android.sh, check_backend_apk.py (+ test)
 .github/workflows/       ci.yml, release.yml
 poc-webapp/              old Next.js POC — git-ignored, never commit or publish (leaked secrets, copyrighted audio)
 ```
 
-Crate dependencies point downward: `core` and `audio` depend on no other workspace crate; `mobile` depends on `core` and `audio`. Mornye's `network` crate is copied back when extensions need it (M5).
+Crate dependencies point downward: `core`, `network` and `audio` depend on no other workspace crate; `extensions` depends on `core` and `network`; `mobile` depends on `core`, `audio`, `network` and `extensions`; `ext-cli` on `extensions`.
 
 ## Architecture
 

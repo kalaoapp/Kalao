@@ -23,6 +23,237 @@ class FakeBackend {
   /// Files the host hands to `takeSharedFiles` once.
   final shared = <Map<String, String>>[];
 
+  // Extensions: a small stand-in for kalao-extensions (it has its own tests).
+
+  /// Installed extensions as `listExtensions` reports them (see
+  /// [extensionInfo]).
+  final extensions = <Map<String, Object?>>[];
+  final priority = <String, List<String>>{};
+
+  /// `inspectExtensionPackage` / `installExtension` by package path.
+  final packages = <String, Map<String, Object?>>{};
+  final lyricsCandidates = <Map<String, Object?>>[];
+  final tracks = <Map<String, Object?>>[];
+  final audioSources = <Map<String, Object?>>[];
+  final repositoryListings = <Map<String, Object?>>[];
+  final secretUpdates = <String, Map<String, Object?>>{};
+  final authRequests = <Map<String, Object?>>[];
+
+  /// Login redirects the host hands to `takeExtensionCallbacks` once.
+  final extensionCallbacks = <String>[];
+  Object? actionResult = 'done';
+
+  /// Secrets Rust holds in memory, by extension id.
+  final heldSecrets = <String, Map<String, Object?>>{};
+
+  /// An installed-extension record for [extensions] and [packages].
+  static Map<String, Object?> extensionInfo(
+    String id, {
+    String name = 'Test extension',
+    String version = '1.0.0',
+    List<String> capabilities = const ['lyrics'],
+    List<Map<String, Object?>> settings = const [],
+    bool enabled = true,
+    List<String> hosts = const ['api.example.org'],
+  }) => {
+    'id': id,
+    'manifest': {
+      'schema': 1,
+      'id': id,
+      'name': name,
+      'version': version,
+      'author': 'Tests',
+      'capabilities': capabilities,
+      'network': {'hosts': hosts},
+      'settings': settings,
+    },
+    'enabled': enabled,
+    'version': version,
+    'source': {'kind': 'file'},
+    'sha256': 'ab' * 32,
+    'packagePath': '/fake/$id/package.kalaoext',
+    'settings': <String, Object?>{},
+    'secretsSet': <String>[],
+    'missingSecrets': [
+      for (final setting in settings)
+        if (setting['type'] == 'secret') setting['key'],
+    ],
+    'degraded': false,
+    'supported': true,
+    'storageBytes': 0,
+  };
+
+  /// Installs [info] as Rust would: listed, and last in the order of each
+  /// of its capabilities.
+  void addExtension(Map<String, Object?> info) {
+    extensions
+      ..removeWhere((other) => other['id'] == info['id'])
+      ..add(info);
+    final manifest = info['manifest']! as Map;
+    for (final capability in manifest['capabilities'] as List) {
+      final order = priority.putIfAbsent('$capability', () => []);
+      if (!order.contains(info['id'])) order.add(info['id']! as String);
+    }
+  }
+
+  Map<String, Object?>? _extension(Object? id) {
+    for (final info in extensions) {
+      if (info['id'] == id) return info;
+    }
+    return null;
+  }
+
+  Object? _extensions(String method, Map<String, Object?> args) {
+    switch (method) {
+      case 'extensionsInit':
+        return {'extensions': extensions};
+      case 'listExtensions':
+        return {
+          'extensions': extensions,
+          'priority': priority,
+          'developerMode': false,
+        };
+      case 'inspectExtensionPackage':
+        final info = packages[args['path']];
+        if (info == null) throw 'not a valid .kalaoext package';
+        final installed = _extension(info['id']);
+        return {
+          'manifest': info['manifest'],
+          'sha256': info['sha256'],
+          'bytes': 1234,
+          'installedVersion': installed?['version'],
+          'isUpdate': installed != null,
+          'isDowngrade': false,
+          'isReinstall': false,
+          'supported': true,
+          'verifiedBy': null,
+        };
+      case 'installExtension':
+        final info = packages[args['path']];
+        if (info == null) throw 'not a valid .kalaoext package';
+        addExtension(info);
+        return info;
+      case 'installExtensionFolder':
+        throw 'installing from a folder needs developer mode';
+      case 'uninstallExtension':
+        final info = _extension(args['id']);
+        if (info == null) throw 'extension is not installed';
+        extensions.remove(info);
+        for (final order in priority.values) {
+          order.remove(args['id']);
+        }
+        return null;
+      case 'setExtensionEnabled':
+        _extension(args['id'])?['enabled'] = args['enabled'];
+        return null;
+      case 'setExtensionPriority':
+        priority[args['capability']! as String] = [
+          for (final id in args['ids']! as List) '$id',
+        ];
+        return priority;
+      case 'setExtensionSetting':
+        final info = _extension(args['id']);
+        if (info == null) throw 'extension is not installed';
+        final settings = ((info['manifest']! as Map)['settings'] as List)
+            .cast<Map<dynamic, dynamic>>();
+        final secret = settings.any(
+          (s) => s['key'] == args['key'] && s['type'] == 'secret',
+        );
+        if (secret) {
+          final held = heldSecrets.putIfAbsent(info['id']! as String, () => {});
+          if (args['value'] case final String value when value.isNotEmpty) {
+            held[args['key']! as String] = value;
+          } else {
+            held.remove(args['key']);
+          }
+          info['secretsSet'] = held.keys.toList();
+          info['missingSecrets'] = [
+            for (final s in settings)
+              if (s['type'] == 'secret' && !held.containsKey(s['key']))
+                s['key'],
+          ];
+        } else {
+          (info['settings']! as Map)[args['key']] = args['value'];
+        }
+        return null;
+      case 'setExtensionSecrets':
+        final values = (args['values']! as Map).cast<String, Object?>();
+        heldSecrets[args['id']! as String] = values;
+        final info = _extension(args['id']);
+        if (info != null) {
+          info['secretsSet'] = values.keys.toList();
+          info['missingSecrets'] = [
+            for (final key in info['missingSecrets']! as List)
+              if (!values.containsKey(key)) key,
+          ];
+        }
+        return null;
+      case 'takeExtensionSecretUpdates':
+        final taken = {...secretUpdates};
+        secretUpdates.clear();
+        return taken;
+      case 'setExtensionDeveloperMode':
+      case 'extensionAuthCallback':
+      case 'removeRepository':
+        return null;
+      case 'addRepository':
+        repositoryListings.add({
+          'repository': {
+            'url': args['url'],
+            'name': args['name'] ?? 'Repo',
+            'publicKey': args['publicKey'],
+          },
+          'entries': <Object?>[],
+        });
+        return null;
+      case 'invokeExtensionAction':
+        return {'result': actionResult};
+      case 'takeExtensionAuthRequest':
+        return authRequests.isEmpty ? null : authRequests.removeAt(0);
+      case 'extensionHealth':
+        return {'ok': true, 'checks': <Object?>[]};
+      case 'extensionLogs':
+        return {'logs': <Object?>[]};
+      case 'listRepositories':
+        return [
+          for (final listing in repositoryListings) listing['repository'],
+        ];
+      case 'previewRepository':
+        return {
+          'url': args['url'],
+          'name': 'Repo',
+          'publicKey': 'ed25519:key',
+          'fingerprint': 'aaaa:bbbb',
+          'extensions': 1,
+        };
+      case 'refreshRepositories':
+        return {'repositories': repositoryListings};
+      case 'installFromRepository':
+        final info = extensionInfo(args['id']! as String);
+        addExtension(info);
+        return info;
+      case 'searchLyrics':
+        return {'candidates': lyricsCandidates, 'errors': <Object?>[]};
+      case 'getLyrics':
+        return lyricsCandidates.firstWhere(
+          (c) =>
+              c['id'] == args['id'] && c['extensionId'] == args['extensionId'],
+        );
+      case 'searchMetadata':
+        return {'tracks': tracks, 'errors': <Object?>[]};
+      case 'getTrack':
+        return tracks.firstWhere((t) => t['id'] == args['id']);
+      case 'getArtwork':
+        return {'extensionId': null, 'images': <Object?>[]};
+      case 'resolveAudio':
+        if (audioSources.isEmpty) throw 'no audio sources';
+        return {'extensionId': args['extensionId'], 'sources': audioSources};
+    }
+    return _notConnected;
+  }
+
+  static const _notConnected = Object();
+
   /// Methods that fail with a PlatformException carrying their message.
   final failing = <String, String>{};
 
@@ -83,6 +314,8 @@ class FakeBackend {
       throw PlatformException(code: 'ERROR', message: message);
     }
     final args = _args(call);
+    final extension = _extensionsOrFail(call.method, args);
+    if (!identical(extension, _notConnected)) return extension;
     switch (call.method) {
       case 'getBackendInfo':
         return jsonEncode({
@@ -214,6 +447,10 @@ class FakeBackend {
         return ['arm64-v8a', 'armeabi-v7a'];
       case 'installApk':
         return true;
+      case 'takeExtensionCallbacks':
+        final taken = [...extensionCallbacks];
+        extensionCallbacks.clear();
+        return taken;
       case 'takeSharedFiles':
         final taken = [...shared];
         shared.clear();
@@ -252,6 +489,17 @@ class FakeBackend {
           message:
               'Rust application method is not connected yet: ${call.method}',
         );
+    }
+  }
+
+  /// Extension methods reply with JSON text; a thrown string becomes the
+  /// PlatformException Rust's error would.
+  Object? _extensionsOrFail(String method, Map<String, Object?> args) {
+    try {
+      final reply = _extensions(method, args);
+      return identical(reply, _notConnected) ? reply : jsonEncode(reply);
+    } on String catch (message) {
+      throw PlatformException(code: 'ERROR', message: message);
     }
   }
 
@@ -508,6 +756,12 @@ class FakeBackend {
               }(),
           ],
         };
+      case 'extensionDownload':
+        // The "download": a small file named after the URL.
+        final target = File(request['path']! as String)
+          ..createSync(recursive: true)
+          ..writeAsStringSync('audio from ${request['url']}');
+        return {'path': target.path, 'bytes': target.lengthSync()};
       case 'backupWrite':
         // A JSON stand-in for the ZIP: same manifest, same entry checks.
         final files = <String, String>{};

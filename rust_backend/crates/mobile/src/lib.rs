@@ -6,11 +6,13 @@
 mod backend;
 mod cancellation;
 mod data_jobs;
+mod extensions;
 mod logging;
 mod lyrics;
 mod media;
 mod native_backup;
 mod player;
+mod stream;
 
 uniffi::setup_scaffolding!();
 

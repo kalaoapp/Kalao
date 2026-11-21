@@ -51,6 +51,7 @@ class MainActivity : AudioServiceFragmentActivity() {
         "listDocumentTree",
         "deleteDocument",
         "takeSharedFiles",
+        "takeExtensionCallbacks",
         "getSupportedAbis",
         "installApk",
     )
@@ -100,6 +101,7 @@ class MainActivity : AudioServiceFragmentActivity() {
         // Activity-result launchers must exist before the activity starts.
         documentPickers = DocumentPickers(this)
         super.onCreate(savedInstanceState)
+        ExtensionAuthCallbacks.collect(intent)
         SharedFiles.collect(intent)
     }
 
@@ -107,6 +109,7 @@ class MainActivity : AudioServiceFragmentActivity() {
     // onResume, where Dart takes it.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        ExtensionAuthCallbacks.collect(intent)
         SharedFiles.collect(intent)
     }
 
@@ -142,6 +145,7 @@ class MainActivity : AudioServiceFragmentActivity() {
                         "deleteDocument" -> handleDeleteDocument(call, result)
                         "getSupportedAbis" -> handleGetSupportedAbis(result)
                         "installApk" -> handleInstallApk(call, result)
+                        "takeExtensionCallbacks" -> result.success(ExtensionAuthCallbacks.take())
                         "takeSharedFiles" -> result.success(
                             withContext(Dispatchers.IO) { SharedFiles.take(applicationContext) },
                         )

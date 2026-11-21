@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:developer' show Timeline;
 
 import 'package:flutter/services.dart';
+import 'package:kalao/models/extension.dart';
 import 'package:kalao/models/player_state.dart';
 import 'package:kalao/services/platform_bridge.dart';
 import 'package:kalao/utils/logger.dart';
@@ -90,12 +91,19 @@ class KaraokeDeck {
     return next;
   }
 
+  /// Loads files ([sources], kind → path) and extension [streams].
   Future<EnginePlayerState> load({
     required String songId,
-    required Map<String, String> sources,
+    Map<String, String> sources = const {},
+    List<StreamSource> streams = const [],
     Duration start = Duration.zero,
   }) => _run(
-    PlatformBridge.playerLoad(songId: songId, sources: sources, start: start),
+    PlatformBridge.playerLoad(
+      songId: songId,
+      sources: sources,
+      streams: streams,
+      start: start,
+    ),
   );
 
   Future<EnginePlayerState> play() => _run(PlatformBridge.playerPlay());

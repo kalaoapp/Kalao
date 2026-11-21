@@ -108,6 +108,12 @@ class SettingsNotifier extends Notifier<AppSettings> {
       _save(state.copyWith(checkUpdates: value));
 
   /// Applies preferences restored from a backup (device keys stay).
+  Future<void> setAutoFetchLyrics(bool value) =>
+      _save(state.copyWith(autoFetchLyrics: value));
+
+  Future<void> setExtensionDeveloperMode(bool value) =>
+      _save(state.copyWith(extensionDeveloperMode: value));
+
   Future<void> restore(AppSettings restored) => _save(restored);
 
   Future<void> setVerboseLogging(bool value) async {

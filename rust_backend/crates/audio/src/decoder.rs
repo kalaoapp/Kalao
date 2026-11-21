@@ -1,6 +1,7 @@
 //! One audio file decoded to interleaved stereo `f32` at the file's own rate.
 
 use crate::AudioError;
+use crate::Media;
 use std::fs::File;
 use std::path::Path;
 use symphonia::core::audio::SampleBuffer;
@@ -22,13 +23,25 @@ pub struct Decoder {
     skip_frames: u64,
 }
 
-fn probe(path: &Path) -> Result<ProbeResult, AudioError> {
-    let file = File::open(path).map_err(|error| AudioError::Open(error.to_string()))?;
-    let stream = MediaSourceStream::new(Box::new(file), Default::default());
+fn probe(media: &Media) -> Result<ProbeResult, AudioError> {
     let mut hint = Hint::new();
-    if let Some(extension) = path.extension().and_then(|value| value.to_str()) {
-        hint.with_extension(extension);
-    }
+    let source: Box<dyn symphonia::core::io::MediaSource> = match media {
+        Media::File(path) => {
+            if let Some(extension) = path.extension().and_then(|value| value.to_str()) {
+                hint.with_extension(extension);
+            }
+            Box::new(File::open(path).map_err(|error| AudioError::Open(error.to_string()))?)
+        }
+        Media::Stream(stream) => {
+            if let Some(extension) = stream.extension() {
+                hint.with_extension(extension);
+            }
+            stream
+                .open()
+                .map_err(|error| AudioError::Open(error.to_string()))?
+        }
+    };
+    let stream = MediaSourceStream::new(source, Default::default());
     symphonia::default::get_probe()
         .format(
             &hint,
@@ -43,8 +56,8 @@ fn probe(path: &Path) -> Result<ProbeResult, AudioError> {
 }
 
 impl Decoder {
-    pub fn open(path: &Path) -> Result<Self, AudioError> {
-        let format = probe(path)?.format;
+    pub fn open(media: &Media) -> Result<Self, AudioError> {
+        let format = probe(media)?.format;
         let track = format
             .tracks()
             .iter()
@@ -180,7 +193,12 @@ pub struct Probe {
 /// Reads tags, cover, duration and codec. A file Symphonia cannot open is an
 /// error; one it can open but not decode reports `decodable: false`.
 pub fn probe_file(path: &Path) -> Result<Probe, AudioError> {
-    let mut probed = probe(path)?;
+    probe_media(&Media::File(path.to_path_buf()))
+}
+
+/// `probe_file` for any media, a stream included.
+pub fn probe_media(media: &Media) -> Result<Probe, AudioError> {
+    let mut probed = probe(media)?;
     let mut result = Probe::default();
     if let Some(revision) = probed.metadata.get().as_ref().and_then(|m| m.current()) {
         apply_revision(&mut result, revision);

@@ -47,6 +47,7 @@ fn execute(request: &Value, check: Check) -> Result<Value, String> {
         "rebuildSearchKeys" => rebuild_search_keys(request, check),
         "backupWrite" => crate::native_backup::write(request, check),
         "backupInspect" => crate::native_backup::inspect(request, check),
+        "extensionDownload" => crate::extensions::download_job(request, check),
         other => Err(format!("Unknown native data job: {other}")),
     }
 }

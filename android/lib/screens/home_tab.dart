@@ -1,12 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kalao/screens/queue_tab.dart';
 import 'package:kalao/l10n/app_localizations.dart';
+import 'package:kalao/models/extension.dart';
 import 'package:kalao/models/song.dart';
+import 'package:kalao/providers/extension_provider.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/player_provider.dart';
 import 'package:kalao/screens/import_sheet.dart';
+import 'package:kalao/screens/song_detail_screen.dart';
 import 'package:kalao/theme/app_tokens.dart';
 import 'package:kalao/widgets/empty_state.dart';
 import 'package:kalao/widgets/song_widgets.dart';
@@ -21,6 +26,9 @@ Future<void> openSong(
   final player = ref.read(playerProvider);
   if (player.song?.id != song.id) {
     await ref.read(playerProvider.notifier).playSong(song, start: start);
+    // A stream that could not start leaves the previous song playing; the
+    // shell shows why.
+    if (ref.read(playerProvider).song?.id != song.id) return;
   }
   if (context.mounted) await context.push('/player');
 }
@@ -124,18 +132,21 @@ class _SearchResults extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final results = ref.watch(librarySearchProvider(query));
     return switch (results) {
-      AsyncData(:final value) when value.isEmpty => Padding(
-        padding: const EdgeInsets.all(AppTokens.space24),
-        child: Text(l10n.searchNoResults, textAlign: TextAlign.center),
-      ),
       AsyncData(:final value) => Column(
         children: [
+          if (value.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(AppTokens.space24),
+              child: Text(l10n.searchNoResults, textAlign: TextAlign.center),
+            ),
           for (final song in value)
             SongListTile(
               song: song,
               onTap: () => openSong(context, ref, song),
               onLongPress: () => showAddToQueueSheet(context, ref, song),
             ),
+          if (ref.watch(extensionsProvider).has(ExtensionCapability.metadata))
+            _OnlineResults(query: query),
         ],
       ),
       AsyncError(:final error) => Padding(
@@ -147,6 +158,109 @@ class _SearchResults extends ConsumerWidget {
         child: LinearProgressIndicator(),
       ),
     };
+  }
+}
+
+final _onlineSearchProvider = FutureProvider.autoDispose
+    .family<
+      ({List<TrackResult> tracks, List<ExtensionFailure> errors}),
+      String
+    >(
+      (ref, query) => ref
+          .watch(extensionServiceProvider)
+          .searchTracks(TrackQuery(title: query)),
+    );
+
+/// Search across the metadata extensions (FEATURES 6.2), after a pause in
+/// typing. Results open the track page: play, add or download.
+class _OnlineResults extends ConsumerStatefulWidget {
+  const _OnlineResults({required this.query});
+
+  final String query;
+
+  @override
+  ConsumerState<_OnlineResults> createState() => _OnlineResultsState();
+}
+
+class _OnlineResultsState extends ConsumerState<_OnlineResults> {
+  Timer? _debounce;
+  String? _settled;
+
+  @override
+  void initState() {
+    super.initState();
+    _schedule();
+  }
+
+  @override
+  void didUpdateWidget(_OnlineResults old) {
+    super.didUpdateWidget(old);
+    if (old.query != widget.query) _schedule();
+  }
+
+  void _schedule() {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 600), () {
+      if (mounted) setState(() => _settled = widget.query);
+    });
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final query = _settled;
+    final results = query == null || query.length < 2
+        ? null
+        : ref.watch(_onlineSearchProvider(query));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppTokens.space16,
+            AppTokens.space16,
+            AppTokens.space16,
+            AppTokens.space4,
+          ),
+          child: Semantics(
+            header: true,
+            child: Text(
+              l10n.searchOnline,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+        ),
+        switch (results) {
+          null || AsyncLoading() => const Padding(
+            padding: EdgeInsets.all(AppTokens.space16),
+            child: LinearProgressIndicator(),
+          ),
+          AsyncData(:final value) when value.tracks.isEmpty => Padding(
+            padding: const EdgeInsets.all(AppTokens.space16),
+            child: Text(l10n.searchNoResults),
+          ),
+          AsyncData(:final value) => Column(
+            children: [
+              for (final track in value.tracks)
+                TrackTile(
+                  track: track,
+                  onTap: () => context.push('/track', extra: track),
+                ),
+            ],
+          ),
+          AsyncError(:final error) => Padding(
+            padding: const EdgeInsets.all(AppTokens.space16),
+            child: Text('$error'),
+          ),
+        },
+      ],
+    );
   }
 }
 

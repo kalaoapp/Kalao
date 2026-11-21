@@ -12,6 +12,7 @@ import 'package:kalao/models/settings.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/services/library_database.dart';
 import 'package:kalao/services/library_schema.dart';
+import 'package:kalao/services/extension_service.dart';
 import 'package:kalao/services/platform_bridge.dart';
 import 'package:kalao/utils/logger.dart';
 import 'package:path/path.dart' as p;
@@ -90,8 +91,12 @@ class StagedBackup {
 /// `.kalaobackup` export, inspection and restore (FEATURES 7.1–7.3, 7.5).
 /// Secrets live in secure storage and are never read here.
 class BackupService {
-  BackupService(this.services, {DatabaseFactory? factory})
+  BackupService(this.services, {DatabaseFactory? factory, this.extensions})
     : _factory = factory ?? databaseFactory;
+
+  /// Installed extensions and repositories go into backups when set
+  /// (DATA_MODEL.md §3); their secrets never do.
+  final ExtensionService? extensions;
 
   /// Bumped on breaking changes; older formats are always readable.
   static const format = 1;
@@ -136,6 +141,24 @@ class BackupService {
       final settingsFile = File(p.join(work.path, 'settings.json'));
       await settingsFile.writeAsString(jsonEncode(settings.toBackupJson()));
       entries.add({'name': 'settings.json', 'path': settingsFile.path});
+      var extensionCount = 0;
+      if (extensions case final extensions?) {
+        try {
+          final state = await extensions.backupState();
+          final file = File(p.join(work.path, 'extensions.json'));
+          await file.writeAsString(jsonEncode(state.json));
+          entries.add({'name': 'extensions.json', 'path': file.path});
+          for (final MapEntry(key: name, value: path)
+              in state.packages.entries) {
+            if (File(path).existsSync()) {
+              entries.add({'name': name, 'path': path});
+              extensionCount++;
+            }
+          }
+        } catch (error) {
+          _log.w('Extensions left out of the backup', error);
+        }
+      }
 
       final library = services.library.db;
       final covers = await library.rawQuery(
@@ -168,6 +191,7 @@ class BackupService {
             'history',
             'appState',
             'settings',
+            if (extensionCount > 0) 'extensions',
             if (includeMedia) 'media',
           ],
           'counts': {
@@ -178,6 +202,7 @@ class BackupService {
               'SELECT COUNT(*) FROM play',
             ),
             'media': mediaFiles,
+            'extensions': extensionCount,
           },
           // FEATURES 7.5: secrets stay in secure storage.
           'secrets': false,
@@ -390,6 +415,7 @@ class BackupService {
         added = await _mergeLibrary(staged.libraryDb);
         await _mergeHistory(staged.historyDb);
       }
+      await _restoreExtensions(staged);
       AppSettings? settings;
       if (mode == RestoreMode.replace && staged.settings.existsSync()) {
         final json = jsonDecode(await staged.settings.readAsString());
@@ -405,6 +431,24 @@ class BackupService {
   }
 
   Future<void> discard(StagedBackup staged) => _delete(staged.dir);
+
+  /// Installs the backup's extensions (both modes: an installed newer
+  /// version stays) and trusts its repositories again. A failure here never
+  /// undoes the library restore.
+  Future<void> _restoreExtensions(StagedBackup staged) async {
+    final service = extensions;
+    final file = File(p.join(staged.dir.path, 'extensions.json'));
+    if (service == null || !file.existsSync()) return;
+    try {
+      final json = jsonDecode(await file.readAsString());
+      if (json is Map<String, dynamic>) {
+        final count = await service.restoreBackup(staged.dir, json);
+        _log.i('Restored $count extensions');
+      }
+    } catch (error) {
+      _log.w('Extensions from the backup were not restored', error);
+    }
+  }
 
   Future<void> _replaceAll(StagedBackup staged) async {
     await _replace(services.library.db, staged.libraryDb, _libraryTables);

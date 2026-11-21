@@ -1,6 +1,6 @@
 # Data Model
 
-Ownership follows Mornye (ARCHITECTURE.md §6): Dart owns the schemas and migrations (`sqflite`, all in `services/library_schema.dart`), Rust never opens the live databases, settings live in `shared_preferences`, secrets (from M5) in `flutter_secure_storage`.
+Ownership follows Mornye (ARCHITECTURE.md §6): Dart owns the schemas and migrations (`sqflite`, all in `services/library_schema.dart`), Rust never opens the live databases, settings live in `shared_preferences`, secrets in `flutter_secure_storage`.
 
 ## 1. Timed lyrics
 
@@ -22,7 +22,7 @@ The POC stored text layers only, with no timing. Kalao separates **text and timi
 }
 ```
 
-`version` 2 (M2) added `words`, `voice` and `translation`; version 1 documents read unchanged. `format` is how the text arrived (`plain`, `lrc`, `elrc`, `ttml`). `offsetMs` is added to the playback position before the line lookup (positive = lyrics earlier, as LRC's `[offset:]`). `words` are in text order; `start` is the word's UTF-16 offset in `text`, set by `parseLyrics` (documents saved before it find the words in `text` in order); `endMs` is optional on lines and words (a line ends when the next lead line starts, a word when the next word starts). `voice` is `v1`, `v2`, … in a duet and `bg` for backing vocals; `words`, `voice`, `translation` and `section` are omitted when empty. A `source` object (extension id and item) is added with lyric extensions in M5.
+`version` 2 (M2) added `words`, `voice` and `translation`; version 1 documents read unchanged. `format` is how the text arrived (`plain`, `lrc`, `elrc`, `ttml`). `offsetMs` is added to the playback position before the line lookup (positive = lyrics earlier, as LRC's `[offset:]`). `words` are in text order; `start` is the word's UTF-16 offset in `text`, set by `parseLyrics` (documents saved before it find the words in `text` in order); `endMs` is optional on lines and words (a line ends when the next lead line starts, a word when the next word starts). `voice` is `v1`, `v2`, … in a duet and `bg` for backing vocals; `words`, `voice`, `translation` and `section` are omitted when empty. Lyrics fetched from an extension carry `source: {extensionId, itemId}` and are saved with `source_kind = extension`.
 
 Annotation layers per line:
 
@@ -49,7 +49,7 @@ Annotation layers per line:
 | `melody` *(planned, M7)* | sha256, path, frames, created_at | Reference pitch track for scoring |
 | `stem_job` *(planned, M6)* | id, song_id, sha256, mode (`local`/`remote`), model, status, progress, remote_job_id, error, created_at | Mirror of Rust job state for UI; checkpoints are Rust files |
 
-`language`, `origin`, `ext_ref` and `media_file.pinned` exist for extensions and stems but are not written yet.
+Songs added from an extension have `origin = extension` and `ext_ref` (`{extensionId, trackId, track}`) and stream until downloaded; downloaded files are `media_file.source = extension`. `language` comes from metadata. `media_file.pinned` is not written yet (stems, M6).
 
 ### `kalao_history.db` (`services/library_schema.dart`, `history_database.dart`)
 
@@ -72,8 +72,9 @@ Annotation layers per line:
 | `shared_preferences` | `settings_provider` | `AppSettings` JSON (IMPLEMENTATION.md §16), `update_checked_at`; later the daily MyMemory character counter |
 | `media/`, `covers/` | `import_service.dart` | Imported audio as `<sha256>.<ext>`, embedded cover art |
 | `backups/`, `backup_work/` | `backup_service.dart` | Safety backups before a Replace (newest three), scratch space for export and restore |
-| `flutter_secure_storage` *(M5–M6)* | Dart | Stem API key, install ID, MyMemory contact email, extension `secret` settings |
-| `extensions/` *(M5)* | `kalao-extensions` | Installed packages, per-extension key-value storage and cookies |
+| `flutter_secure_storage` | Dart (`secure_storage_options.dart`) | Extension `secret` settings (`ext:<id>:<key>`); later the stem API key, install ID and MyMemory contact email |
+| `extensions/` | `kalao-extensions` | `registry.json` (enabled, plain settings, priority, repositories), `<id>/package.kalaoext`, `<id>/storage.json`, `repositories/` (last indexes). Cookies stay in memory |
+| `stream_cache/` | `kalao-mobile` stream | Streamed extension audio: `<key>.part` while it downloads, `<key>.data` when finished (newest 1 GiB kept) |
 | `models/` *(M6)* | `kalao-stems` | User-installed ONNX models (verified by SHA-256), plus partial downloads |
 | `stems/<sha256>/` *(M6)* | `kalao-stems` | `vocals.flac`, `instrumental.flac`, `job.json` checkpoints |
 | `melody/<sha256>.bin` *(M7)* | `kalao-audio` | Pitch frames (u16 cents per 10 ms) |
@@ -93,8 +94,8 @@ kalao-2026-11-15-2105.kalaobackup
 ├── settings.json        # AppSettings without secrets
 ├── covers/              # cover art, by file name
 ├── media/               # optional: imported audio, by sha256
-├── extensions.json      # (M5) ids, versions, enabled, priority, repositories
-├── extensions/*.kalaoext # (M5)
+├── extensions.json      # ids, versions, enabled, plain settings, priority, repositories (with keys)
+├── extensions/*.kalaoext # the installed packages
 └── stems/               # (M6) optional: stems, by sha256
 ```
 

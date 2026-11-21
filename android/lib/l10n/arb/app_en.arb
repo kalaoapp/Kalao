@@ -13,7 +13,7 @@
   "queueEmptyTitle": "The queue is empty",
   "queueEmptyBody": "Long-press a song on Home, or select songs in Library, to add them here. The next song starts when the current one ends.",
   "extensionsEmptyTitle": "No extensions installed",
-  "extensionsEmptyBody": "Extensions add lyrics, metadata and audio sources. Installing them arrives in a later update.",
+  "extensionsEmptyBody": "Extensions add lyrics, song details, artwork and audio sources. Install one from a .kalaoext file or a repository.",
   "setupWelcomeTitle": "Welcome to Kalao",
   "setupWelcomeBody": "Sing karaoke and learn lyrics with pinyin, furigana and translations. Everything stays on your device: no accounts, no tracking.",
   "setupLanguage": "Language",
@@ -501,6 +501,311 @@
     "placeholders": {
       "count": {
         "type": "int"
+      }
+    }
+  },
+  "capabilityLyrics": "Lyrics",
+  "capabilityMetadata": "Song details",
+  "capabilityAudio": "Audio",
+  "capabilityArtwork": "Artwork",
+  "extensionVersion": "Version {version}",
+  "@extensionVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionInstall": "Install",
+  "extensionUpdate": "Update",
+  "extensionInstallFromFile": "Install from file",
+  "extensionPick": "Choose a .kalaoext file",
+  "extensionInstallTitle": "Install {name}?",
+  "@extensionInstallTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionUpdateTitle": "Update {name}?",
+  "@extensionUpdateTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionInstalled": "{name} installed",
+  "@extensionInstalled": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionInstallFailed": "Could not install: {error}",
+  "@extensionInstallFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionInvalid": "Not a valid extension: {error}",
+  "@extensionInvalid": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionInstalledVersion": "Installed: {version}",
+  "@extensionInstalledVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionDowngrade": "This is older than the installed version {version}.",
+  "@extensionDowngrade": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionHosts": "Sites it can reach",
+  "extensionNoHosts": "None: it works offline.",
+  "extensionHostAfter": "{host} (after you fill in “{setting}”)",
+  "@extensionHostAfter": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "setting": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionLogin": "It can ask you to log in to these sites in your browser.",
+  "extensionFingerprint": "Fingerprint (SHA-256)",
+  "extensionVerifiedBy": "Signed and listed by your trusted repository “{repository}”.",
+  "@extensionVerifiedBy": {
+    "placeholders": {
+      "repository": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionUnverified": "Not from a repository you trust. Install it only if you trust where the file came from.",
+  "extensionResponsibility": "Extensions run in a sandbox and see none of your library or files. Each extension’s author is responsible for respecting the terms of the sites it uses.",
+  "extensionNeedsNewer": "Needs Kalao {version} or newer.",
+  "@extensionNeedsNewer": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionRepositories": "Repositories",
+  "extensionPriority": "Order",
+  "extensionPriorityBody": "Extensions are asked in this order. It breaks ties between equally good results and decides which plays audio and draws artwork first. Drag to reorder.",
+  "extensionPriorityEmpty": "No installed extension provides this.",
+  "extensionPriorityDrag": "Drag to reorder",
+  "extensionsUnavailable": "Extensions are unavailable: {error}",
+  "@extensionsUnavailable": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionOptions": "Options",
+  "extensionAutoLyrics": "Fetch lyrics automatically",
+  "extensionAutoLyricsBody": "When a song without lyrics plays, ask the lyrics extensions and save the best match.",
+  "extensionDeveloperMode": "Developer mode",
+  "extensionDeveloperModeBody": "For writing extensions: allows HTTP to localhost and loading an extension from a folder.",
+  "extensionLoadFolder": "Load from folder",
+  "extensionLoadFolderBody": "Install an unpacked extension; load it again to reload it.",
+  "extensionDisabled": "Disabled",
+  "extensionDegraded": "Failing: skipped for now",
+  "extensionNeedsSecret": "Needs a setting",
+  "extensionNotInstalled": "This extension is not installed.",
+  "extensionEnabled": "Enabled",
+  "extensionSettings": "Settings",
+  "extensionPermissions": "Permissions",
+  "extensionHealth": "Status",
+  "extensionHealthUnknown": "Not checked yet",
+  "extensionHealthOk": "Working",
+  "extensionHealthFailed": "Not reachable",
+  "extensionHealthCheck": "Check now",
+  "extensionAbout": "About",
+  "extensionSource": "Installed from",
+  "extensionSourceFile": "A file",
+  "extensionSourceFolder": "Folder {path} (developer mode)",
+  "@extensionSourceFolder": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionReload": "Reload from the folder",
+  "extensionStorage": "Storage",
+  "extensionStorageBytes": "{bytes, plural, =0{Empty} other{{bytes} bytes}}",
+  "@extensionStorageBytes": {
+    "placeholders": {
+      "bytes": {
+        "type": "int"
+      }
+    }
+  },
+  "extensionLog": "Debug log",
+  "extensionLogEmpty": "Nothing logged yet.",
+  "extensionUninstall": "Uninstall",
+  "extensionUninstallTitle": "Uninstall {name}?",
+  "@extensionUninstallTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionUninstallBody": "Its settings, saved logins and storage are deleted. Songs and lyrics you added with it stay in your library.",
+  "extensionRun": "Run",
+  "extensionActionDone": "“{label}” finished",
+  "@extensionActionDone": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionSecretSet": "Saved (hidden)",
+  "extensionSecretMissing": "Not set",
+  "extensionSecretNote": "Kept in this device’s secure storage. Never shown again, never logged and never put in backups.",
+  "extensionSecretClear": "Remove",
+  "extensionFailed": "{name} failed",
+  "@extensionFailed": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "repositoryAdd": "Add repository",
+  "repositoryUrl": "Repository URL",
+  "repositoryUrlHelp": "The https address of its index.json",
+  "repositoryCheck": "Check",
+  "repositoryInvalid": "Could not read the repository: {error}",
+  "@repositoryInvalid": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "repositoryTrustTitle": "Trust “{name}”?",
+  "@repositoryTrustTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "repositoryExtensions": "{count, plural, =0{No extensions} =1{1 extension} other{{count} extensions}}",
+  "@repositoryExtensions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "repositoryKey": "Signing key fingerprint",
+  "repositoryTrustBody": "Only packages signed with this key will install from it. If the key ever changes, Kalao stops installing from it until you add it again.",
+  "repositoryTrust": "Trust and add",
+  "repositoryRefresh": "Check for updates",
+  "repositoryRemove": "Remove",
+  "repositoryRemoveTitle": "Remove “{name}”?",
+  "@repositoryRemoveTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "repositoryRemoveBody": "Extensions installed from it stay installed but no longer get updates.",
+  "repositoryEmptyTitle": "No repositories",
+  "repositoryEmptyBody": "A repository lists signed extensions and their updates. Add one by its URL.",
+  "lyricsSearchOnline": "Find lyrics online",
+  "lyricsSearchNone": "No lyrics found. Try another title or artist.",
+  "lyricsSearchReplace": "Saved as a new version; the current one stays in the history.",
+  "lyricsSynced": "Synced",
+  "lyricsPlain": "Plain",
+  "lyricsFetched": "Lyrics from {name} saved",
+  "@lyricsFetched": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "searchAction": "Search",
+  "searchOnline": "From extensions",
+  "songDetails": "Song details",
+  "songPlay": "Play",
+  "songAddToLibrary": "Add to library",
+  "songAlbum": "Album",
+  "songDuration": "Length",
+  "songLanguage": "Language",
+  "songSource": "Source",
+  "songSourceLocal": "Imported on this device",
+  "songSourceStream": "Streams from {name}",
+  "@songSourceStream": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "songSourceDownloaded": "Downloaded from {name}",
+  "@songSourceDownloaded": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "songNoAudioExtension": "Install an audio extension to play or download this song.",
+  "detailsFind": "Find details online",
+  "detailsFindBody": "Title, artist, album and artwork from your metadata extensions.",
+  "detailsApplied": "Details updated",
+  "detailsNoExtensions": "Install lyrics or metadata extensions to look this song up online.",
+  "downloadOffline": "Download for offline",
+  "downloadOfflineBody": "Saves the audio, its stems and lyrics in your library.",
+  "downloadDone": "“{title}” is available offline",
+  "@downloadDone": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "downloadFailed": "Download failed: {error}",
+  "@downloadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "streamFailed": "Cannot play this song: {error}",
+  "@streamFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
       }
     }
   }

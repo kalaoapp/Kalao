@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/l10n/supported_locales.dart';
 import 'package:kalao/models/settings.dart';
+import 'package:kalao/providers/extension_provider.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/player_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
@@ -17,7 +18,10 @@ const _log = AppLogger('Backup');
 
 /// Replaced in tests with one on the FFI database factory.
 final backupServiceProvider = Provider<BackupService>(
-  (ref) => BackupService(ref.watch(libraryServicesProvider)),
+  (ref) => BackupService(
+    ref.watch(libraryServicesProvider),
+    extensions: ref.watch(extensionServiceProvider),
+  ),
 );
 
 /// The newest scheduled backup run, for the Backup screen.

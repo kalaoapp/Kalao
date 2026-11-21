@@ -72,6 +72,8 @@ class AppSettings {
     this.backupKeep = 5,
     this.backupIncludeMedia = false,
     this.checkUpdates = true,
+    this.autoFetchLyrics = true,
+    this.extensionDeveloperMode = false,
   });
 
   factory AppSettings.fromJson(Map<String, dynamic> json) => AppSettings(
@@ -104,6 +106,8 @@ class AppSettings {
     backupKeep: ((json['backupKeep'] as num?)?.toInt() ?? 5).clamp(1, 30),
     backupIncludeMedia: json['backupIncludeMedia'] as bool? ?? false,
     checkUpdates: json['checkUpdates'] as bool? ?? true,
+    autoFetchLyrics: json['autoFetchLyrics'] as bool? ?? true,
+    extensionDeveloperMode: json['extensionDeveloperMode'] as bool? ?? false,
   );
 
   /// Keys that describe this device or this install rather than the user's
@@ -117,6 +121,7 @@ class AppSettings {
     'backupSchedule',
     'backupKeep',
     'backupIncludeMedia',
+    'extensionDeveloperMode',
   };
 
   /// `settings.json` in a backup (DATA_MODEL.md §3).
@@ -203,6 +208,14 @@ class AppSettings {
   /// Check GitHub Releases for a newer version once a day (FEATURES 9.8).
   final bool checkUpdates;
 
+  /// Fetch lyrics from lyrics extensions when a song without lyrics is
+  /// played (FEATURES 2.11).
+  final bool autoFetchLyrics;
+
+  /// Extension developer mode (EXTENSIONS.md §8): `localhost` over HTTP and
+  /// installs from a folder.
+  final bool extensionDeveloperMode;
+
   Map<String, dynamic> toJson() => {
     'setupCompleted': setupCompleted,
     'themeMode': themeMode.name,
@@ -227,6 +240,8 @@ class AppSettings {
     'backupKeep': backupKeep,
     'backupIncludeMedia': backupIncludeMedia,
     'checkUpdates': checkUpdates,
+    'autoFetchLyrics': autoFetchLyrics,
+    'extensionDeveloperMode': extensionDeveloperMode,
   };
 
   AppSettings copyWith({
@@ -253,6 +268,8 @@ class AppSettings {
     int? backupKeep,
     bool? backupIncludeMedia,
     bool? checkUpdates,
+    bool? autoFetchLyrics,
+    bool? extensionDeveloperMode,
   }) => AppSettings(
     setupCompleted: setupCompleted ?? this.setupCompleted,
     themeMode: themeMode ?? this.themeMode,
@@ -283,6 +300,9 @@ class AppSettings {
     backupKeep: backupKeep ?? this.backupKeep,
     backupIncludeMedia: backupIncludeMedia ?? this.backupIncludeMedia,
     checkUpdates: checkUpdates ?? this.checkUpdates,
+    autoFetchLyrics: autoFetchLyrics ?? this.autoFetchLyrics,
+    extensionDeveloperMode:
+        extensionDeveloperMode ?? this.extensionDeveloperMode,
   );
 
   @override
@@ -310,7 +330,9 @@ class AppSettings {
       other.backupSchedule == backupSchedule &&
       other.backupKeep == backupKeep &&
       other.backupIncludeMedia == backupIncludeMedia &&
-      other.checkUpdates == checkUpdates;
+      other.checkUpdates == checkUpdates &&
+      other.autoFetchLyrics == autoFetchLyrics &&
+      other.extensionDeveloperMode == extensionDeveloperMode;
 
   @override
   int get hashCode => Object.hashAll([
@@ -337,5 +359,7 @@ class AppSettings {
     backupKeep,
     backupIncludeMedia,
     checkUpdates,
+    autoFetchLyrics,
+    extensionDeveloperMode,
   ]);
 }

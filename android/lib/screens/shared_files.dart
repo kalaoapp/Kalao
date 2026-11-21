@@ -7,6 +7,7 @@ import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/models/song.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/player_provider.dart';
+import 'package:kalao/screens/extensions/extension_install.dart';
 import 'package:kalao/screens/import_sheet.dart';
 import 'package:kalao/screens/lyrics_import_sheet.dart';
 import 'package:kalao/screens/settings/backup_screen.dart';
@@ -20,7 +21,13 @@ import 'package:path/path.dart' as p;
 const _log = AppLogger('SharedFiles');
 
 /// What to do with files opened with or shared to Kalao.
-enum SharedFilesAction { restore, importAudio, importLyrics, unsupported }
+enum SharedFilesAction {
+  restore,
+  installExtension,
+  importAudio,
+  importLyrics,
+  unsupported,
+}
 
 SharedFilesAction sharedFilesAction(List<String> names) {
   String ext(String name) =>
@@ -28,6 +35,7 @@ SharedFilesAction sharedFilesAction(List<String> names) {
   final kinds = names.map(ext).toSet();
   if (kinds.any(audioExtensions.contains)) return SharedFilesAction.importAudio;
   if (kinds.contains('kalaobackup')) return SharedFilesAction.restore;
+  if (kinds.contains('kalaoext')) return SharedFilesAction.installExtension;
   if (kinds.any(lyricsExtensions.contains)) {
     return SharedFilesAction.importLyrics;
   }
@@ -71,6 +79,11 @@ Future<void> handleSharedFiles(BuildContext context, WidgetRef ref) async {
         final backup = files.firstWhere((f) => f.name.endsWith('.kalaobackup'));
         final staged = await restoreBackupFile(context, backup.path);
         if (context.mounted) await confirmRestore(context, staged);
+      case SharedFilesAction.installExtension:
+        for (final file in files.where((f) => f.name.endsWith('.kalaoext'))) {
+          if (!context.mounted) break;
+          await installExtensionFile(context, ref, file.path);
+        }
       case SharedFilesAction.importLyrics:
         final text = utf8.decode(
           await File(files.first.path).readAsBytes(),

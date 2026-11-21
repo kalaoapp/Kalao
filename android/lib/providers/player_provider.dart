@@ -2,9 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:kalao/models/extension.dart';
 import 'package:kalao/models/lyrics.dart';
 import 'package:kalao/models/player_state.dart';
 import 'package:kalao/models/song.dart';
+import 'package:kalao/providers/extension_provider.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
 import 'package:kalao/services/history_database.dart';
@@ -38,6 +40,8 @@ class NowPlaying {
     this.singer = '',
     this.loopLines,
     this.loopOpen = false,
+    this.streaming = false,
+    this.error,
   });
 
   final Song? song;
@@ -61,6 +65,13 @@ class NowPlaying {
   /// line widens the repeat to everything between the two.
   final bool loopOpen;
 
+  /// The song plays from an extension stream, not a downloaded file.
+  final bool streaming;
+
+  /// Why the last song could not start (no audio extension, a failed
+  /// stream); shown once by the shell.
+  final String? error;
+
   bool get isInstrumental => engine.canSwitch && engine.vocalLevel < 0.5;
   bool get isKaraoke => mode == PlayMode.karaoke;
 
@@ -72,6 +83,7 @@ class NowPlaying {
     PlayMode? mode,
     (int, int)? Function()? loopLines,
     bool? loopOpen,
+    String? Function()? error,
   }) => NowPlaying(
     song: song ?? this.song,
     lyrics: lyrics != null ? lyrics() : this.lyrics,
@@ -81,6 +93,8 @@ class NowPlaying {
     singer: singer,
     loopLines: loopLines != null ? loopLines() : this.loopLines,
     loopOpen: loopOpen ?? this.loopOpen,
+    streaming: streaming,
+    error: error != null ? error() : this.error,
   );
 }
 
@@ -170,7 +184,21 @@ class PlayerController extends Notifier<NowPlaying>
   }) async {
     await _finishPlay();
     final sources = sourcesFor(song);
-    if (sources.isEmpty) return;
+    var streams = const <StreamSource>[];
+    if (sources.isEmpty) {
+      final extRef = song.extRef;
+      if (extRef == null) return;
+      // An extension song that is not downloaded streams (FEATURES 1.8).
+      try {
+        streams = await ref
+            .read(extensionServiceProvider)
+            .resolveStreams(extRef);
+      } catch (error) {
+        _log.w('Cannot stream ${song.title}', error);
+        state = state.copyWith(error: () => '$error');
+        return;
+      }
+    }
     final playMode = mode ?? modeFor(song);
     final lyrics = await _loadLyrics(song.id);
     state = NowPlaying(
@@ -179,12 +207,32 @@ class PlayerController extends Notifier<NowPlaying>
       engine: state.engine,
       mode: playMode,
       singer: singer,
+      streaming: streams.isNotEmpty,
     );
-    await _deck.load(songId: '${song.id}', sources: sources, start: start);
+    try {
+      await _deck.load(
+        songId: '${song.id}',
+        sources: sources,
+        streams: streams,
+        start: start,
+      );
+    } catch (error) {
+      if (streams.isEmpty) rethrow;
+      _log.w('Stream failed for ${song.title}', error);
+      state = state.copyWith(error: () => '$error');
+      return;
+    }
+    final kinds = {
+      ...sources.keys,
+      for (final stream in streams) stream.source.kind,
+    };
+    final hasBacking =
+        kinds.contains('instrumental') &&
+        (kinds.contains('original') || kinds.contains('vocals'));
     // Speed, key and loops belong to one play of one song.
     if (_deck.state.tempo != 1) await _deck.setTempo(1);
     if (_deck.state.key != 0) await _deck.setKey(0);
-    if (song.hasBacking) {
+    if (hasBacking) {
       await _deck.switchTrack(instrumental: playMode == PlayMode.karaoke);
     } else {
       await _deck.setVocalLevel(1);
@@ -205,7 +253,26 @@ class PlayerController extends Notifier<NowPlaying>
     _sessionTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (state.engine.playing) unawaited(_saveSession());
     });
+    if (lyrics == null) unawaited(_fetchLyrics(song));
   }
+
+  /// Fetches lyrics for a song that has none from the lyrics extensions
+  /// (FEATURES 2.11), when the setting allows it.
+  Future<void> _fetchLyrics(Song song) async {
+    if (!ref.read(settingsProvider).autoFetchLyrics) return;
+    if (!ref.read(extensionsProvider).has(ExtensionCapability.lyrics)) return;
+    if (!await ref.read(extensionServiceProvider).autoFetchLyrics(song)) return;
+    if (!ref.mounted) return;
+    ref.read(libraryRevisionProvider.notifier).bump();
+    if (state.song?.id != song.id) return;
+    final lyrics = await _loadLyrics(song.id);
+    if (ref.mounted && state.song?.id == song.id) {
+      state = state.copyWith(lyrics: () => lyrics);
+    }
+  }
+
+  /// Clears [NowPlaying.error] once it was shown.
+  void clearError() => state = state.copyWith(error: () => null);
 
   /// The song's current lyrics in the Chinese variant from settings.
   Future<LyricDocument?> _loadLyrics(int songId) async {

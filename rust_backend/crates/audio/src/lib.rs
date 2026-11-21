@@ -9,8 +9,9 @@ mod mixer;
 mod output;
 mod source;
 
-pub use decoder::{Probe, probe_file};
+pub use decoder::{Probe, probe_file, probe_media};
 pub use mixer::{Layout, soft_limit};
+pub use symphonia::core::io::MediaSource;
 
 use mixer::{LoopPlay, Mixer, Preroll};
 use serde_json::{Value, json};
@@ -42,6 +43,27 @@ const MIN_LOOP_MS: u64 = 250;
 const PREROLL_MS: u64 = 500;
 /// The crossfade from the loop end into the loop start.
 const SEAM_FADE_MS: u64 = 10;
+
+/// Opens a byte stream the decoders read, e.g. a cached HTTP stream. Each
+/// call returns a fresh reader (one per decoder, plus loop prerolls).
+pub trait StreamOpener: Send + Sync {
+    fn open(&self) -> std::io::Result<Box<dyn MediaSource>>;
+    /// Container hint for the decoder (`mp3`, `m4a`, `flac`, …).
+    fn extension(&self) -> Option<&str>;
+}
+
+/// Where a source's audio comes from.
+#[derive(Clone)]
+pub enum Media {
+    File(PathBuf),
+    Stream(Arc<dyn StreamOpener>),
+}
+
+impl From<PathBuf> for Media {
+    fn from(path: PathBuf) -> Self {
+        Self::File(path)
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum AudioError {
@@ -88,7 +110,7 @@ struct Session {
     /// Shared with the loop thread, which repositions them outside the
     /// session lock so the callback keeps playing the preroll.
     sources: Vec<Arc<Source>>,
-    paths: Vec<PathBuf>,
+    media: Vec<Media>,
     kinds: Vec<SourceKind>,
     layout: Layout,
     duration_ms: Option<u64>,
@@ -660,9 +682,13 @@ impl Engine {
     pub fn load(
         &self,
         song_id: &str,
-        sources: &[(SourceKind, PathBuf)],
+        sources: &[(SourceKind, impl Clone + Into<Media>)],
         start_ms: u64,
     ) -> Result<(), AudioError> {
+        let sources: Vec<(SourceKind, Media)> = sources
+            .iter()
+            .map(|(kind, media)| (*kind, media.clone().into()))
+            .collect();
         if sources.is_empty() || sources.len() > 3 {
             return Err(AudioError::Invalid(
                 "one to three sources are required".into(),
@@ -673,16 +699,16 @@ impl Engine {
         let mut duration_ms = None;
         let mut opened = Vec::with_capacity(sources.len());
         let mut kinds = Vec::with_capacity(sources.len());
-        for (kind, path) in sources {
+        for (kind, media) in &sources {
             if kinds.contains(kind) {
                 return Err(AudioError::Invalid(format!(
                     "duplicate {} source",
                     kind.as_str()
                 )));
             }
-            let probe = probe_file(path)?;
+            let probe = probe_media(media)?;
             duration_ms = duration_ms.max(probe.duration_ms);
-            let source = Arc::new(Source::open(*kind, path, rate, RING_FRAMES)?);
+            let source = Arc::new(Source::open(*kind, media, rate, RING_FRAMES)?);
             if start_ms > 0 {
                 source.seek(start_ms)?;
             }
@@ -695,7 +721,7 @@ impl Engine {
             song_id: song_id.to_owned(),
             layout: Layout::for_kinds(&kinds),
             sources: opened,
-            paths: sources.iter().map(|(_, path)| path.clone()).collect(),
+            media: sources.iter().map(|(_, media)| media.clone()).collect(),
             kinds,
             duration_ms,
         };
@@ -908,14 +934,14 @@ impl Engine {
     /// Decodes the first part of `start..end` for every source, at the output
     /// rate. `None` when nothing is loaded or a source cannot be decoded.
     fn build_preroll(&self, start: u64, end: u64) -> Option<Preroll> {
-        let paths = lock(&self.shared.session).as_ref()?.paths.clone();
+        let media = lock(&self.shared.session).as_ref()?.media.clone();
         let rate = self.shared.output_rate.load(Ordering::Acquire);
         // Leave room before the end for the rings to play the fade.
         let length_ms = PREROLL_MS.min((end - start).saturating_sub(2 * SEAM_FADE_MS));
         let frames = (u64::from(rate) * length_ms / 1000) as usize;
-        let mut buffers = Vec::with_capacity(paths.len());
-        for path in &paths {
-            let mut buffer = source::decode_range(path, start, frames, rate).ok()?;
+        let mut buffers = Vec::with_capacity(media.len());
+        for item in &media {
+            let mut buffer = source::decode_range(item, start, frames, rate).ok()?;
             buffer.resize(frames * 2, 0.0);
             buffers.push(buffer);
         }

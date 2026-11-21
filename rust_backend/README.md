@@ -6,16 +6,19 @@ The toolchain is pinned in `rust-toolchain.toml` (Rust 1.99.1 with rustfmt and c
 
 ## Crate map
 
-Dependencies point downward: `core` and `audio` depend on no other workspace crate.
+Dependencies point downward: `core`, `network` and `audio` depend on no other workspace crate.
 
 | Crate | Package | Depends on | Contents |
 | --- | --- | --- | --- |
 | `crates/core` | `kalao-core` | none | JSON helpers, text, XML depth check, matching, lyrics (`lrc`, TTML payloads, and `doc`: LRC/eLRC/TTML/plain import, LRC/eLRC export), section markers, annotation (pinyin, furigana and romaji, Chinese variants), search keys, import pairing |
-| `crates/audio` | `kalao-audio` | none | Playback engine (Symphonia → rubato → ring buffers → mixer → Signalsmith Stretch → cpal/AAudio), gapless loops, clock, `probe_file` |
-| `crates/mobile` | `kalao-mobile` | core, audio | UniFFI API: `invoke_application` method table, `run_native_data_job`, cancellation registry, player state publisher (`player_subscribe`), log buffer, backup archive codec |
+| `crates/audio` | `kalao-audio` | none | Playback engine (Symphonia → rubato → ring buffers → mixer → Signalsmith Stretch → cpal/AAudio) over files or streams (`Media`), gapless loops, clock, `probe_file` |
+| `crates/network` | `kalao-network` | none | Mornye's HTTP client, unchanged: per-session allowlist and cookies, redirect checks, DNS, TLS roots, streams |
+| `crates/extensions` | `kalao-extensions` | core, network | Extension framework (EXTENSIONS.md): manifest, `.kalaoext` packages, QuickJS runtime and the `kalao` host object, ed25519 repositories, the manager (install, settings, priority, health) and capability calls |
+| `crates/ext-cli` | `kalao-ext` | extensions | Extension author CLI: `validate`, `test`, `pack`, `keygen`, `sign`, `index` |
+| `crates/mobile` | `kalao-mobile` | core, audio, network, extensions | UniFFI API: `invoke_application` method table, `run_native_data_job`, cancellation registry, player state publisher (`player_subscribe`), log buffer, backup archive codec, extension methods and the stream cache |
 | `crates/bindgen` | `kalao-bindgen` | `uniffi` CLI | Generates the Kotlin bindings |
 
-Later milestones add `network` (Mornye's, copied unchanged), `extensions`, `providers`, `stems`, `party`, `desktop` and `ext-cli` (see `android/docs/ARCHITECTURE.md`).
+Later milestones add `providers`, `stems`, `party` and `desktop` (see `android/docs/ARCHITECTURE.md`).
 
 ## Method table
 

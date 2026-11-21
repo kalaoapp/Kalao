@@ -22,7 +22,7 @@ Sections mark planned parts with *(planned, Mx)*; everything else exists.
 │  kalao-mobile (UniFFI API, native data jobs) → kalao-audio · kalao-core           │
 │  later: stems · extensions · providers (MyMemory) · party · network              │
 └──────────┬────────────────────────┬──────────────────────────┬────────────────────┘
-           │ extension fetch (M5)   │ MyMemory (M6)            │ optional donor API key (M6)
+           │ extension fetch        │ MyMemory (M6)            │ optional donor API key (M6)
            ▼ (allowlisted hosts)    ▼ api.mymemory.translated  ▼
        third-party sites                                  Kalao stem server (stem-server/)
 ```
@@ -59,7 +59,7 @@ Kalao keeps one Flutter project per platform folder (Q6): `desktop/` will be a s
 | `services/` | All non-UI logic, one file per concern: `platform_bridge.dart`, `backend/`, `library_schema.dart`, `library_database.dart`, `history_database.dart`, `app_state_database.dart`, `library_queue_store.dart`, `library_search.dart`, `import_service.dart`, `lyrics_service.dart`, `karaoke_deck.dart`, `playback_handler.dart`, `backup_service.dart`, `backup_runs.dart`, `poc_import_service.dart`, `update_service.dart`, `app_crash_service.dart`, `app_storage.dart`, `custom_font_service.dart`, `external_links.dart` |
 | `providers/` | Riverpod `Notifier`s and providers, thin over services: `settings_provider`, `library_provider`, `player_provider`, `queue_provider`, `backup_provider`, `update_provider` |
 | `controllers/` | Multi-step flows without widgets: `lyrics_sync_editor_controller.dart` |
-| `screens/` | `main_shell` (Home, Library, Queue, Extensions placeholder, Settings), `home_tab`, `library_screen`, `queue_tab`, `now_playing_screen` (Learn / Karaoke layouts), `lyrics_sync_screen`, import and lyrics sheets, `setup_screen`, `tutorial_screen`, `whats_new_screen`, `stats_screen`, `shared_files`, `settings/*` |
+| `screens/` | `main_shell` (Home, Library, Queue, Extensions, Settings), `extensions/*` (tab, detail and settings form, install prompt, repositories, priority), `song_detail_screen` (song and track pages), `home_tab`, `library_screen`, `queue_tab`, `now_playing_screen` (Learn / Karaoke layouts), `lyrics_sync_screen`, import and lyrics sheets, `setup_screen`, `tutorial_screen`, `whats_new_screen`, `stats_screen`, `shared_files`, `settings/*` |
 | `widgets/` | `ruby_lyric_line` (ruby layout + `SweepText`), `lyric_line_view`, `screen_awake`, `karaoke_lyrics_view`, `mini_player`, `song_widgets`, `stepper_tile`, `update_dialog`, `settings_group`, `empty_state`, `app_crash_banner` |
 | `theme/` | `app_tokens`, `app_theme` (Material 3, brand palette, Material You through `dynamic_color`) |
 | `l10n/` | `arb/app_{en,zh,zh_Hant,ja}.arb`, generated `app_localizations*.dart` (git-ignored), `supported_locales.dart` |
@@ -77,15 +77,15 @@ Workspace settings: `resolver = "3"`, edition 2024, `rust-version = "1.99.0"`, t
 | `crates/audio` | `kalao-audio` | new | Karaoke engine: synchronised decoders, mixer, crossfade, key/tempo (Signalsmith Stretch), loops, clock, cpal/AAudio output, `probe_file`; later mic input, pitch tracking, reverb, recording (M7, M8) | none |
 | `crates/mobile` | `kalao-mobile` | Mornye `mobile` (skeleton) | UniFFI API, `invoke_application` dispatch, cancellation registry, log buffer, native data jobs (`hash_file`, `importInspect`, `importStore`, `rebuildSearchKeys`, `backupWrite`, `backupInspect`), backup archive codec, player/lyrics/import methods, the player state publisher | core, audio |
 | `crates/bindgen` | `kalao-bindgen` | Mornye `bindgen`, unchanged | UniFFI CLI for the Kotlin bindings | uniffi only |
-| `crates/network` *(planned, M5)* | `kalao-network` | Mornye `network`, unchanged | Cancellable HTTP client, cookies, DNS, TLS roots, request policy | none |
-| `crates/extensions` *(planned, M5)* | `kalao-extensions` | Mornye `extensions` (subset) | QuickJS runtime, host APIs, manifest, package, repository, storage, lyrics/metadata/health backends | core, network, providers |
+| `crates/network` | `kalao-network` | Mornye `network`, unchanged | Cancellable HTTP client, cookies, DNS, TLS roots, request policy | none |
+| `crates/extensions` | `kalao-extensions` | Kalao-sized, Mornye `extensions` patterns | QuickJS runtime, host APIs, manifest, package, signatures, repositories, storage, manager, capability calls, health | core, network |
 | `crates/providers` *(planned, M6)* | `kalao-providers` | Mornye `providers` (structure) | MyMemory translation client, request coalescer | core, network |
 | `crates/stems` *(planned, M6)* | `kalao-stems` | new | ONNX separation, model manager, resumable chunked jobs, FLAC output, remote stem-server client | core, network |
 | `crates/party` *(planned, M8)* | `kalao-party` | Mornye `link` | LAN party host: HTTPS + WebSocket, PIN pairing, room state, TV lyrics page | core |
 | `crates/desktop` *(planned, M8.7)* | `kalao-desktop` | Mornye `desktop` | C ABI over the same method table | mobile |
-| `crates/ext-cli` *(planned, M5)* | `kalao-ext` | new | Extension author CLI (validate, test, pack, sign) | extensions |
+| `crates/ext-cli` | `kalao-ext` | new | Extension author CLI (validate, test, pack, keygen, sign, index) | extensions |
 
-`crates/mobile/uniffi.toml`: `package_name = "com.brinsley.kalao.backend"`, `cdylib_name = "kalao_mobile"`. Dependencies point downward; `core`, `audio` (and later `network`) depend on no workspace crate.
+`crates/mobile/uniffi.toml`: `package_name = "com.brinsley.kalao.backend"`, `cdylib_name = "kalao_mobile"`. Dependencies point downward; `core`, `audio` and `network` depend on no workspace crate; `extensions` depends on `core` and `network`; `mobile` on `core`, `audio`, `network` and `extensions`.
 
 ## 5. Dart ↔ Kotlin ↔ Rust transport
 
@@ -108,8 +108,8 @@ Workspace settings: `resolver = "3"`, edition 2024, `rust-version = "1.99.0"`, t
 | Settings | Dart `models/settings.dart` via `settings_provider` | `shared_preferences` |
 | Imported audio and covers | Dart `import_service.dart` | `media/<sha256>.<ext>`, `covers/` in app support |
 | Backup archives | Rust `kalao-mobile::native_backup` (codec), Dart `backup_service.dart` (contents, restore) | `.kalaobackup` files |
-| Secrets *(M5–M6)* (stem key, install ID, extension secrets) | Dart, `flutter_secure_storage` (Keystore) | — |
-| Extension packages, storage and cookies *(M5)* | Rust `kalao-extensions` | App-private files |
+| Secrets (extension secrets; stem key and install ID in M6) | Dart, `flutter_secure_storage` (Keystore) | — |
+| Extension packages, registry and storage | Rust `kalao-extensions` | App-private files (`extensions/`); cookies in memory |
 | Stem models, checkpoints, stem files *(M6)* | Rust `kalao-stems` | App-private files, keyed by audio SHA-256 |
 
 The schema stays owned by Dart; Rust never opens the live databases.
@@ -131,7 +131,7 @@ The schema stays owned by Dart; Rust never opens the live databases.
 
 ## 9. Android host (`android/android/app/src/main/kotlin/com/brinsley/kalao/`)
 
-`KalaoApplication.kt` (crash capture), `MainActivity.kt` (routing), `MainActivityCalls.kt` (screen awake, background work, crash report), `MainActivityStorageCalls.kt` (SAF: save a document, backup folder), `MainActivityUpdateCalls.kt` (ABIs, APK installer through a `FileProvider`), `MainActivityProgressStreams.kt`, `SharedFiles.kt` (VIEW/SEND intents), `BackgroundWorkService.kt` + `ForegroundServiceStartPolicy.kt` + `ForegroundWorkLock.kt` + `CoalescingWorkRefresh.kt`, `AppCrashReporter.kt`, `NativeCrashTrace.kt`; `src/rust/kotlin/{SelectedCoreBackend,NativeDataJobs}.kt`; `src/test/kotlin/MainActivityRoutingTest.kt`. Later: player calls (audio permissions, routes, M7), party calls (multicast lock, M8), extension auth callbacks (M5).
+`KalaoApplication.kt` (crash capture), `MainActivity.kt` (routing), `MainActivityCalls.kt` (screen awake, background work, crash report), `MainActivityStorageCalls.kt` (SAF: save a document, backup folder), `MainActivityUpdateCalls.kt` (ABIs, APK installer through a `FileProvider`), `MainActivityProgressStreams.kt`, `SharedFiles.kt` (VIEW/SEND intents), `BackgroundWorkService.kt` + `ForegroundServiceStartPolicy.kt` + `ForegroundWorkLock.kt` + `CoalescingWorkRefresh.kt`, `AppCrashReporter.kt`, `NativeCrashTrace.kt`; `src/rust/kotlin/{SelectedCoreBackend,NativeDataJobs}.kt`; `src/test/kotlin/MainActivityRoutingTest.kt`. `ExtensionAuthCallbacks.kt` (`kalao://ext/…` login redirects). Later: player calls (audio permissions, routes, M7), party calls (multicast lock, M8).
 
 Manifest: `minSdk 26`, `targetSdk 37`, `compileSdk 37`, NDK `30.0.16248370`, 16 KB page-aligned `.so`, ABI splits (arm64-v8a, armeabi-v7a, x86_64) plus universal. Permissions are added with the features that need them: today `INTERNET`, `FOREGROUND_SERVICE` (+ media playback and data sync types), `POST_NOTIFICATIONS`, `WAKE_LOCK`, `REQUEST_INSTALL_PACKAGES`; later `RECORD_AUDIO` (M7), `CHANGE_WIFI_MULTICAST_STATE` and `CAMERA` (M8). No Google Play services.
 
@@ -153,6 +153,6 @@ Separate deployment with its own Cargo workspace: Rust (axum) gateway with key w
 | Backup layout and restore | Dart `backup_service.dart`; archive codec in `kalao-mobile::native_backup` |
 | Updates | `update_service.dart` + `update_provider.dart` |
 | Stem separation *(M6)* | `kalao-stems` |
-| Third-party content access *(M5)* | extensions, via `kalao-extensions` host fetch only |
+| Third-party content access | extensions, via `kalao-extensions` host fetch only |
 | Translation *(M6)* | `kalao-providers` (MyMemory client) + a Dart translation service (dedupe, cache, alignment) |
 | Stem API key validity and device binding *(M6)* | stem server gateway |

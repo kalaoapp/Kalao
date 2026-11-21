@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:kalao/models/extension.dart';
 import 'package:kalao/models/player_state.dart';
 import 'package:kalao/services/backend/backend_channel.dart';
 
@@ -129,16 +130,19 @@ class PlatformBridge {
 
   // Player (Rust engine)
 
-  /// Loads [sources] (`kind` → file path) paused at [start].
+  /// Loads [sources] (`kind` → file path) and [streams] (sources an
+  /// extension resolved, FEATURES 1.8) paused at [start].
   static Future<EnginePlayerState> playerLoad({
     required String songId,
-    required Map<String, String> sources,
+    Map<String, String> sources = const {},
+    List<StreamSource> streams = const [],
     Duration start = Duration.zero,
   }) => _player('playerLoad', {
     'songId': songId,
     'sources': [
       for (final entry in sources.entries)
         {'kind': entry.key, 'path': entry.value},
+      for (final stream in streams) stream.toJson(),
     ],
     'startMs': start.inMilliseconds,
   });
@@ -353,6 +357,32 @@ class PlatformBridge {
     'maxFormat': maxFormat,
   }, requestId: requestId);
 
+  /// Saves [url] (through extension [extensionId]'s network session, or its
+  /// finished stream cache [cacheKey]) to [path]; at most [maxBytes].
+  static Future<({String path, int bytes})> extensionDownload({
+    required String extensionId,
+    required String url,
+    Map<String, String> headers = const {},
+    required String path,
+    String? cacheKey,
+    int? maxBytes,
+    required String requestId,
+  }) async {
+    final reply = await runNativeDataJob({
+      'operation': 'extensionDownload',
+      'extensionId': extensionId,
+      'url': url,
+      'headers': headers,
+      'path': path,
+      'cacheKey': ?cacheKey,
+      'maxBytes': ?maxBytes,
+    }, requestId: requestId);
+    return (
+      path: reply['path'] as String? ?? path,
+      bytes: (reply['bytes'] as num?)?.toInt() ?? 0,
+    );
+  }
+
   /// Runs CPU or file work in the Rust worker. [requestId] lets
   /// [cancelNativeDataJob] cancel it, also before it starts.
   static Future<Map<String, dynamic>> runNativeDataJob(
@@ -368,6 +398,275 @@ class PlatformBridge {
 
   static Future<void> cancelNativeDataJob(String requestId) => backendChannel
       .invokeMethod<void>('cancelNativeDataJob', {'request_id': requestId});
+
+  // Extensions (Rust, kalao-extensions)
+
+  /// Opens the installed extensions under [root]; streams cache in
+  /// [streamCache]. Returns the installed list.
+  static Future<List<ExtensionInfo>> extensionsInit({
+    required String root,
+    required String streamCache,
+    required String appVersion,
+    required bool developerMode,
+  }) async => _extensions(
+    (await _requiredMap('extensionsInit', {
+      'root': root,
+      'streamCache': streamCache,
+      'appVersion': appVersion,
+      'developerMode': developerMode,
+    }))['extensions'],
+  );
+
+  static List<ExtensionInfo> _extensions(Object? list) => [
+    for (final item in list as List<dynamic>? ?? const [])
+      ExtensionInfo.fromJson((item as Map).cast()),
+  ];
+
+  /// Installed extensions and the priority order per capability.
+  static Future<
+    ({List<ExtensionInfo> extensions, Map<String, List<String>> priority})
+  >
+  listExtensions() async {
+    final reply = await _requiredMap('listExtensions');
+    return (
+      extensions: _extensions(reply['extensions']),
+      priority: {
+        for (final MapEntry(:key, :value)
+            in ((reply['priority'] as Map?) ?? const {}).entries)
+          '$key': [for (final id in value as List<dynamic>) '$id'],
+      },
+    );
+  }
+
+  static Future<ExtensionPackagePreview> inspectExtensionPackage(
+    String path,
+  ) async => ExtensionPackagePreview.fromJson(
+    await _requiredMap('inspectExtensionPackage', {'path': path}),
+  );
+
+  static Future<ExtensionInfo> installExtension(
+    String path, {
+    bool allowDowngrade = false,
+  }) async => ExtensionInfo.fromJson(
+    await _requiredMap('installExtension', {
+      'path': path,
+      'allowDowngrade': allowDowngrade,
+    }),
+  );
+
+  /// Developer mode: packs and installs a folder (again = reload).
+  static Future<ExtensionInfo> installExtensionFolder(String path) async =>
+      ExtensionInfo.fromJson(
+        await _requiredMap('installExtensionFolder', {'path': path}),
+      );
+
+  static Future<void> uninstallExtension(String id) =>
+      _rust('uninstallExtension', {'id': id});
+
+  static Future<void> setExtensionEnabled(String id, bool enabled) =>
+      _rust('setExtensionEnabled', {'id': id, 'enabled': enabled});
+
+  static Future<void> setExtensionPriority(
+    ExtensionCapability capability,
+    List<String> ids,
+  ) => _rust('setExtensionPriority', {
+    'capability': capability.name,
+    'ids': ids,
+  });
+
+  /// A plain setting is stored by Rust; a secret is only held in memory
+  /// (the caller keeps it in secure storage).
+  static Future<void> setExtensionSetting(
+    String id,
+    String key,
+    Object? value,
+  ) => _rust('setExtensionSetting', {'id': id, 'key': key, 'value': value});
+
+  static Future<void> setExtensionSecrets(
+    String id,
+    Map<String, String> values,
+  ) => _rust('setExtensionSecrets', {'id': id, 'values': values});
+
+  /// Secrets extensions set since the last call: id → key → value (null
+  /// deletes).
+  static Future<Map<String, Map<String, String?>>>
+  takeExtensionSecretUpdates() async {
+    final reply = await _requiredMap('takeExtensionSecretUpdates');
+    return {
+      for (final MapEntry(:key, :value) in reply.entries)
+        key: {
+          for (final MapEntry(key: name, value: secret)
+              in (value as Map).cast<String, Object?>().entries)
+            name: secret as String?,
+        },
+    };
+  }
+
+  static Future<void> setExtensionDeveloperMode(bool enabled) =>
+      _rust('setExtensionDeveloperMode', {'enabled': enabled});
+
+  /// Runs a `button` setting's function (may wait for a login callback).
+  static Future<Object?> invokeExtensionAction(String id, String key) async =>
+      (await _requiredMap('invokeExtensionAction', {
+        'id': id,
+        'key': key,
+      }))['result'];
+
+  /// The next login page an extension asked to open, or null.
+  static Future<({String extensionId, String url})?>
+  takeExtensionAuthRequest() async {
+    final reply = await _rust('takeExtensionAuthRequest');
+    if (reply case {'extensionId': final String id, 'url': final String url}) {
+      return (extensionId: id, url: url);
+    }
+    return null;
+  }
+
+  /// Hands a `kalao://ext/<id>/…` redirect to the waiting extension.
+  static Future<void> extensionAuthCallback(String url) =>
+      _rust('extensionAuthCallback', {'url': url});
+
+  static Future<ExtensionHealth> extensionHealth(String id) async =>
+      ExtensionHealth.fromJson(
+        await _requiredMap('extensionHealth', {'id': id}),
+      );
+
+  static Future<List<ExtensionLogEntry>> extensionLogs(String id) async => [
+    for (final entry
+        in (await _requiredMap('extensionLogs', {'id': id}))['logs']
+                as List<dynamic>? ??
+            const [])
+      ExtensionLogEntry.fromJson((entry as Map).cast()),
+  ];
+
+  static Future<List<ExtensionRepository>> listRepositories() async => [
+    for (final item in await _requiredList('listRepositories'))
+      ExtensionRepository.fromJson(item),
+  ];
+
+  static Future<RepositoryPreview> previewRepository(String url) async =>
+      RepositoryPreview.fromJson(
+        await _requiredMap('previewRepository', {'url': url}),
+      );
+
+  /// Trusts [publicKey] for [url]. [fetch] false restores a repository
+  /// from a backup without the network.
+  static Future<void> addRepository(
+    String url,
+    String publicKey, {
+    String? name,
+    bool fetch = true,
+  }) => _rust('addRepository', {
+    'url': url,
+    'publicKey': publicKey,
+    'name': ?name,
+    'fetch': fetch,
+  });
+
+  static Future<void> removeRepository(String url) =>
+      _rust('removeRepository', {'url': url});
+
+  static Future<List<RepositoryListing>> refreshRepositories({
+    String? url,
+  }) async => [
+    for (final item
+        in (await _requiredMap('refreshRepositories', {
+                  'url': ?url,
+                }))['repositories']
+                as List<dynamic>? ??
+            const [])
+      RepositoryListing.fromJson((item as Map).cast()),
+  ];
+
+  static Future<ExtensionInfo> installFromRepository(
+    String url,
+    String id, {
+    bool allowDowngrade = false,
+  }) async => ExtensionInfo.fromJson(
+    await _requiredMap('installFromRepository', {
+      'url': url,
+      'id': id,
+      'allowDowngrade': allowDowngrade,
+    }),
+  );
+
+  /// Ranked candidates from every enabled lyrics extension.
+  static Future<
+    ({List<LyricsCandidate> candidates, List<ExtensionFailure> errors})
+  >
+  searchLyrics(TrackQuery query) async {
+    final reply = await _requiredMap('searchLyrics', {'query': query.toJson()});
+    return (
+      candidates: [
+        for (final item in reply['candidates'] as List<dynamic>? ?? const [])
+          LyricsCandidate.fromJson((item as Map).cast()),
+      ],
+      errors: extensionFailures(reply['errors']),
+    );
+  }
+
+  static Future<LyricsCandidate> getLyrics(
+    String extensionId,
+    String id,
+  ) async => LyricsCandidate.fromJson(
+    await _requiredMap('getLyrics', {'extensionId': extensionId, 'id': id}),
+  );
+
+  /// Merged tracks from every enabled metadata extension.
+  static Future<({List<TrackResult> tracks, List<ExtensionFailure> errors})>
+  searchMetadata(TrackQuery query) async {
+    final reply = await _requiredMap('searchMetadata', {
+      'query': query.toJson(),
+    });
+    return (
+      tracks: [
+        for (final item in reply['tracks'] as List<dynamic>? ?? const [])
+          TrackResult.fromJson((item as Map).cast()),
+      ],
+      errors: extensionFailures(reply['errors']),
+    );
+  }
+
+  static Future<TrackResult> getTrack(String extensionId, String id) async =>
+      TrackResult.fromJson(
+        await _requiredMap('getTrack', {'extensionId': extensionId, 'id': id}),
+      );
+
+  /// Image URLs for [track], widest first.
+  static Future<({String? extensionId, List<String> urls})> getArtwork(
+    Map<String, Object?> track, {
+    String? extensionId,
+  }) async {
+    final reply = await _requiredMap('getArtwork', {
+      'track': track,
+      'extensionId': ?extensionId,
+    });
+    final images = [
+      for (final image in reply['images'] as List<dynamic>? ?? const [])
+        (
+          url: (image as Map)['url'] as String,
+          width: (image['width'] as num?)?.toInt() ?? 0,
+        ),
+    ]..sort((a, b) => b.width.compareTo(a.width));
+    return (
+      extensionId: reply['extensionId'] as String?,
+      urls: [for (final image in images) image.url],
+    );
+  }
+
+  static Future<List<AudioSourceRef>> resolveAudio(
+    String extensionId,
+    Map<String, Object?> track,
+  ) async => [
+    for (final source
+        in (await _requiredMap('resolveAudio', {
+                  'extensionId': extensionId,
+                  'track': track,
+                }))['sources']
+                as List<dynamic>? ??
+            const [])
+      AudioSourceRef.fromJson((source as Map).cast()),
+  ];
 
   // Android-native methods
 
@@ -465,6 +764,16 @@ class PlatformBridge {
           (path: path, name: name),
     ];
   }
+
+  /// `kalao://ext/…` login redirects received since the last call.
+  static Future<List<String>> takeExtensionCallbacks() async => [
+    for (final url
+        in await backendChannel.invokeMethod<List<Object?>>(
+              'takeExtensionCallbacks',
+            ) ??
+            const <Object?>[])
+      url! as String,
+  ];
 
   /// The device's ABIs, preferred first (`arm64-v8a`, …).
   static Future<List<String>> getSupportedAbis() async => [

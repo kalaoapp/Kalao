@@ -15,6 +15,12 @@ class AppStorage {
   Directory get fonts => Directory(p.join(root.path, 'fonts'));
   Directory get importStaging => Directory(p.join(root.path, 'import_staging'));
 
+  /// Installed extensions, their storage and registry (`kalao-extensions`).
+  Directory get extensions => Directory(p.join(root.path, 'extensions'));
+
+  /// Streamed extension audio; finished streams are kept up to 1 GiB.
+  Directory get streamCache => Directory(p.join(root.path, 'stream_cache'));
+
   /// Snapshots and extracted archives while a backup or restore runs; on the
   /// same volume as [media] so restored files are moved, not copied.
   Directory get backupWork => Directory(p.join(root.path, 'backup_work'));
@@ -32,6 +38,8 @@ class AppStorage {
       covers,
       fonts,
       importStaging,
+      extensions,
+      streamCache,
       backupWork,
       safetyBackups,
       Directory(p.dirname(libraryDb)),

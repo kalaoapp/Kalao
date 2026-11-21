@@ -290,10 +290,18 @@ fn volume_and_vocal_level_ramp_without_steps() {
 #[test]
 fn bad_loads_are_rejected() {
     let engine = Engine::new(Output::Manual { sample_rate: RATE });
-    assert!(engine.load("x", &[], 0).is_err());
     assert!(
         engine
-            .load("x", &[(SourceKind::Original, "missing.wav".into())], 0)
+            .load("x", &[] as &[(SourceKind, PathBuf)], 0)
+            .is_err()
+    );
+    assert!(
+        engine
+            .load(
+                "x",
+                &[(SourceKind::Original, PathBuf::from("missing.wav"))],
+                0
+            )
             .is_err()
     );
     assert!(engine.play().is_err());

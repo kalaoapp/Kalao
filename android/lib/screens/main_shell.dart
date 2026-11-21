@@ -6,7 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/providers/backup_provider.dart';
+import 'package:kalao/providers/extension_provider.dart';
+import 'package:kalao/providers/player_provider.dart';
 import 'package:kalao/providers/update_provider.dart';
+import 'package:kalao/screens/extensions/extensions_tab.dart';
 import 'package:kalao/screens/home_tab.dart';
 import 'package:kalao/screens/library_screen.dart';
 import 'package:kalao/screens/queue_tab.dart';
@@ -14,7 +17,6 @@ import 'package:kalao/screens/settings/settings_tab.dart';
 import 'package:kalao/screens/shared_files.dart';
 import 'package:kalao/services/app_crash_service.dart';
 import 'package:kalao/widgets/app_crash_banner.dart';
-import 'package:kalao/widgets/empty_state.dart';
 import 'package:kalao/widgets/mini_player.dart';
 import 'package:kalao/widgets/update_dialog.dart';
 
@@ -56,6 +58,8 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   void _onForeground() {
     if (!mounted) return;
+    // Login redirects first: an extension may be waiting for one.
+    unawaited(ref.read(extensionServiceProvider).deliverCallbacks());
     unawaited(handleSharedFiles(context, ref));
     unawaited(ref.read(backupControllerProvider.notifier).runScheduledIfDue());
   }
@@ -69,17 +73,20 @@ class _MainShellState extends ConsumerState<MainShell> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final tabs = <Widget>[
-      const HomeTab(),
-      const LibraryScreen(),
-      const QueueTab(),
-      _PlaceholderTab(
-        title: l10n.navExtensions,
-        icon: Icons.extension_outlined,
-        emptyTitle: l10n.extensionsEmptyTitle,
-        emptyBody: l10n.extensionsEmptyBody,
-      ),
-      const SettingsTab(),
+    ref.listen(playerProvider.select((now) => now.error), (_, error) {
+      if (error == null) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.streamFailed(error))));
+      ref.read(playerProvider.notifier).clearError();
+    });
+    final updates = ref.watch(extensionsProvider.select((s) => s.updates));
+    const tabs = <Widget>[
+      HomeTab(),
+      LibraryScreen(),
+      QueueTab(),
+      ExtensionsTab(),
+      SettingsTab(),
     ];
     final crash = _crash;
     return Scaffold(
@@ -126,7 +133,11 @@ class _MainShellState extends ConsumerState<MainShell> {
                 label: l10n.navQueue,
               ),
               NavigationDestination(
-                icon: const Icon(Icons.extension_outlined),
+                icon: Badge(
+                  isLabelVisible: updates > 0,
+                  label: Text('$updates'),
+                  child: const Icon(Icons.extension_outlined),
+                ),
                 selectedIcon: const Icon(Icons.extension),
                 label: l10n.navExtensions,
               ),
@@ -141,25 +152,4 @@ class _MainShellState extends ConsumerState<MainShell> {
       ),
     );
   }
-}
-
-/// A tab whose feature arrives in a later milestone (ROADMAP.md).
-class _PlaceholderTab extends StatelessWidget {
-  const _PlaceholderTab({
-    required this.title,
-    required this.icon,
-    required this.emptyTitle,
-    required this.emptyBody,
-  });
-
-  final String title;
-  final IconData icon;
-  final String emptyTitle;
-  final String emptyBody;
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(title)),
-    body: EmptyState(icon: icon, title: emptyTitle, body: emptyBody),
-  );
 }

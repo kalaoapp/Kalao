@@ -115,22 +115,26 @@ Tests added: Rust `native_backup` (round trip, newer format, damaged/unlisted/mi
 
 **Exit:** a backup made on one device restores on another (both modes) with no secrets inside; scheduled backup runs when due; the update flow installs a newer test release.
 
-## M5 Extensions
+## M5 Extensions — implemented except the private repository (2026-11-21)
 
-| # | Task | Features | Source / § |
-| --- | --- | --- | --- |
-| M5.1 | `crates/extensions` copied (runtime, host, manifest, package, repository, storage, manager, network_host, crypto, redact, logging, lyrics/metadata/health backends); Kalao capabilities; limits per EXTENSIONS.md §5 | 5.1 | `crates/extensions` |
-| M5.2 | Install from file and repository; signature + SHA-256 checks; update checks; install prompt (hosts, permissions, fingerprint) | 5.2 | `repository`, `repo_provider.dart`, `repo_tab.dart` |
-| M5.3 | Manifest-generated settings UI and button actions; restored extensions ask for their secrets again (from M4.6) | 5.3, 7.5 | `extension_detail_page*.dart`, `extension_action_forms.dart` |
-| M5.4 | Allowlist enforcement, login callbacks (`kalao://ext/<id>/callback`), health checks, enable/disable, priority ordering | 5.4 | `extension_auth_launcher.dart`, `ExtensionAuthCallbacks.kt`, `extension_health.dart`, `extension_provider_priority.dart` |
-| M5.5 | `kalao-ext` CLI (validate, test with fixtures, pack, sign); public sample extension **LRCLIB** (open API) in `examples/extensions/lrclib/`; EXTENSIONS.md published | 5.5 | Mornye `core/lyrics/lrclib.rs` as reference |
-| M5.6 | Lyric fetch: parallel query, ranking, provider picker, priority page | 2.11 | `lyrics_provider_picker.dart`, `lyrics_provider_priority_page.dart`, `core::lyrics::matching` |
-| M5.7 | Language detection drives annotation layers | 2.10 | `lyrics_language_guess.dart` |
-| M5.8 | Metadata and artwork search/merge; song detail screen | 6.4 | `metadata_provider_priority_page.dart`, `track_metadata_*` |
-| M5.9 | Search across library + metadata extensions | 6.2 (extensions) | `home_tab_search_results.dart` |
-| M5.10 | Streaming playback with range requests and cache | 1.8 | `network_playback_cache.dart` |
-| M5.11 | Offline downloads of tracks, stems, lyrics and annotations | 6.6 | §10 |
-| M5.12 | Owner's private extensions packaged in the private repo and installed from a signed repository | 2.11 | private repo |
+Status: ✅ built and tested locally (Rust: fmt, clippy, all workspace tests incl. 46 `kalao-extensions` tests — sandbox limits, allowlist, signatures, repositories, ranking — the stream cache and the LRCLIB sample against its fixtures; `libkalao_mobile.so` cross-compiles for arm64; Flutter analyze clean, 103 Dart tests; Kotlin `testDebugUnitTest`); ⏳ M5.12 lives in the private repo; ⏳ the on-device checks (a real login redirect, streaming on mobile data, a signed repository over HTTPS) need a device.
+
+| # | Task | Features | Status | Source / § |
+| --- | --- | --- | --- | --- |
+| M5.1 | `crates/network` restored (Mornye's, unchanged); `crates/extensions` (`kalao-extensions`): manifest, package (zip limits), QuickJS runtime (`rquickjs` 0.14, one worker VM per extension, 64 MiB heap, deadline interrupt, retired after a timeout or out of memory, ES modules with package-relative imports only, `eval`/`Function` removed), host object (`kalao.fetch` through the extension's `kalao-network` session, settings, storage ≤ 5 MiB, auth, `html` via scraper, crypto, log, url, time), redacted per-extension debug log, capability result validation | 5.1 | ✅ (Kalao-sized, not a copy: Mornye's crate is 33k lines built around downloads, FFmpeg, signed sessions and Go compatibility; the worker/VM split, limits and redaction patterns are Mornye's) | §10 |
+| M5.2 | Install from file (`.kalaoext` opened or picked) with a prompt (name, author, capabilities, complete host list, SHA-256 fingerprint, "verified by" a trusted repository); repositories: trust on first add (key fingerprint), ed25519 signature + SHA-256 per package, key change blocks installs until re-added, refresh shows installs and updates (badge on the tab); downgrades need consent; `minKalao` checked | 5.2 | ✅ | `repository.rs`, `signing.rs`, `repositories_screen.dart` |
+| M5.3 | Settings form generated from the manifest (text, secret, toggle, select, number, button actions); secrets only in `flutter_secure_storage`, handed to Rust in memory, secrets an extension sets come back to secure storage; restored extensions list their missing secrets | 5.3, 7.5 | ✅ | `extension_detail_screen.dart`, `extension_service.dart` |
+| M5.4 | Allowlist (checked by `kalao-network` before the request and after redirects; `grantsNetwork` hosts only once their setting is filled), login callbacks (`kalao://ext/<id>/<path>` → `ExtensionAuthCallbacks.kt` → `takeExtensionCallbacks`), health checks, enable/disable, degraded after 3 failures (skipped 10 min), priority per capability | 5.4 | ✅ | `ExtensionAuthCallbacks.kt`, `provider_priority_screen.dart` |
+| M5.5 | `kalao-ext` CLI (`validate`, `test` against `fixtures/tests.json`, `pack`, `keygen`, `sign`, `index`); public sample `examples/extensions/lrclib/` (tested in CI); EXTENSIONS.md updated | 5.5 | ✅ | `crates/ext-cli` |
+| M5.6 | Lyric fetch: all lyrics extensions in parallel (6 s each), ranked by title/artist/duration match plus a format bonus, priority as tie-break; provider picker; automatic fetch for songs without lyrics (setting) | 2.11 | ✅ | `manager/calls.rs`, `lyrics_provider_picker.dart` |
+| M5.7 | Language detection drives annotation layers: the candidate's language or Mornye's `lyrics_language_guess.dart` picks pinyin / furigana + romaji / none | 2.10 | ✅ | `lyrics_language_guess.dart` |
+| M5.8 | Metadata search merged across extensions (ISRC or title + artist, gaps filled from other sources); song detail screen with "Find details online" (tags and artwork through the extension's session) | 6.4 | ✅ (artwork is downloaded into `covers/` when chosen; no separate cover cache) | `song_detail_screen.dart` |
+| M5.9 | Home search shows metadata extension results under the library results | 6.2 (extensions) | ✅ | `home_tab.dart` |
+| M5.10 | Streaming: `resolveAudio` sources play through `kalao-audio`'s new `Media::Stream`; a downloader per source fills a cache file with range requests (restarts at a far seek, falls back to one sequential response), finished streams kept up to 1 GiB | 1.8 | ✅ | `crates/mobile/src/stream.rs` |
+| M5.11 | Offline downloads: every resolved source (original, instrumental, vocals) via the `extensionDownload` job into `media/` (`media_file.source = extension`), lyrics fetched and annotated; backups carry `extensions.json` + packages | 6.6 | ✅ | `extension_service.dart`, `backup_service.dart` |
+| M5.12 | Owner's private extensions packaged in the private repo and installed from a signed repository | 2.11 | ⏳ private repo | private repo |
+
+Tests added: Rust `kalao-extensions` (manifest, package limits and packing, semver, signatures, repository index and verification, runtime: exports, async, imports, errors, timeout, memory cap, no code from strings, fetch fixtures and allowlist, secrets kept out of logs, settings/storage/html/crypto, login flow; manager: install/update/downgrade/uninstall, missing exports, actions and secrets, granted hosts, lyric ranking and degraded state, metadata merge, artwork, audio, health, repositories and a changed key, folder installs), `kalao-ext` (the LRCLIB sample; keys, signing, index), `kalao-mobile` (stream cache with and without ranges, cache sweep, extension method routing); Dart `extensions_test` (secrets, login flow, lyric import and language layers, automatic fetch, language guess, extension songs, streaming loads, downloads, backup and restore, install prompt, Extensions tab, settings form).
 
 **Exit:** private lyrics and metadata extensions install from a signed repo and work; LRCLIB sample and EXTENSIONS.md are public; streaming and offline downloads work.
 
@@ -328,7 +332,7 @@ What it achieves:
 
 ## **M5 — Extensions**
 
-Planned
+Implemented; the owner's private extensions and the on-device checks are still to do.
 
 **In simple terms: Allow Kalao to gain new features through installable add-ons.**
 

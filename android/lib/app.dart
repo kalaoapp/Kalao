@@ -7,7 +7,11 @@ import 'package:go_router/go_router.dart';
 import 'package:kalao/constants/app_info.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/l10n/supported_locales.dart';
+import 'package:kalao/models/extension.dart';
 import 'package:kalao/providers/settings_provider.dart';
+import 'package:kalao/screens/extensions/extension_detail_screen.dart';
+import 'package:kalao/screens/extensions/provider_priority_screen.dart';
+import 'package:kalao/screens/extensions/repositories_screen.dart';
 import 'package:kalao/screens/lyrics_sync_screen.dart';
 import 'package:kalao/screens/main_shell.dart';
 import 'package:kalao/screens/now_playing_screen.dart';
@@ -16,6 +20,7 @@ import 'package:kalao/screens/settings/log_screen.dart';
 import 'package:kalao/screens/settings/privacy_screen.dart';
 import 'package:kalao/screens/stats_screen.dart';
 import 'package:kalao/screens/setup_screen.dart';
+import 'package:kalao/screens/song_detail_screen.dart';
 import 'package:kalao/screens/tutorial_screen.dart';
 import 'package:kalao/screens/whats_new_screen.dart';
 import 'package:kalao/theme/app_theme.dart';
@@ -80,6 +85,30 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const PrivacyScreen(),
       ),
       GoRoute(path: '/stats', builder: (context, state) => const StatsScreen()),
+      GoRoute(
+        path: '/song/:id',
+        builder: (context, state) => SongDetailScreen(
+          songId: int.tryParse(state.pathParameters['id'] ?? '') ?? -1,
+        ),
+      ),
+      GoRoute(
+        path: '/track',
+        builder: (context, state) =>
+            TrackDetailScreen(track: state.extra! as TrackResult),
+      ),
+      GoRoute(
+        path: '/extensions/detail/:id',
+        builder: (context, state) =>
+            ExtensionDetailScreen(id: state.pathParameters['id'] ?? ''),
+      ),
+      GoRoute(
+        path: '/extensions/repositories',
+        builder: (context, state) => const RepositoriesScreen(),
+      ),
+      GoRoute(
+        path: '/extensions/priority',
+        builder: (context, state) => const ProviderPriorityScreen(),
+      ),
     ],
   );
   ref.onDispose(router.dispose);

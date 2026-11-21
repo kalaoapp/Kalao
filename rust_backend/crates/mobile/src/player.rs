@@ -5,7 +5,7 @@
 //! playing, at once after a command).
 
 use crate::backend::{BackendError, invalid, operation, str_arg};
-use kalao_audio::{Engine, Output, SourceKind};
+use kalao_audio::{Engine, Media, Output, SourceKind};
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -98,14 +98,16 @@ pub fn dispatch(method: &str, args: &Value) -> Result<Value, BackendError> {
                 .ok_or_else(|| invalid(method, "missing array field sources"))?
                 .iter()
                 .map(|source| {
-                    let path = source["path"]
-                        .as_str()
-                        .filter(|path| !path.is_empty())
-                        .ok_or_else(|| invalid(method, "source without path"))?;
-                    Ok((
-                        kind(method, source["kind"].as_str().unwrap_or_default())?,
-                        PathBuf::from(path),
-                    ))
+                    let kind = kind(method, source["kind"].as_str().unwrap_or_default())?;
+                    // A file, or a stream an extension resolved (FEATURES 1.8).
+                    let media = match source["path"].as_str().filter(|path| !path.is_empty()) {
+                        Some(path) => Media::File(PathBuf::from(path)),
+                        None if source["url"].is_string() => {
+                            crate::extensions::stream_media(source).map_err(operation)?
+                        }
+                        None => return Err(invalid(method, "source without path or url")),
+                    };
+                    Ok((kind, media))
                 })
                 .collect::<Result<Vec<_>, BackendError>>()?;
             let start_ms = args["startMs"].as_u64().unwrap_or(0);

@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
+import 'package:kalao/models/extension.dart';
 
 /// `media_file.kind`: which part of a song a file plays.
 enum MediaKind { original, instrumental, vocals }
@@ -19,6 +22,9 @@ class Song {
     this.hasLyrics = false,
     this.favorite = false,
     this.songKey = '',
+    this.isrc,
+    this.language,
+    this.extRef,
   });
 
   final int id;
@@ -37,6 +43,33 @@ class Song {
 
   /// `song.song_key`: matches the song across backups and devices.
   final String songKey;
+  final String? isrc;
+
+  /// BCP-47 language of the song, when known (from metadata or lyrics).
+  final String? language;
+
+  /// Set for songs added from an extension (`song.origin = extension`):
+  /// they stream until downloaded (FEATURES 1.8, 6.6).
+  final ExtensionTrackRef? extRef;
+
+  bool get fromExtension => extRef != null;
+
+  /// Plays from a stream: an extension song with no downloaded files.
+  bool get streams => media.isEmpty && extRef != null;
+
+  bool get playable => media.isNotEmpty || extRef != null;
+
+  /// `song.ext_ref` text as stored.
+  static ExtensionTrackRef? parseExtRef(String? json) {
+    if (json == null || json.isEmpty) return null;
+    try {
+      return ExtensionTrackRef.fromJson(
+        (jsonDecode(json) as Map).cast<String, dynamic>(),
+      );
+    } on FormatException {
+      return null;
+    }
+  }
 
   MediaFile? file(MediaKind kind) {
     for (final file in media) {
@@ -71,6 +104,9 @@ class Song {
     hasLyrics: hasLyrics ?? this.hasLyrics,
     favorite: favorite ?? this.favorite,
     songKey: songKey,
+    isrc: isrc,
+    language: language,
+    extRef: extRef,
   );
 
   @override

@@ -25,7 +25,7 @@ Pin policy (from Mornye): exact versions (`=x.y.z` in Cargo, no caret for packag
 | `flutter_riverpod` | `^3.4.2` | State | Mornye |
 | `go_router` | `^18.1.2` | Routing | Mornye |
 | `shared_preferences` | `^2.5.6` | Settings | Mornye |
-| `flutter_secure_storage` | `10.3.4` (exact; v11 drops legacy Android readers) | Secrets from M5 | Mornye |
+| `flutter_secure_storage` | `10.3.4` (exact; v11 drops legacy Android readers) | Extension secrets (M5) | Mornye |
 | `path_provider`, `path` | `^2.1.6`, `^1.9.1` | Paths | Mornye |
 | `sqflite` (+ `sqflite_common_ffi` in tests) | `^2.4.5` | Library, history, app-state databases | Mornye |
 | `file_picker` | `^13.3.0` | Import audio, lyrics, backups, fonts | Mornye |
@@ -46,8 +46,6 @@ Pin policy (from Mornye): exact versions (`=x.y.z` in Cargo, no caret for packag
 | `ffi` | `^2.2.0` | Desktop backend | M8.7 |
 | `connectivity_plus` | `^7.3.1` | Offline detection (stems remote, translation) | M6 |
 | `crypto` | `^3.0.8` | SHA-256 cache keys (translation); file hashes use the Rust `hash_file` job | M6 |
-| `app_links` | `^7.2.2` | `kalao://ext/<id>/callback` | M5 |
-| `cached_network_image`, `flutter_cache_manager` | `^4.0.6`, `^3.4.6` | Artwork | M5 |
 | `permission_handler` | `^13.0.1` | Mic, camera, notifications | M7 |
 | `flutter_local_notifications` | `^22.3.3` | Job notifications | M6 |
 | `synchronized` | `^3.5.0` | Locks around DB writes, if needed | — |
@@ -100,11 +98,9 @@ No `play-services-*` artifacts. `androidx.documentfile` is not used: `DocumentsC
 
 | Crate | Version | Crate user | Use | Milestone |
 | --- | --- | --- | --- | --- |
-| `tokio`, `hyper-util`, `hyper-rustls`, `rustls`, `rustls-pemfile`, `http`, `http-body-util`, `bytes`, `futures-util`, `tokio-util`, `async-compression`, `tower-service`, `hickory-proto`, `cookie`, `url` | Mornye's pins | network | HTTP stack of `kalao-network` | M5 |
-| `unicode-normalization`, `unicode-general-category` | =0.1.22, =0.6.0 | core | Lyric search matching (Mornye `lyrics::matching`) | M5 |
-| `rquickjs`, `scraper` + `html5ever`, `aes-gcm`, `aes`, `hmac`, `sha1`, `md-5`, `zeroize`, `getrandom`, `cap-std`, `time`, `httpdate`, `tempfile` | Mornye's pins | extensions | Extension runtime and host APIs | M5 |
-| `ed25519-dalek` | 2.x | extensions | Repository signatures (if Mornye's repository module lacks it) | M5 |
-| `clap` | 4.x | ext-cli | `kalao-ext` CLI | M5 |
+| `tokio`, `hyper-util`, `hyper-rustls`, `rustls`, `rustls-pemfile`, `http`, `http-body-util`, `bytes`, `futures-util`, `tokio-util`, `async-compression`, `tower-service`, `hickory-proto`, `cookie`, `url` | Mornye's pins | network | HTTP stack of `kalao-network` | ✅ M5 |
+| `rquickjs` (`loader`; `bindgen` off Windows), `scraper`, `aes-gcm`, `hmac`, `sha1`, `md-5`, `getrandom` | =0.14.0, =0.29.0, =0.11.1, 0.13, 0.11, 0.11, 0.4 | extensions | Extension runtime and host APIs | ✅ M5 |
+| `ed25519-dalek` | 2.2 | extensions | Repository signatures | ✅ M5 |
 | `rusqlite` | =0.41.1 (bundled) | mobile | Only if a data job needs to read a database snapshot | — |
 | `image` | =0.25.10 | mobile | Cover thumbnails, if artwork search needs them | M5 |
 | `ort` | 2.x (`load-dynamic`) | stems | ONNX Runtime; XNNPACK, CPU fallback | M6 |

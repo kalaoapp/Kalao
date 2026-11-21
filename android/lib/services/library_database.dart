@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:kalao/models/extension.dart';
 import 'package:kalao/models/lyrics.dart';
 import 'package:kalao/models/song.dart';
 import 'package:kalao/services/library_schema.dart';
@@ -45,6 +46,8 @@ class NewSong {
     this.isrc,
     this.coverPath,
     required this.media,
+    this.language,
+    this.extRef,
   });
 
   final String title;
@@ -54,6 +57,10 @@ class NewSong {
   final String? isrc;
   final String? coverPath;
   final List<NewMediaFile> media;
+  final String? language;
+
+  /// For a song added from an extension (`origin = extension`).
+  final ExtensionTrackRef? extRef;
 }
 
 class NewMediaFile {
@@ -64,6 +71,7 @@ class NewMediaFile {
     this.bytes = 0,
     this.codec = '',
     this.sampleRate,
+    this.source = 'import',
   });
 
   final MediaKind kind;
@@ -72,6 +80,9 @@ class NewMediaFile {
   final int bytes;
   final String codec;
   final int? sampleRate;
+
+  /// `media_file.source`: `import`, or `extension` for offline downloads.
+  final String source;
 }
 
 /// `kalao_library.db`: songs, media files, lyric documents and layers,
@@ -123,6 +134,9 @@ class LibraryDatabase {
       'duration_ms': song.durationMs,
       'isrc': song.isrc,
       'cover_path': song.coverPath,
+      'language': song.language,
+      'origin': song.extRef == null ? 'local' : 'extension',
+      'ext_ref': song.extRef == null ? null : jsonEncode(song.extRef!.toJson()),
       'song_key': songKey(song.title, song.artist, song.durationMs, song.isrc),
       'added_at': (now ?? DateTime.now()).millisecondsSinceEpoch,
     });
@@ -147,7 +161,66 @@ class LibraryDatabase {
     'bytes': file.bytes,
     'codec': file.codec,
     'sample_rate': file.sampleRate,
+    'source': file.source,
   }, conflictAlgorithm: ConflictAlgorithm.replace);
+
+  /// Applies details from a metadata extension (FEATURES 6.4); null
+  /// arguments keep what the song has. The song key is recomputed.
+  Future<void> updateDetails(
+    int songId, {
+    String? title,
+    String? artist,
+    String? album,
+    int? durationMs,
+    String? isrc,
+    String? language,
+    String? coverPath,
+  }) => db.transaction((txn) async {
+    final rows = await txn.query('song', where: 'id = ?', whereArgs: [songId]);
+    if (rows.isEmpty) return;
+    final row = rows.first;
+    final next = {
+      'title': title ?? row['title'],
+      'artist': artist ?? row['artist'],
+      'album': album ?? row['album'],
+      'duration_ms': durationMs ?? row['duration_ms'],
+      'isrc': isrc ?? row['isrc'],
+      'language': language ?? row['language'],
+      'cover_path': coverPath ?? row['cover_path'],
+    };
+    await txn.update(
+      'song',
+      {
+        ...next,
+        'song_key': songKey(
+          next['title']! as String,
+          next['artist'] as String? ?? '',
+          next['duration_ms'] as int?,
+          next['isrc'] as String?,
+        ),
+      },
+      where: 'id = ?',
+      whereArgs: [songId],
+    );
+  });
+
+  /// An extension song already in the library ([ref]'s extension and
+  /// track), if any.
+  Future<int?> songIdForTrack(ExtensionTrackRef ref) async {
+    final rows = await db.query(
+      'song',
+      columns: ['id', 'ext_ref'],
+      where: "origin = 'extension'",
+    );
+    for (final row in rows) {
+      final other = Song.parseExtRef(row['ext_ref'] as String?);
+      if (other?.extensionId == ref.extensionId &&
+          other?.trackId == ref.trackId) {
+        return row['id'] as int;
+      }
+    }
+    return null;
+  }
 
   Future<List<Song>> songs({
     SongSort sort = SongSort.recentlyAdded,
@@ -288,6 +361,9 @@ class LibraryDatabase {
           hasLyrics: withLyrics.contains(row['id']),
           favorite: favorites.contains(row['id']),
           songKey: row['song_key'] as String? ?? '',
+          isrc: row['isrc'] as String?,
+          language: row['language'] as String?,
+          extRef: Song.parseExtRef(row['ext_ref'] as String?),
         ),
     ];
   }

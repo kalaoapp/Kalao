@@ -5,12 +5,12 @@
 //! (so the callback is not reading), clears the ring and repositions the
 //! decoder; the callback outputs silence while either lock is held.
 
+use crate::Media;
 use crate::decoder::Decoder;
 use crate::{AudioError, SourceKind};
 use ringbuf::traits::{Consumer, Observer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};
 use rubato::{FastFixedIn, PolynomialDegree, Resampler};
-use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
@@ -45,15 +45,15 @@ pub struct Source {
 }
 
 impl Source {
-    /// Opens `path` and starts its decoder thread. `ring_frames` is the ring
+    /// Opens `media` and starts its decoder thread. `ring_frames` is the ring
     /// capacity in output frames.
     pub fn open(
         kind: SourceKind,
-        path: &Path,
+        media: &Media,
         output_rate: u32,
         ring_frames: usize,
     ) -> Result<Self, AudioError> {
-        let decoder = Decoder::open(path)?;
+        let decoder = Decoder::open(media)?;
         let resampler = resampler(decoder.sample_rate, output_rate)?;
         let (producer, consumer) = HeapRb::<f32>::new(ring_frames * 2).split();
         let shared = Arc::new(SourceShared {
@@ -123,16 +123,16 @@ impl Source {
     }
 }
 
-/// `frames` stereo frames of `path` from `start_ms`, at `output_rate`, decoded
+/// `frames` stereo frames of `media` from `start_ms`, at `output_rate`, decoded
 /// off the audio thread (the loop start, played while the decoders seek back).
 /// Shorter when the file ends first.
 pub fn decode_range(
-    path: &Path,
+    media: &Media,
     start_ms: u64,
     frames: usize,
     output_rate: u32,
 ) -> Result<Vec<f32>, AudioError> {
-    let decoder = Decoder::open(path)?;
+    let decoder = Decoder::open(media)?;
     let resampler = resampler(decoder.sample_rate, output_rate)?;
     let (producer, mut consumer) = HeapRb::<f32>::new(frames.max(1) * 2).split();
     let mut worker = Worker {

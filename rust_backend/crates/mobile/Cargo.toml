@@ -12,6 +12,8 @@ crate-type = ["lib", "cdylib", "staticlib"]
 [dependencies]
 kalao-core.workspace = true
 kalao-audio.workspace = true
+kalao-extensions.workspace = true
+kalao-network.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
