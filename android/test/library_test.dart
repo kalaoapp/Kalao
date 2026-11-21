@@ -140,6 +140,11 @@ void main() {
       expect((await db.search('moon')).map((s) => s.id), [other]);
       expect(await db.search('%'), isEmpty);
       expect(await db.search('  '), isEmpty);
+      // Home's likely matches: short queries only match at a key's start.
+      expect((await db.search('oo')).map((s) => s.id), [other]);
+      expect(await db.search('oo', likelyOnly: true), isEmpty);
+      expect((await db.search('bl', likelyOnly: true)).single.id, other);
+      expect((await db.search('moo', likelyOnly: true)).single.id, other);
     });
 
     test('song keys prefer ISRC and round the duration', () {
