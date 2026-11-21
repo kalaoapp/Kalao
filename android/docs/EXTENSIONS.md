@@ -149,7 +149,7 @@ Host object `kalao`:
 ## 8. Developing an extension
 
 1. Copy the public sample `examples/extensions/lrclib/` (an LRCLIB lyrics provider).
-2. Turn on **Extensions → Developer mode** (alpha and beta builds only; stable releases neither show nor honour it), which allows HTTP to `localhost` and **Load from folder**: the folder is packed and installed, and loading it again reloads it.
+2. Turn on **Settings → Extensions → Developer mode** (alpha and beta builds only; stable releases neither show nor honour it), which allows HTTP to `localhost` and **Load from folder**: the folder is packed and installed, and loading it again reloads it.
 3. Use `kalao-ext` (`rust_backend/crates/ext-cli`; `cargo run --locked -p kalao-ext -- <command>`):
    - `validate <folder|package>`: checks the manifest and package and loads it, reporting its exports.
    - `test <folder> [--fixtures tests.json]`: runs calls offline against recorded responses (`fixtures/tests.json` by default) and checks the results as Kalao would. The file holds `fixtures` (`{method?, url, status?, headers?, body | bodyJson | bodyBase64}`, matched by method and exact URL; hosts outside the allowlist fail as on a device), optional `settings`, and `calls` (`{name?, function, argument, expect?: {items?, minItems?, first?}}`).

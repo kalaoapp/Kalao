@@ -16,6 +16,8 @@ import 'package:kalao/providers/settings_provider.dart';
 import 'package:kalao/screens/extensions/extension_detail_screen.dart';
 import 'package:kalao/screens/extensions/extension_install.dart';
 import 'package:kalao/screens/extensions/extensions_tab.dart';
+import 'package:kalao/screens/settings/extension_settings_screen.dart';
+import 'package:kalao/screens/settings/repository_settings_screen.dart';
 import 'package:kalao/screens/shared_files.dart';
 import 'package:kalao/services/backup_service.dart';
 import 'package:kalao/services/extension_service.dart';
@@ -430,6 +432,45 @@ void main() {
     await tester.tap(find.byType(Switch).first);
     await _settle(tester);
     expect(backend.extensions.single['enabled'], isFalse);
+  });
+
+  testWidgets('Settings → Extensions holds order, install and options', (
+    tester,
+  ) async {
+    await _pump(tester, services, secrets, const ExtensionSettingsScreen());
+    expect(find.text('Order'), findsOneWidget);
+    expect(find.text('Repositories'), findsOneWidget);
+    expect(find.text('Install from file'), findsOneWidget);
+    expect(find.text('Fetch lyrics automatically'), findsOneWidget);
+    expect(
+      find.text('Developer mode'),
+      AppInfo.developerModeAvailable ? findsOneWidget : findsNothing,
+    );
+  });
+
+  testWidgets('repositories are added after trusting the key and removed', (
+    tester,
+  ) async {
+    await _pump(tester, services, secrets, const RepositorySettingsScreen());
+    await tester.tap(find.byKey(const ValueKey('repository-add')));
+    await _settle(tester);
+    final field = find.byKey(const ValueKey('repository-url-field'));
+    expect(tester.widget<TextField>(field).controller!.text, isEmpty);
+    await tester.enterText(field, 'https://repo.example.org/index.json');
+    await tester.tap(find.widgetWithText(FilledButton, 'Add repository'));
+    await _settle(tester);
+    expect(find.text('aaaa:bbbb'), findsOneWidget);
+    await tester.tap(find.text('Trust and add'));
+    await _settle(tester);
+    expect(find.text('https://repo.example.org/index.json'), findsOneWidget);
+    expect(find.text('No extensions'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Remove'));
+    await _settle(tester);
+    await tester.tap(find.widgetWithText(TextButton, 'Remove'));
+    await _settle(tester);
+    expect(backend.repositoryListings, isEmpty);
+    expect(find.text('https://repo.example.org/index.json'), findsNothing);
   });
 
   testWidgets('the settings form saves a secret to secure storage', (

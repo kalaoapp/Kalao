@@ -454,5 +454,8 @@
   "foldersSkipFormat": "その場で再生できない形式",
   "foldersSkipUnreadable": "読み込めませんでした",
   "foldersOverlap": "このフォルダは音楽フォルダ {name} と重なっています。",
-  "foldersScanResult": "追加 {added}、更新 {updated}、削除 {removed}"
+  "foldersScanResult": "追加 {added}、更新 {updated}、削除 {removed}",
+  "extensionPrioritySubtitle": "どの拡張機能を先に使うか",
+  "settingsRepositoriesCount": "{count, plural, =0{未追加} other{{count} 件のリポジトリ}}",
+  "settingsExtensionsSubtitle": "ファイルからインストール、順序、リポジトリ、オプション"
 }

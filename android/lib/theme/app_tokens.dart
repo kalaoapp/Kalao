@@ -39,6 +39,28 @@ class AppTokens {
   static const double radiusLarge = 20;
   static const double radiusFull = 999;
 
+  /// Grouped containers: settings groups, section cards (Mornye's
+  /// `radiusCard`). Rows inside a connected group keep [radiusRowInner]
+  /// between them.
+  static const double radiusCard = 20;
+  static const double radiusRowInner = 4;
+
+  /// Mornye's settings rows (`AppTokens.standard`).
+  static const double rowPaddingH = 20;
+  static const double rowPaddingV = 16;
+  static const double rowPaddingVCompact = 12;
+  static const double rowIconGap = 16;
+  static const double rowIconDividerIndent = 56;
+  static const double rowChevronSize = 24;
+
+  /// Gap between the rows of a connected group.
+  static const double rowGap = 2;
+
+  /// Mornye's collapsing page header.
+  static const double headerExpandedHeight = 120;
+  static const double headerCollapsedTitleSize = 20;
+  static const double headerExpandedTitleSize = 28;
+
   /// Readable line length for long text on tablets.
   static const double maxContentWidth = 720;
 

@@ -1,49 +1,23 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:kalao/constants/app_info.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/models/extension.dart';
 import 'package:kalao/providers/extension_provider.dart';
-import 'package:kalao/providers/settings_provider.dart';
-import 'package:kalao/screens/extensions/extension_install.dart';
 import 'package:kalao/theme/app_tokens.dart';
 import 'package:kalao/widgets/empty_state.dart';
 import 'package:kalao/widgets/extension_widgets.dart';
-import 'package:kalao/widgets/settings_group.dart';
 
-/// The Extensions tab (FEATURES 5.x): installed extensions, install from a
-/// file, repositories, provider order and developer mode.
+/// The Extensions tab (FEATURES 5.x): installed extensions and the
+/// repositories' store. Install from a file, order, repository management and
+/// options are in Settings → Extensions.
 class ExtensionsTab extends ConsumerWidget {
   const ExtensionsTab({super.key});
-
-  Future<void> _loadFolder(BuildContext context, WidgetRef ref) async {
-    final l10n = AppLocalizations.of(context);
-    final messenger = ScaffoldMessenger.of(context);
-    final path = await FilePicker.getDirectoryPath(
-      dialogTitle: l10n.extensionLoadFolder,
-    );
-    if (path == null) return;
-    try {
-      final info = await ref
-          .read(extensionsProvider.notifier)
-          .installFolder(path);
-      messenger.showSnackBar(
-        SnackBar(content: Text(l10n.extensionInstalled(info.manifest.name))),
-      );
-    } catch (error) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(l10n.extensionInstallFailed('$error'))),
-      );
-    }
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final state = ref.watch(extensionsProvider);
-    final settings = ref.watch(settingsProvider);
     final notifier = ref.read(extensionsProvider.notifier);
     return Scaffold(
       appBar: AppBar(
@@ -59,17 +33,11 @@ class ExtensionsTab extends ConsumerWidget {
             onPressed: () => context.push('/extensions/repositories'),
           ),
           IconButton(
-            tooltip: l10n.extensionPriority,
-            icon: const Icon(Icons.low_priority),
-            onPressed: () => context.push('/extensions/priority'),
+            tooltip: l10n.settingsTitle,
+            icon: const Icon(Icons.tune),
+            onPressed: () => context.push('/settings/extensions'),
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'install-extension',
-        onPressed: () => pickAndInstallExtension(context, ref),
-        icon: const Icon(Icons.add),
-        label: Text(l10n.extensionInstallFromFile),
       ),
       body: RefreshIndicator(
         onRefresh: () async {
@@ -77,7 +45,7 @@ class ExtensionsTab extends ConsumerWidget {
           await notifier.refreshRepositories();
         },
         child: ListView(
-          padding: const EdgeInsets.only(bottom: 96),
+          padding: const EdgeInsets.only(bottom: AppTokens.space24),
           children: [
             if (state.error case final error?)
               Padding(
@@ -98,38 +66,6 @@ class ExtensionsTab extends ConsumerWidget {
             else
               for (final extension in state.extensions)
                 _ExtensionTile(extension: extension),
-            SettingsGroup(
-              title: l10n.extensionOptions,
-              children: [
-                SwitchListTile(
-                  secondary: const Icon(Icons.lyrics_outlined),
-                  title: Text(l10n.extensionAutoLyrics),
-                  subtitle: Text(l10n.extensionAutoLyricsBody),
-                  value: settings.autoFetchLyrics,
-                  onChanged: ref
-                      .read(settingsProvider.notifier)
-                      .setAutoFetchLyrics,
-                ),
-                if (AppInfo.developerModeAvailable)
-                  SwitchListTile(
-                    secondary: const Icon(Icons.developer_mode_outlined),
-                    title: Text(l10n.extensionDeveloperMode),
-                    subtitle: Text(l10n.extensionDeveloperModeBody),
-                    value: settings.extensionDeveloperMode,
-                    onChanged: ref
-                        .read(settingsProvider.notifier)
-                        .setExtensionDeveloperMode,
-                  ),
-                if (AppInfo.developerModeAvailable &&
-                    settings.extensionDeveloperMode)
-                  ListTile(
-                    leading: const Icon(Icons.folder_open_outlined),
-                    title: Text(l10n.extensionLoadFolder),
-                    subtitle: Text(l10n.extensionLoadFolderBody),
-                    onTap: () => _loadFolder(context, ref),
-                  ),
-              ],
-            ),
           ],
         ),
       ),
