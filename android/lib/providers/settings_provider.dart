@@ -127,6 +127,12 @@ class SettingsNotifier extends Notifier<AppSettings> {
   Future<void> setExtensionDeveloperMode(bool value) =>
       _save(state.copyWith(extensionDeveloperMode: value));
 
+  Future<void> setFolderScanSchedule(FolderScanSchedule value) =>
+      _save(state.copyWith(folderScanSchedule: value));
+
+  Future<void> setLibraryTab(LibraryTab value) =>
+      _save(state.copyWith(libraryTab: value));
+
   Future<void> restore(AppSettings restored) => _save(restored);
 
   Future<void> setVerboseLogging(bool value) async {

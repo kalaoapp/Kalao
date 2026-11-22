@@ -183,29 +183,175 @@ void main() {
     );
 
     test(
-      'removed files leave the library; a renamed original keeps its pair',
+      'a removed file leaves its song unavailable; a renamed one relinks it',
       () async {
         put('Moon.mp3');
         put('Moon (Instrumental).mp3');
-        put('Sun.mp3');
+        put('Sun.mp3', 'sun');
         final folder = await added();
         await folders.scan(folder);
+        final moon = (await services.library.songs()).firstWhere(
+          (song) => song.title == 'Moon',
+        );
+        await services.lyrics.importText(moon.id, 'line one');
+        await services.library.setFavorite(moon.id, true);
 
         backend.musicFolders[tree]!.remove('Sun.mp3');
         final renamed = backend.musicFolders[tree]!.remove('Moon.mp3')!;
         backend.musicFolders[tree]!['Moon .mp3'] = renamed;
         final result = await folders.scan(folder);
         expect(result.removed, 2);
-        expect(result.added, hasLength(1));
-        final song = (await services.library.songs()).single;
-        expect(song.file(MediaKind.original)!.path, uri('Moon .mp3'));
-        expect(song.hasBacking, isTrue);
+        expect(result.relinked, 1);
+        expect(result.added, isEmpty);
+        final songs = await services.library.songs(sort: SongSort.title);
+        expect(songs, hasLength(2));
+        final relinked = songs.firstWhere((song) => song.id == moon.id);
+        expect(relinked.file(MediaKind.original)!.path, uri('Moon .mp3'));
+        expect(relinked.hasBacking, isTrue);
+        expect(relinked.hasLyrics, isTrue);
+        expect(relinked.favorite, isTrue);
+        expect(relinked.playable, isTrue);
+        final sun = songs.firstWhere((song) => song.title == 'Sun');
+        expect(sun.unavailable, isTrue);
+        expect(sun.playable, isFalse);
+        await expectLater(
+          folders.playableSources(sun),
+          throwsA(isA<SongUnavailableException>()),
+        );
+
+        expect(await folders.missingSongs(), [sun.id]);
+        expect(await folders.cleanupMissing(), 1);
+        expect((await services.library.songs()).single.id, moon.id);
 
         backend.musicFolders[tree]!.remove('Moon (Instrumental).mp3');
         await folders.scan(folder);
         expect((await services.library.songs()).single.hasBacking, isFalse);
       },
     );
+
+    test('a file moved to another music folder relinks its song', () async {
+      const other =
+          'content://com.android.externalstorage.documents/tree/primary%3AKaraoke';
+      final file = put('Moon.mp3');
+      final folder = await added();
+      await folders.scan(folder);
+      final id = (await services.library.songs()).single.id;
+
+      backend.musicFolders[tree]!.remove('Moon.mp3');
+      await folders.scan(folder);
+      expect((await services.library.songs()).single.unavailable, isTrue);
+
+      backend.musicFolders[other] = {'Moon.mp3': file};
+      final second = await folders.addFolder(other);
+      final result = await folders.scan(second);
+      expect(result.relinked, 1);
+      final song = (await services.library.songs()).single;
+      expect(song.id, id);
+      expect(song.unavailable, isFalse);
+      expect(await folders.missingSongs(), isEmpty);
+    });
+
+    test(
+      'an offline folder keeps its songs unavailable until it returns',
+      () async {
+        put('Moon.mp3');
+        final folder = await added();
+        await folders.scan(folder);
+        backend.offlineFolders.add(tree);
+        final result = await folders.scan(folder);
+        expect(result.offline, isTrue);
+        expect((await folders.folders()).single.isOffline, isTrue);
+        final song = (await services.library.songs()).single;
+        expect(song.unavailable, isTrue);
+        // Offline is not missing: cleanup leaves it.
+        expect(await folders.missingSongs(), isEmpty);
+
+        backend.offlineFolders.remove(tree);
+        await folders.scan(folder);
+        expect((await services.library.songs()).single.unavailable, isFalse);
+        expect((await folders.folders()).single.error, isNull);
+      },
+    );
+
+    test('tags, an older reader and Force Full Scan', () async {
+      backend.probeTags['Moon.mp3'] = {
+        'title': 'Moon',
+        'artist': 'Teresa',
+        'album': 'Light',
+        'albumArtist': 'Teresa Teng',
+        'genre': 'Pop; Ballad',
+        'year': 1977,
+        'trackNo': 3,
+        'discNo': 1,
+      };
+      put('Moon.mp3');
+      final folder = await added();
+      await folders.scan(folder);
+      var song = (await services.library.songs()).single;
+      expect(song.albumArtist, 'Teresa Teng');
+      expect(song.genre, 'Pop; Ballad');
+      expect(song.year, 1977);
+      expect(song.trackNo, 3);
+
+      // Unchanged files are not read again…
+      final before = probes();
+      await folders.scan(folder);
+      expect(probes(), before);
+      // …unless an older reader recorded them…
+      await services.library.db.update('folder_file', {'scan_version': 1});
+      await services.library.db.update('song', {'genre': null});
+      await folders.scan(folder);
+      expect(probes(), before + 1);
+      song = (await services.library.songs()).single;
+      expect(song.genre, 'Pop; Ballad');
+      // …or the user asks for a full scan.
+      await folders.scan(folder, full: true);
+      expect(probes(), before + 2);
+    });
+
+    test('a folder image covers songs without embedded art', () async {
+      put('Album/CD1/Moon.mp3');
+      put('Album/cover.jpg', 'jpeg');
+      put('Album/._cover.jpg', 'apple double');
+      final folder = await added();
+      await folders.scan(folder);
+      final song = (await services.library.songs()).single;
+      expect(song.coverPath, isNotNull);
+      expect(File(song.coverPath!).readAsStringSync(), 'jpeg');
+    });
+
+    test('formats the engine cannot decode convert on first play', () async {
+      final converted = <String>[];
+      final withFfmpeg = LibraryFolderService(
+        library: services.library,
+        importer: services.importer,
+        storage: services.storage,
+        transcoder: FolderTranscoder(
+          probe: (uri) async => {
+            'title': 'Wind',
+            'durationMs': 1000,
+            'codec': 'opus',
+          },
+          convert: (uri, output) async {
+            converted.add(uri);
+            File(output).writeAsStringSync('flac');
+            return true;
+          },
+        ),
+      );
+      put('Wind.opus');
+      final folder = await withFfmpeg.addFolder(tree);
+      final result = await withFfmpeg.scan(folder);
+      expect(result.added, hasLength(1));
+      final song = (await services.library.songs()).single;
+      expect(song.title, 'Wind');
+      expect(song.file(MediaKind.original)!.decodable, isFalse);
+      final first = await withFfmpeg.playableSources(song);
+      expect(first['original'], endsWith('.flac'));
+      expect(File(first['original']!).readAsStringSync(), 'flac');
+      await withFfmpeg.playableSources(song);
+      expect(converted, [uri('Wind.opus')]);
+    });
 
     test('a deleted song stays out and its file stays on disk', () async {
       final file = put('Moon.mp3');
@@ -339,7 +485,7 @@ void main() {
     tester,
   ) async {
     tester.view.physicalSize = const Size(1080, 2400);
-    tester.view.devicePixelRatio = 2.75;
+    tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
     SharedPreferences.setMockInitialValues({});
     final preferences = (await tester.runAsync(SharedPreferences.getInstance))!;

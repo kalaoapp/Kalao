@@ -7,9 +7,12 @@ import 'dart:io';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:ffmpeg_kit_flutter_new_audio/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_new_audio/ffmpeg_kit_config.dart';
+import 'package:ffmpeg_kit_flutter_new_audio/ffprobe_kit.dart';
 import 'package:ffmpeg_kit_flutter_new_audio/return_code.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kalao/app.dart';
 import 'package:kalao/providers/library_provider.dart';
@@ -23,9 +26,11 @@ import 'package:kalao/services/external_links.dart';
 import 'package:kalao/services/history_database.dart';
 import 'package:kalao/services/import_service.dart';
 import 'package:kalao/services/library_database.dart';
+import 'package:kalao/services/library_folder_service.dart';
 import 'package:kalao/services/platform_bridge.dart';
 import 'package:kalao/services/playback_handler.dart';
 import 'package:kalao/utils/logger.dart';
+import 'package:kalao/widgets/player_orientation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -33,6 +38,8 @@ const _log = AppLogger('App');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Portrait everywhere but the player (`AnyOrientation`).
+  await SystemChrome.setPreferredOrientations(appOrientations);
 
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
@@ -82,6 +89,10 @@ Future<LibraryServices> openLibraryServices() async {
       storage: storage,
       convert: _convertWithFfmpeg,
     ),
+    transcoder: FolderTranscoder(
+      probe: _probeDocumentWithFfprobe,
+      convert: _convertDocumentWithFfmpeg,
+    ),
   );
 }
 
@@ -97,6 +108,62 @@ Future<bool> _convertWithFfmpeg(String input, String output) async {
     if (partial.existsSync()) await partial.delete();
   }
   return ok;
+}
+
+/// FFmpegKit reads a document URI through its own SAF parameter, so no
+/// descriptor is reopened (ADR-018).
+Future<String?> _safInput(String uri) =>
+    FFmpegKitConfig.getSafParameterForRead(uri);
+
+/// Tags and duration of a music-folder file Symphonia cannot open (Opus,
+/// APE, WavPack, Musepack, DSF/DFF), in `probeAudio`'s shape.
+Future<Map<String, dynamic>?> _probeDocumentWithFfprobe(String uri) async {
+  final input = await _safInput(uri);
+  if (input == null) return null;
+  final session = await FFprobeKit.getMediaInformation(input);
+  final info = session.getMediaInformation();
+  if (info == null) return null;
+  final tags = <String, String>{
+    for (final MapEntry(:key, :value) in (info.getTags() ?? const {}).entries)
+      key.toString().toLowerCase(): '$value',
+  };
+  for (final stream in info.getStreams()) {
+    for (final MapEntry(:key, :value)
+        in (stream.getAllProperties()?['tags'] as Map? ?? const {}).entries) {
+      tags.putIfAbsent(key.toString().toLowerCase(), () => '$value');
+    }
+  }
+  int? number(String? value) => int.tryParse(
+    RegExp(r'^\s*(\d+)').firstMatch(value ?? '')?.group(1) ?? '',
+  );
+  final seconds = double.tryParse(info.getDuration() ?? '');
+  final audio = info
+      .getStreams()
+      .where((s) => s.getType() == 'audio')
+      .firstOrNull;
+  return {
+    'title': tags['title'],
+    'artist': tags['artist'],
+    'album': tags['album'],
+    'albumArtist': tags['album_artist'] ?? tags['albumartist'],
+    'genre': tags['genre'],
+    'composer': tags['composer'],
+    'isrc': tags['isrc'],
+    'lyrics': tags['lyrics'] ?? tags['unsyncedlyrics'],
+    'trackNo': number(tags['track']),
+    'discNo': number(tags['disc']),
+    'year': number(tags['date'] ?? tags['year']),
+    'durationMs': seconds == null ? null : (seconds * 1000).round(),
+    'codec': audio?.getCodec() ?? '',
+    'sampleRate': int.tryParse(audio?.getSampleRate() ?? ''),
+  };
+}
+
+/// A FLAC copy of a music-folder file, made on its first play.
+Future<bool> _convertDocumentWithFfmpeg(String uri, String output) async {
+  final input = await _safInput(uri);
+  if (input == null) return false;
+  return _convertWithFfmpeg(input, output);
 }
 
 /// audio_service owns the cached engine and the media session; a failure

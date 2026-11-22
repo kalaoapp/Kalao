@@ -363,7 +363,18 @@ class ImportService {
         if (file.inFolder || used.contains(file.sha256)) continue;
         await _deleteFile(file.path);
       }
-      if (song.coverPath case final cover?) await _deleteFile(cover);
+    }
+    // A folder image is shared by the songs of its directory (and a found
+    // album cover by its album): delete a cover only once no song uses it.
+    final covers = {for (final song in songs) ?song.coverPath};
+    await deleteUnusedCovers(covers);
+  }
+
+  /// Deletes the cover files of [paths] no song uses any more.
+  Future<void> deleteUnusedCovers(Set<String> paths) async {
+    final used = await library.usedCovers(paths);
+    for (final cover in paths.difference(used)) {
+      await _deleteFile(cover);
     }
   }
 

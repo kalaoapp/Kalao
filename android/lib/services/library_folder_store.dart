@@ -18,6 +18,7 @@ class FolderFile {
     this.bytes = 0,
     this.modified = 0,
     this.error,
+    this.scanVersion = folderScanVersion,
   });
 
   factory FolderFile.fromRow(Map<String, Object?> row) => FolderFile(
@@ -32,6 +33,7 @@ class FolderFile {
     bytes: row['bytes'] as int? ?? 0,
     modified: row['modified'] as int? ?? 0,
     error: row['error'] as String?,
+    scanVersion: row['scan_version'] as int? ?? 0,
   );
 
   final String uri;
@@ -46,6 +48,9 @@ class FolderFile {
   /// Why a [FolderFileRole.skipped] file was not added.
   final String? error;
 
+  /// The reader that recorded it ([folderScanVersion]).
+  final int scanVersion;
+
   Map<String, Object?> toRow() => {
     'uri': uri,
     'folder_id': folderId,
@@ -56,8 +61,14 @@ class FolderFile {
     'bytes': bytes,
     'modified': modified,
     'error': error,
+    'scan_version': scanVersion,
   };
 }
+
+/// The music-folder reader's version (`folder_file.scan_version`): a scan
+/// reads files recorded by an older reader again once (v2: album artist,
+/// track and disc numbers, year, genre and composer).
+const folderScanVersion = 2;
 
 /// SQL for `library_folder` and `folder_file` in `kalao_library.db`.
 class LibraryFolderStore {
@@ -183,6 +194,18 @@ FROM library_folder f''';
       whereArgs: list,
     );
   }
+
+  /// The audio files of folder [folderId] that belong to songs.
+  Future<List<String>> mediaUris(int folderId) async => [
+    for (final row in await db.query(
+      'folder_file',
+      columns: ['uri'],
+      where:
+          "folder_id = ? AND role IN ('original', 'instrumental') AND song_id IS NOT NULL",
+      whereArgs: [folderId],
+    ))
+      row['uri']! as String,
+  ];
 
   /// Songs whose original is in folder [folderId].
   Future<List<int>> songIds(int folderId) async => [

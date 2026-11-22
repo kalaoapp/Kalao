@@ -2,19 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kalao/l10n/app_localizations.dart';
+import 'package:kalao/models/settings.dart';
 import 'package:kalao/models/song.dart';
-import 'package:kalao/providers/queue_provider.dart';
+import 'package:kalao/providers/library_browse_provider.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/player_provider.dart';
+import 'package:kalao/providers/settings_provider.dart';
 import 'package:kalao/screens/home_tab.dart';
 import 'package:kalao/screens/import_sheet.dart';
-import 'package:kalao/services/library_database.dart';
+import 'package:kalao/screens/library/library_filter_sheet.dart';
+import 'package:kalao/screens/library/library_pages.dart';
+import 'package:kalao/services/library_browse.dart';
 import 'package:kalao/theme/app_tokens.dart';
 import 'package:kalao/widgets/empty_state.dart';
-import 'package:kalao/widgets/song_widgets.dart';
+import 'package:kalao/widgets/library/library_actions.dart';
+import 'package:kalao/widgets/library/paged_song_list.dart';
 
-/// Library: grid or list, sort, and a selection mode (long press) for
-/// deleting songs.
+/// Library (FEATURES 6.11): Songs, Albums, Artists, Genres, Folders and
+/// Playlists, after Mornye's Library tab. Songs are paged, filtered and
+/// sorted; a long press selects them for the queue, a playlist, favorites or
+/// deletion. The view shown last is remembered.
 class LibraryScreen extends ConsumerStatefulWidget {
   const LibraryScreen({super.key});
 
@@ -23,9 +30,8 @@ class LibraryScreen extends ConsumerStatefulWidget {
 }
 
 class _LibraryScreenState extends ConsumerState<LibraryScreen> {
-  SongSort _sort = SongSort.recentlyAdded;
+  SongQuery _query = const SongQuery();
   bool _grid = false;
-  bool _favoritesOnly = false;
   final _selected = <int>{};
 
   bool get _selecting => _selected.isNotEmpty;
@@ -34,9 +40,21 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     if (!_selected.remove(song.id)) _selected.add(song.id);
   });
 
-  Future<void> _deleteSelected(List<Song> songs) async {
+  LibraryTab get _tab =>
+      ref.watch(settingsProvider.select((s) => s.libraryTab));
+
+  void _setTab(LibraryTab tab) {
+    setState(_selected.clear);
+    ref.read(settingsProvider.notifier).setLibraryTab(tab);
+  }
+
+  Future<List<Song>> _chosen() =>
+      ref.read(libraryServicesProvider).library.songsByIds([..._selected]);
+
+  Future<void> _deleteSelected() async {
     final l10n = AppLocalizations.of(context);
-    final chosen = songs.where((song) => _selected.contains(song.id)).toList();
+    final chosen = await _chosen();
+    if (!mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -71,139 +89,21 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     ref.read(libraryRevisionProvider.notifier).bump();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final songs = ref.watch(
-      librarySongsProvider((sort: _sort, favoritesOnly: _favoritesOnly)),
-    );
-    final list = songs.asData?.value ?? const <Song>[];
-    return PopScope(
-      canPop: !_selecting,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) setState(_selected.clear);
-      },
-      child: Scaffold(
-        appBar: _selecting
-            ? AppBar(
-                leading: IconButton(
-                  tooltip: l10n.actionCancel,
-                  icon: const Icon(Icons.close),
-                  onPressed: () => setState(_selected.clear),
-                ),
-                title: Text(l10n.librarySelected(_selected.length)),
-                actions: [
-                  IconButton(
-                    tooltip: l10n.librarySelectAll,
-                    icon: const Icon(Icons.select_all),
-                    onPressed: () =>
-                        setState(() => _selected.addAll(list.map((s) => s.id))),
-                  ),
-                  IconButton(
-                    tooltip: l10n.queueAdd,
-                    icon: const Icon(Icons.playlist_add),
-                    onPressed: () => _queueSelected(list),
-                  ),
-                  IconButton(
-                    tooltip: l10n.favoriteAdd,
-                    icon: const Icon(Icons.favorite_border),
-                    onPressed: () => _favoriteSelected(),
-                  ),
-                  IconButton(
-                    tooltip: l10n.actionDelete,
-                    icon: const Icon(Icons.delete_outline),
-                    onPressed: () => _deleteSelected(list),
-                  ),
-                ],
-              )
-            : AppBar(
-                title: Text(l10n.navLibrary),
-                actions: [
-                  IconButton(
-                    tooltip: l10n.libraryFavoritesOnly,
-                    isSelected: _favoritesOnly,
-                    icon: const Icon(Icons.favorite_border),
-                    selectedIcon: const Icon(Icons.favorite),
-                    onPressed: () =>
-                        setState(() => _favoritesOnly = !_favoritesOnly),
-                  ),
-                  PopupMenuButton<SongSort>(
-                    tooltip: l10n.librarySort,
-                    icon: const Icon(Icons.sort),
-                    initialValue: _sort,
-                    onSelected: (sort) => setState(() => _sort = sort),
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: SongSort.recentlyAdded,
-                        child: Text(l10n.sortRecentlyAdded),
-                      ),
-                      PopupMenuItem(
-                        value: SongSort.title,
-                        child: Text(l10n.sortTitle),
-                      ),
-                      PopupMenuItem(
-                        value: SongSort.artist,
-                        child: Text(l10n.sortArtist),
-                      ),
-                    ],
-                  ),
-                  IconButton(
-                    tooltip: l10n.foldersTitle,
-                    icon: const Icon(Icons.folder_outlined),
-                    onPressed: () => context.push('/settings/folders'),
-                  ),
-                  IconButton(
-                    tooltip: _grid
-                        ? l10n.libraryShowList
-                        : l10n.libraryShowGrid,
-                    icon: Icon(_grid ? Icons.view_list : Icons.grid_view),
-                    onPressed: () => setState(() => _grid = !_grid),
-                  ),
-                ],
-              ),
-        floatingActionButton: _selecting
-            ? null
-            : FloatingActionButton.extended(
-                heroTag: 'import-library',
-                onPressed: () => pickAndImport(context, ref),
-                icon: const Icon(Icons.add),
-                label: Text(l10n.importAction),
-              ),
-        body: switch (songs) {
-          AsyncData(:final value) when value.isEmpty && _favoritesOnly =>
-            EmptyState(
-              icon: Icons.favorite_border,
-              title: l10n.favoritesEmptyTitle,
-              body: l10n.favoritesEmptyBody,
-            ),
-          AsyncData(:final value) when value.isEmpty => EmptyState(
-            icon: Icons.library_music_outlined,
-            title: l10n.libraryEmptyTitle,
-            body: l10n.libraryEmptyBody,
-          ),
-          AsyncError(:final error) => Center(child: Text('$error')),
-          AsyncData(:final value) =>
-            _grid ? _buildGrid(value) : _buildList(value),
-          _ => const Center(child: CircularProgressIndicator()),
-        },
-      ),
-    );
+  Future<void> _selectAll() async {
+    final ids = await ref.read(libraryServicesProvider).browse.ids(_query);
+    setState(() => _selected.addAll(ids));
   }
 
-  /// Queues the selected songs in list order, for Karaoke, no singer named.
-  Future<void> _queueSelected(List<Song> songs) async {
-    final l10n = AppLocalizations.of(context);
-    final messenger = ScaffoldMessenger.of(context);
-    final actions = ref.read(queueActionsProvider);
-    final chosen = [
-      for (final song in songs)
-        if (_selected.contains(song.id)) song,
-    ];
+  Future<void> _queueSelected() async {
+    final ids = [..._selected];
     setState(_selected.clear);
-    for (final song in chosen) {
-      await actions.add(song);
-    }
-    messenger.showSnackBar(SnackBar(content: Text(l10n.queueAdded)));
+    await queueAll(context, ref, ids);
+  }
+
+  Future<void> _playlistSelected() async {
+    final ids = [..._selected];
+    setState(_selected.clear);
+    await addToPlaylist(context, ref, ids);
   }
 
   Future<void> _favoriteSelected() async {
@@ -224,44 +124,186 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     }
   }
 
-  Widget _buildList(List<Song> songs) => ListView.builder(
-    padding: const EdgeInsets.only(bottom: 96),
-    itemCount: songs.length,
-    itemBuilder: (context, index) {
-      final song = songs[index];
-      return SongListTile(
-        song: song,
-        selectionMode: _selecting,
-        selected: _selected.contains(song.id),
-        onTap: () => _open(song),
-        onLongPress: () => _toggle(song),
-      );
-    },
+  Future<void> _filters() async {
+    final next = await showLibraryFilters(context, _query);
+    if (next != null) setState(() => _query = next);
+  }
+
+  PreferredSizeWidget _tabs(AppLocalizations l10n) => PreferredSize(
+    preferredSize: const Size.fromHeight(52),
+    child: SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTokens.space12,
+        vertical: AppTokens.space8,
+      ),
+      child: Row(
+        children: [
+          for (final (tab, label) in [
+            (LibraryTab.songs, l10n.libraryViewSongs),
+            (LibraryTab.albums, l10n.libraryViewAlbums),
+            (LibraryTab.artists, l10n.libraryViewArtists),
+            (LibraryTab.genres, l10n.libraryViewGenres),
+            (LibraryTab.folders, l10n.libraryViewFolders),
+            (LibraryTab.playlists, l10n.libraryViewPlaylists),
+          ])
+            Padding(
+              padding: const EdgeInsets.only(right: AppTokens.space8),
+              child: ChoiceChip(
+                label: Text(label),
+                selected: _tab == tab,
+                onSelected: (_) => _setTab(tab),
+              ),
+            ),
+        ],
+      ),
+    ),
   );
 
-  Widget _buildGrid(List<Song> songs) => GridView.builder(
-    padding: const EdgeInsets.fromLTRB(
-      AppTokens.space12,
-      AppTokens.space8,
-      AppTokens.space12,
-      96,
-    ),
-    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-      maxCrossAxisExtent: 180,
-      childAspectRatio: 0.72,
-    ),
-    itemCount: songs.length,
-    itemBuilder: (context, index) {
-      final song = songs[index];
-      return LayoutBuilder(
-        builder: (context, constraints) => SongCard(
-          song: song,
-          width: constraints.maxWidth - AppTokens.space8,
-          selected: _selected.contains(song.id),
-          onTap: () => _open(song),
-          onLongPress: () => _toggle(song),
+  List<Widget> _songActions(AppLocalizations l10n) {
+    final filters = _query.activeFilters;
+    return [
+      IconButton(
+        tooltip: l10n.libraryFilters,
+        onPressed: _filters,
+        icon: Badge(
+          isLabelVisible: filters > 0,
+          label: Text('$filters'),
+          child: const Icon(Icons.filter_list),
         ),
+      ),
+      PopupMenuButton<LibrarySort>(
+        tooltip: l10n.librarySort,
+        icon: const Icon(Icons.sort),
+        initialValue: _query.sort,
+        onSelected: (sort) =>
+            setState(() => _query = _query.copyWith(sort: sort)),
+        itemBuilder: (context) => [
+          for (final (sort, label) in [
+            (LibrarySort.latest, l10n.sortRecentlyAdded),
+            (LibrarySort.oldest, l10n.sortOldest),
+            (LibrarySort.title, l10n.sortTitle),
+            (LibrarySort.artist, l10n.sortArtist),
+            (LibrarySort.album, l10n.sortAlbum),
+            (LibrarySort.year, l10n.sortYear),
+            (LibrarySort.genre, l10n.sortGenre),
+            (LibrarySort.size, l10n.sortSize),
+          ])
+            PopupMenuItem(value: sort, child: Text(label)),
+        ],
+      ),
+      IconButton(
+        tooltip: _grid ? l10n.libraryShowList : l10n.libraryShowGrid,
+        icon: Icon(_grid ? Icons.view_list : Icons.grid_view),
+        onPressed: () => setState(() => _grid = !_grid),
+      ),
+    ];
+  }
+
+  Widget _songs(AppLocalizations l10n) {
+    final count = ref.watch(songCountProvider(_query)).asData?.value;
+    if (count == 0) {
+      if (_query.activeFilters > 0) {
+        return EmptyState(
+          icon: _query.favoritesOnly
+              ? Icons.favorite_border
+              : Icons.filter_list_off,
+          title: _query.favoritesOnly
+              ? l10n.favoritesEmptyTitle
+              : l10n.libraryViewEmpty,
+          body: _query.favoritesOnly ? l10n.favoritesEmptyBody : '',
+        );
+      }
+      return EmptyState(
+        icon: Icons.library_music_outlined,
+        title: l10n.libraryEmptyTitle,
+        body: l10n.libraryEmptyBody,
       );
-    },
-  );
+    }
+    return PagedSongList(
+      query: _query,
+      grid: _grid,
+      selected: _selected,
+      onTap: _open,
+      onLongPress: _toggle,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final tab = _tab;
+    return PopScope(
+      canPop: !_selecting,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) setState(_selected.clear);
+      },
+      child: Scaffold(
+        appBar: _selecting
+            ? AppBar(
+                leading: IconButton(
+                  tooltip: l10n.actionCancel,
+                  icon: const Icon(Icons.close),
+                  onPressed: () => setState(_selected.clear),
+                ),
+                title: Text(l10n.librarySelected(_selected.length)),
+                actions: [
+                  IconButton(
+                    tooltip: l10n.librarySelectAll,
+                    icon: const Icon(Icons.select_all),
+                    onPressed: _selectAll,
+                  ),
+                  IconButton(
+                    tooltip: l10n.queueAdd,
+                    icon: const Icon(Icons.queue_music),
+                    onPressed: _queueSelected,
+                  ),
+                  IconButton(
+                    tooltip: l10n.playlistAddTo,
+                    icon: const Icon(Icons.playlist_add),
+                    onPressed: _playlistSelected,
+                  ),
+                  IconButton(
+                    tooltip: l10n.favoriteAdd,
+                    icon: const Icon(Icons.favorite_border),
+                    onPressed: _favoriteSelected,
+                  ),
+                  IconButton(
+                    tooltip: l10n.actionDelete,
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: _deleteSelected,
+                  ),
+                ],
+              )
+            : AppBar(
+                title: Text(l10n.navLibrary),
+                actions: [
+                  if (tab == LibraryTab.songs) ..._songActions(l10n),
+                  IconButton(
+                    tooltip: l10n.foldersTitle,
+                    icon: const Icon(Icons.folder_outlined),
+                    onPressed: () => context.push('/settings/folders'),
+                  ),
+                ],
+                bottom: _tabs(l10n),
+              ),
+        floatingActionButton: _selecting
+            ? null
+            : FloatingActionButton.extended(
+                heroTag: 'import-library',
+                onPressed: () => pickAndImport(context, ref),
+                icon: const Icon(Icons.add),
+                label: Text(l10n.importAction),
+              ),
+        body: switch (tab) {
+          LibraryTab.songs => _songs(l10n),
+          LibraryTab.albums => const AlbumsView(),
+          LibraryTab.artists => const ArtistsView(),
+          LibraryTab.genres => const GenresView(),
+          LibraryTab.folders => const FoldersView(),
+          LibraryTab.playlists => const PlaylistsView(),
+        },
+      ),
+    );
+  }
 }

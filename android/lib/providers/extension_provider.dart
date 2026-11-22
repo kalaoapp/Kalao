@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:kalao/constants/app_info.dart';
 import 'package:kalao/models/extension.dart';
+import 'package:kalao/models/settings.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
 import 'package:kalao/services/extension_service.dart';
@@ -91,7 +93,7 @@ class ExtensionsController extends Notifier<ExtensionsState> {
   @override
   ExtensionsState build() {
     ref.listen(
-      settingsProvider.select((settings) => settings.extensionDeveloperMode),
+      settingsProvider.select(_developerMode),
       (_, enabled) => unawaited(_service.setDeveloperMode(enabled)),
     );
     Future.microtask(() async {
@@ -100,6 +102,10 @@ class ExtensionsController extends Notifier<ExtensionsState> {
     });
     return const ExtensionsState();
   }
+
+  /// The setting, honoured only in builds that offer developer mode.
+  static bool _developerMode(AppSettings settings) =>
+      settings.extensionDeveloperMode && AppInfo.developerModeAvailable;
 
   static const _checkedKey = 'extension_repos_checked_at';
 
@@ -119,7 +125,7 @@ class ExtensionsController extends Notifier<ExtensionsState> {
   Future<void> refresh() async {
     try {
       await _service.start(
-        developerMode: ref.read(settingsProvider).extensionDeveloperMode,
+        developerMode: _developerMode(ref.read(settingsProvider)),
       );
       final listed = await _service.list();
       if (!ref.mounted) return;

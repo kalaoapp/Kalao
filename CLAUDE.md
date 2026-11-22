@@ -140,7 +140,7 @@ bash scripts/build_android.sh
 
 **Rust**
 
-- `unsafe_code = "deny"` workspace-wide; `thiserror` error enums; no `unwrap` outside tests; `--locked` on every cargo command.
+- `unsafe_code = "deny"` workspace-wide (the one `#[allow(unsafe_code)]` is `kalao-audio::open_file`, ADR-018); `thiserror` error enums; no `unwrap` outside tests; `--locked` on every cargo command.
 - Dependencies are declared once in `[workspace.dependencies]` (many pinned with `=`) and referenced as `foo.workspace = true`; every crate inherits `[lints] workspace = true`.
 - Process-wide state uses `OnceLock<Mutex<…>>` behind an accessor function.
 

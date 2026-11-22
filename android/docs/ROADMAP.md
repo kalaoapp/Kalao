@@ -47,7 +47,7 @@ Status: ✅ built and tested locally (Rust: fmt, clippy, all workspace tests inc
 | M1.10 | Lyrics import (paste, `.txt`/`.lrc` file, embedded tags, lyrics file paired at import); `parseLyrics` (`core::lyrics::doc`: LRC with several time tags and `[offset:]`, plain text) | 2.1 | ✅ | `lyrics_import_sheet.dart` |
 | M1.11 | Sections and normalisation (`core::sections`, POC marker lists for en/zh/ja/ko/es/fr/de/pt and its bracket forms) | 2.2 | ✅ | §4 |
 | M1.12 | `core::annotate::pinyin` with `pinyin_pro` (context polyphones, tone marks, er-hua merge, per-character UTF-16 segments); POC diacritic, 而, bracket and whitespace cases pass | 2.3 | ✅ | §4 |
-| M1.13 | Now playing: layered lyrics (`ruby_lyric_line.dart`), section labels, pinyin toggle, seek slider, transport, original ↔ instrumental, vocal-guide slider, manual line stepping (tap, ↑/↓, buttons), keyboard (Space, ←/→ 5 s) | 1.2, 1.3, 2.1, 2.7 | ✅ (Mornye's player layout widgets are not copied; the screen is Kalao-sized) | `now_playing_screen.dart` |
+| M1.13 | Now playing: layered lyrics (`ruby_lyric_line.dart`), section labels, pinyin toggle, seek slider, transport, original ↔ instrumental, vocal-guide slider, manual line stepping (tap, ↑/↓, buttons), keyboard (Space, ←/→ 5 s); landscape (added 2026-11-21): lyrics fill the screen and a tap beside the text shows or hides floating compact controls (Learn \| Karaoke at the left; back 10 s and play/pause above a short seek bar, bottom centre) | 1.2, 1.3, 2.1, 2.7 | ✅ (Mornye's player layout widgets are not copied; the screen is Kalao-sized) | `now_playing_screen.dart` |
 | M1.14 | Material You (`dynamic_color` + `material_ui`, toggle), lyric sizes S–XXL, custom lyric font (FontLoader), strings for en, zh-Hans, zh-Hant, ja | 9.1 (launch set), 9.2 | ✅ | `app_theme.dart`, `custom_font_service.dart` |
 | M1.15 | Accessibility: tooltips/labels on every icon button, ruby lines read as text + readings, slider value semantics, section headers, text scale unclamped, reduced motion disables lyric scroll animation, inactive lyrics use `onSurfaceVariant` for contrast | 9.4 | ✅ (TalkBack pass on a device is part of the exit check) | — |
 
@@ -140,6 +140,32 @@ Tests added: Rust `kalao-extensions` (manifest, package limits and packing, semv
 
 **Exit:** private lyrics and metadata extensions install from a signed repo and work; LRCLIB sample and EXTENSIONS.md are public; streaming and offline downloads work.
 
+## M5B Local Library — implemented (2026-11-21)
+
+Status: ✅ built and tested locally (Rust: fmt, clippy, all workspace tests incl. the lent-descriptor duplicate and tag numbers; Flutter analyze clean, 136 Dart tests; Kotlin `compileDebugKotlin` + `testDebugUnitTest`); ⏳ the on-device checks (a real SAF folder of 5,000 files, an SD card taken out and put back, a proxy-descriptor provider, FFmpegKit converting an Opus file) need a device.
+
+The rest of Mornye's Local Library on top of M4.13's music folders, adapted for karaoke; MORNYE_REUSE.md §7 has the inventory and the verdicts.
+
+| # | Task | Features | Status | Source / § |
+| --- | --- | --- | --- | --- |
+| M5B.1 | Unavailable instead of deleted: a gone original or an offline folder marks its media `available = 0` (library v4); the song keeps its lyrics, plays, favorites and queue entries, is dimmed with a badge and cannot play. A new original whose `song_key` matches a missing song (file gone, not merely offline), in any music folder, is relinked to it. **Clean up missing songs** deletes them after a confirmation that counts those with lyrics. Restore relinks folder songs the same way once their folder is scanned | 6.9 | ✅ | `library_cleanup.dart`; IMPLEMENTATION §3 |
+| M5B.2 | Folder state: `listLibraryFolder` returns `ok`, `offline` (its volume is not mounted) or `access`; offline folders are scanned again on resume. Auto scan setting: every app open (default), daily, weekly, manual. **Force full scan** re-reads every file; `folder_file.scan_version` re-reads rows from an older reader once | 6.8 | ✅ | `local_library_provider_sources.dart`, `library_settings_page.dart` |
+| M5B.3 | Lent descriptors are duplicated, never reopened (ADR-018): `kalao-audio::open_file` (Mornye's `open_audio_file`, the one `#[allow(unsafe_code)]`) opens every `/proc/self/fd/N` path for the decoder and `probeAudio`; Dart reads lyrics files and folder images through `copyDocumentToFile`, which streams them | 6.8 | ✅ (in `kalao-audio`, which may not depend on `kalao-core`; ⏳ device test with a proxy-descriptor provider) | `mobile/src/tags.rs` `open_audio_file` |
+| M5B.4 | Richer tags: `probeAudio` also returns album artist, track and disc numbers, year, genre and composer (Symphonia standard keys; AIFF enabled); library v4 adds them to `song`; a scan-version bump fills them in for existing folder songs | 6.10 | ✅ | — |
+| M5B.5 | Undecodable formats (Opus, APE, WavPack, Musepack, DSF/DFF, WMA): indexed with FFprobeKit tags (through FFmpegKit's SAF parameter) instead of skipped; the first play converts the file to FLAC with FFmpegKit into `converted/` (newest 1 GiB kept) and plays that copy; never backed up | 6.8 | ✅ | — |
+| M5B.6 | Folder-image covers: the listing also returns images; a song without an embedded cover uses its directory's image (Mornye's rule, disc folders such as `CD1` use their parent's), copied once into `covers/` and shared; a shared cover is deleted only when no song uses it | 6.8 | ✅ | `cover/folder.rs` |
+| M5B.7 | Library views over every song: Songs, Albums (album page in disc/track order with Sing all, Shuffle, Queue all, Remove artwork), Artists (Albums \| Songs), Genres (tags split on `; / , ；、 |`), Folders (tree with counts and Sing all under a folder), Playlists; the last view is remembered. Lists read 100 songs a page with shared counts; fast scroller with a letter, year or month bubble | 6.11 | ✅ (offset pages instead of keyset cursors: simpler, and fast enough at karaoke-library sizes; Recently added is the Songs list's default sort) | `library_browse_provider.dart`, `library_directory_view.dart`, `local_album_screen.dart`, `library_artist_screen.dart`, `library_fast_scroller.dart` |
+| M5B.8 | Filters: origin (imported, folder, extension), format, lyrics (none, not timed, by line, by word), instrumental, favorites, unavailable, missing artwork, genre or year; sorts latest, oldest, title, artist, album, year, genre, size. Selection: select all, queue, add to playlist, favorite, delete | 6.11 | ✅ (no "most sung" sort: plays live in the history database and the Stats screen ranks them) | `library_track_selection_bar.dart` |
+| M5B.9 | Search: every query word must match some `song_search` key, in any order (punctuation separates words); Home lists songs whose current lyrics contain the words under "In lyrics"; Home's extension results show **In library** by ISRC or `song_key`. `IN` lists are chunked to 500 (Android 8's SQLite allows 999 variables) | 6.2, 6.12 | ✅ | `library_search.dart` |
+| M5B.10 | Review duplicates: songs sharing a `song_key` across folders, imports and downloads; keeping one moves the others' plays, queue and playlist entries and favorite to it, takes their newest lyrics when it has none, and deletes them (folder files stay) | 6.13 | ✅ (by `song_key` only; no SHA-256 confirmation) | `library_duplicates.dart` |
+| M5B.11 | Find Missing Artwork: albums without a cover, one at a time through the artwork extensions, cancellable, with progress; results, "none found" and removed covers are remembered (`album_artwork`) | 6.13 | ✅ | `library_album_artwork.dart` |
+| M5B.12 | Playlists (local): `playlist` + `playlist_item`; create, rename, delete, reorder, swipe to remove, add from a selection, Sing all, Shuffle, Queue all; backups carry them, Merge joins by name and appends missing songs | 6.14 | ✅ (adding from Now playing is not built) | `library_collections_database.dart` (local part) |
+| M5B.13 | Strings in all four ARB files; docs updated | — | ✅ | — |
+
+Tests added: Rust `kalao-audio` (lent descriptor paths and a duplicate that reads and seeks after the lender closes, tag numbers); Dart `library_folder_test` (unavailable and relink in place and across folders, cleanup, offline and back, tags with an older reader and Force full scan, folder image, converted formats), `library_browse_test` (sorts, pages, 1,200 songs past the variable limit, karaoke filters, albums in disc/track order, artists, genres, folder levels, word-order search with pinyin, lyrics search, known keys, duplicates keeping user data, artwork memory and removal, playlists with reorder and Merge restore, folder-image rules, the Library opening Albums and an album page).
+
+**Exit:** a folder of 5,000 songs scans on a mid-range device and later scans read only changes; moving or renaming a song, or unplugging its SD card, keeps its lyrics and plays; albums, artists, genres and folders browse smoothly at that size; search finds songs by pinyin words in any order and by a lyric line.
+
 ## M6 Stems and translation
 
 | # | Task | Features | Source / § |
@@ -203,6 +229,9 @@ Tests added: Rust `kalao-extensions` (manifest, package limits and packing, semv
 | 2.8 | M2.2 | 5.3 | M5.3 | 9.6 | M4.9 |
 | 2.9 | M2.4 | 5.4 | M5.4 | 9.7 | M4.10 |
 | — | — | 5.5 | M5.5 | 9.8 | M4.11 |
+| 6.8 | M4.13, M5B.2–M5B.6 | 6.9 | M5B.1 | 6.10 | M5B.4 |
+| 6.11 | M5B.7, M5B.8 | 6.12 | M5B.9 | 6.13 | M5B.10, M5B.11 |
+| 6.14 | M5B.12 | — | — | — | — |
 | — | — | — | — | 6.8 | M4.13 |
 
 **Distribution:** GitHub Releases only, from M3 (v0.1.0). Each release: per-ABI and universal signed APKs, SHA-256 checksums, changelog. No store builds.

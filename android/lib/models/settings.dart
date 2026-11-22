@@ -48,6 +48,23 @@ enum BackupSchedule {
 /// by every later write; [undecided] until then.
 enum InstrumentalPlacement { undecided, separateFolder, besideOriginal }
 
+/// When music folders are scanned (Mornye's auto scan). A due scan runs
+/// when the app is opened (ADR-016); a folder whose storage was offline is
+/// also scanned when the app resumes.
+enum FolderScanSchedule {
+  onOpen(Duration.zero),
+  daily(Duration(days: 1)),
+  weekly(Duration(days: 7)),
+  manual(null);
+
+  const FolderScanSchedule(this.interval);
+
+  final Duration? interval;
+}
+
+/// The Library tab's views (FEATURES 6.11); the last one is remembered.
+enum LibraryTab { songs, albums, artists, genres, folders, playlists }
+
 /// App preferences, stored as one JSON object in shared_preferences.
 /// Unknown or missing keys fall back to defaults, so adding a field never
 /// breaks an existing install. Secrets never go here (secure storage).
@@ -81,6 +98,8 @@ class AppSettings {
     this.extensionDeveloperMode = false,
     this.instrumentalPlacement = InstrumentalPlacement.undecided,
     this.instrumentalFolderUri,
+    this.folderScanSchedule = FolderScanSchedule.onOpen,
+    this.libraryTab = LibraryTab.songs,
   });
 
   factory AppSettings.fromJson(Map<String, dynamic> json) => AppSettings(
@@ -120,6 +139,11 @@ class AppSettings {
             .asNameMap()[json['instrumentalPlacement']] ??
         InstrumentalPlacement.undecided,
     instrumentalFolderUri: json['instrumentalFolderUri'] as String?,
+    folderScanSchedule:
+        FolderScanSchedule.values.asNameMap()[json['folderScanSchedule']] ??
+        FolderScanSchedule.onOpen,
+    libraryTab:
+        LibraryTab.values.asNameMap()[json['libraryTab']] ?? LibraryTab.songs,
   );
 
   /// Keys that describe this device or this install rather than the user's
@@ -134,6 +158,7 @@ class AppSettings {
     'backupKeep',
     'backupIncludeMedia',
     'extensionDeveloperMode',
+    'libraryTab',
     // Folder grants belong to this device; another device asks again.
     'instrumentalPlacement',
     'instrumentalFolderUri',
@@ -236,6 +261,12 @@ class AppSettings {
   /// The SAF folder (tree URI) for [InstrumentalPlacement.separateFolder].
   final String? instrumentalFolderUri;
 
+  /// When music folders are scanned.
+  final FolderScanSchedule folderScanSchedule;
+
+  /// The Library view shown last.
+  final LibraryTab libraryTab;
+
   Map<String, dynamic> toJson() => {
     'setupCompleted': setupCompleted,
     'themeMode': themeMode.name,
@@ -264,6 +295,8 @@ class AppSettings {
     'extensionDeveloperMode': extensionDeveloperMode,
     'instrumentalPlacement': instrumentalPlacement.name,
     'instrumentalFolderUri': instrumentalFolderUri,
+    'folderScanSchedule': folderScanSchedule.name,
+    'libraryTab': libraryTab.name,
   };
 
   AppSettings copyWith({
@@ -294,6 +327,8 @@ class AppSettings {
     bool? extensionDeveloperMode,
     InstrumentalPlacement? instrumentalPlacement,
     String? Function()? instrumentalFolderUri,
+    FolderScanSchedule? folderScanSchedule,
+    LibraryTab? libraryTab,
   }) => AppSettings(
     setupCompleted: setupCompleted ?? this.setupCompleted,
     themeMode: themeMode ?? this.themeMode,
@@ -331,6 +366,8 @@ class AppSettings {
     instrumentalFolderUri: instrumentalFolderUri != null
         ? instrumentalFolderUri()
         : this.instrumentalFolderUri,
+    folderScanSchedule: folderScanSchedule ?? this.folderScanSchedule,
+    libraryTab: libraryTab ?? this.libraryTab,
   );
 
   @override
@@ -362,7 +399,9 @@ class AppSettings {
       other.autoFetchLyrics == autoFetchLyrics &&
       other.extensionDeveloperMode == extensionDeveloperMode &&
       other.instrumentalPlacement == instrumentalPlacement &&
-      other.instrumentalFolderUri == instrumentalFolderUri;
+      other.instrumentalFolderUri == instrumentalFolderUri &&
+      other.folderScanSchedule == folderScanSchedule &&
+      other.libraryTab == libraryTab;
 
   @override
   int get hashCode => Object.hashAll([
@@ -393,5 +432,7 @@ class AppSettings {
     extensionDeveloperMode,
     instrumentalPlacement,
     instrumentalFolderUri,
+    folderScanSchedule,
+    libraryTab,
   ]);
 }

@@ -183,7 +183,16 @@ class PlayerController extends Notifier<NowPlaying>
     String singer = '',
   }) async {
     await _finishPlay();
-    final sources = sourcesFor(song);
+    final Map<String, String> sources;
+    try {
+      // Music-folder files the engine cannot decode play from a converted
+      // copy; a song whose original is gone cannot play (FEATURES 6.9).
+      sources = await _services.folders.playableSources(song);
+    } catch (error) {
+      _log.w('Cannot play ${song.title}', error);
+      state = state.copyWith(error: () => '$error');
+      return;
+    }
     var streams = const <StreamSource>[];
     if (sources.isEmpty) {
       final extRef = song.extRef;
