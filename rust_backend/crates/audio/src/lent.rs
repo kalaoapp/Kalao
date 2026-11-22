@@ -1,75 +1,180 @@
-// Derived from Mornye (https://github.com/mornyeapp/Mornye), Copyright 2026 zarzet, LGPL-3.0-only. Modified for Kalao.
-//! Files the Android host lends as descriptors (ADR-018).
+// Derived from Mornye (https://github.com/mornyeapp/Mornye), Copyright 2026 zarzet,
+// LGPL-3.0-only. Modified for Kalao.
+//! Files the app lends by descriptor (ADR-018). Music-folder documents reach
+//! Rust as `/proc/self/fd/N` paths. Reopening such a path issues a new open
+//! through the storage provider, which Android refuses for documents read
+//! through Storage Access Framework (`Permission denied`, and always for
+//! AppFuse proxies), so the descriptor is duplicated instead, as Mornye's
+//! `open_audio_file` does.
 
 use std::fs::File;
-use std::io;
+use std::io::{self, Read, Seek, SeekFrom};
 use std::path::Path;
 
-/// Opens `path` for reading. A descriptor path the host lent
-/// (`/proc/self/fd/N`, `/dev/fd/N`, a music-folder file) is duplicated
-/// instead of reopened: Android refuses to reopen an AppFuse-proxied
-/// descriptor, and the copy stays readable and seekable on its own. The host
-/// keeps the lent descriptor open until the song is replaced.
-pub fn open_file(path: &Path) -> io::Result<File> {
+/// The descriptor number of a lent path (`/proc/self/fd/N` or `/dev/fd/N`).
+pub fn lent_descriptor(path: &Path) -> Option<i32> {
+    let path = path.to_str()?;
+    path.strip_prefix("/proc/self/fd/")
+        .or_else(|| path.strip_prefix("/dev/fd/"))?
+        .parse::<i32>()
+        .ok()
+        .filter(|descriptor| *descriptor >= 0)
+}
+
+/// A file opened for reading with its own position. Duplicated descriptors
+/// share one file offset, and playback and the loop pre-decode read the same
+/// lent path at once, so reads are positional and never move the offset.
+#[derive(Debug)]
+pub struct LentFile {
+    file: File,
+    position: u64,
+    len: Option<u64>,
+}
+
+impl LentFile {
+    pub fn len(&self) -> Option<u64> {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == Some(0)
+    }
+}
+
+/// Opens `path` for reading. A lent descriptor is duplicated: the copy stays
+/// valid whatever the app does with its own descriptor.
+pub fn open_lent(path: &Path) -> io::Result<LentFile> {
+    let file = open_file(path)?;
+    let len = file
+        .metadata()
+        .ok()
+        .filter(|m| m.is_file())
+        .map(|m| m.len());
+    Ok(LentFile {
+        file,
+        position: 0,
+        len,
+    })
+}
+
+fn open_file(path: &Path) -> io::Result<File> {
     #[cfg(unix)]
     if let Some(descriptor) = lent_descriptor(path) {
         use std::os::fd::BorrowedFd;
-        // The one unsafe call in the workspace (ADR-018): the host owns the
-        // descriptor and keeps it open for the whole call.
+        // The app keeps the descriptor open until it closes the lease, which
+        // is after this call returns.
         #[allow(unsafe_code)]
-        let owned = unsafe { BorrowedFd::borrow_raw(descriptor) }.try_clone_to_owned()?;
-        return Ok(File::from(owned));
+        let borrowed = unsafe { BorrowedFd::borrow_raw(descriptor) };
+        return Ok(File::from(borrowed.try_clone_to_owned()?));
     }
     File::open(path)
 }
 
-/// The descriptor number of a lent path.
-#[cfg_attr(not(unix), allow(dead_code))]
-fn lent_descriptor(path: &Path) -> Option<i32> {
-    let text = path.to_str()?;
-    text.strip_prefix("/proc/self/fd/")
-        .or_else(|| text.strip_prefix("/dev/fd/"))?
-        .parse::<i32>()
-        .ok()
-        .filter(|descriptor| *descriptor >= 0)
+impl Read for LentFile {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let read = read_at(&self.file, buf, self.position)?;
+        self.position += read as u64;
+        Ok(read)
+    }
+}
+
+#[cfg(unix)]
+fn read_at(file: &File, buf: &mut [u8], offset: u64) -> io::Result<usize> {
+    std::os::unix::fs::FileExt::read_at(file, buf, offset)
+}
+
+#[cfg(windows)]
+fn read_at(file: &File, buf: &mut [u8], offset: u64) -> io::Result<usize> {
+    std::os::windows::fs::FileExt::seek_read(file, buf, offset)
+}
+
+impl Seek for LentFile {
+    fn seek(&mut self, to: SeekFrom) -> io::Result<u64> {
+        let target = match to {
+            SeekFrom::Start(offset) => Some(offset),
+            SeekFrom::Current(delta) => self.position.checked_add_signed(delta),
+            SeekFrom::End(delta) => {
+                let len = match self.len {
+                    Some(len) => len,
+                    None => self.file.metadata()?.len(),
+                };
+                len.checked_add_signed(delta)
+            }
+        };
+        self.position = target
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "seek before the start"))?;
+        Ok(self.position)
+    }
+}
+
+impl symphonia::core::io::MediaSource for LentFile {
+    fn is_seekable(&self) -> bool {
+        self.len.is_some()
+    }
+
+    fn byte_len(&self) -> Option<u64> {
+        self.len
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn temp(name: &str, bytes: &[u8]) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!("kalao-lent-{name}"));
+        std::fs::write(&path, bytes).unwrap();
+        path
+    }
+
     #[test]
     fn descriptor_paths_are_recognised() {
-        assert_eq!(lent_descriptor(Path::new("/proc/self/fd/7")), Some(7));
-        assert_eq!(lent_descriptor(Path::new("/dev/fd/12")), Some(12));
-        assert_eq!(lent_descriptor(Path::new("/proc/self/fd/-1")), None);
-        assert_eq!(lent_descriptor(Path::new("/proc/self/fd/x")), None);
-        assert_eq!(lent_descriptor(Path::new("/music/a.flac")), None);
+        assert_eq!(lent_descriptor(Path::new("/proc/self/fd/42")), Some(42));
+        assert_eq!(lent_descriptor(Path::new("/dev/fd/7")), Some(7));
+        for path in [
+            "/proc/self/fd/-1",
+            "/proc/self/fd/x",
+            "/music/a.flac",
+            "fd/3",
+        ] {
+            assert_eq!(lent_descriptor(Path::new(path)), None, "{path}");
+        }
+    }
+
+    #[test]
+    fn plain_paths_read_and_seek() {
+        let path = temp("plain.txt", b"abcdef");
+        let mut file = open_lent(&path).unwrap();
+        assert_eq!(file.len(), Some(6));
+        let mut head = [0; 2];
+        file.read_exact(&mut head).unwrap();
+        assert_eq!(&head, b"ab");
+        file.seek(SeekFrom::End(-2)).unwrap();
+        let mut tail = String::new();
+        file.read_to_string(&mut tail).unwrap();
+        assert_eq!(tail, "ef");
+        assert!(file.seek(SeekFrom::Current(-10)).is_err());
+        std::fs::remove_file(path).unwrap();
     }
 
     #[cfg(unix)]
     #[test]
-    fn a_lent_descriptor_is_duplicated_and_readable() {
-        use std::io::{Read, Seek, SeekFrom, Write};
+    fn lent_descriptors_are_duplicated_with_their_own_positions() {
         use std::os::fd::AsRawFd;
-        let dir = std::env::temp_dir().join(format!("kalao-lent-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("song.txt");
-        std::fs::File::create(&path)
-            .unwrap()
-            .write_all(b"lent bytes")
-            .unwrap();
+        let path = temp("fd.txt", b"0123456789");
         let lent = File::open(&path).unwrap();
-        let mut copy =
-            open_file(Path::new(&format!("/proc/self/fd/{}", lent.as_raw_fd()))).unwrap();
-        let mut text = String::new();
-        copy.read_to_string(&mut text).unwrap();
-        assert_eq!(text, "lent bytes");
-        copy.seek(SeekFrom::Start(5)).unwrap();
+        let lent_path = format!("/proc/self/fd/{}", lent.as_raw_fd());
+        let mut first = open_lent(Path::new(&lent_path)).unwrap();
+        let mut second = open_lent(Path::new(&lent_path)).unwrap();
+        let mut a = [0; 4];
+        first.read_exact(&mut a).unwrap();
+        let mut b = [0; 3];
+        second.read_exact(&mut b).unwrap();
+        assert_eq!((&a, &b), (b"0123", b"012"));
         drop(lent);
-        let mut rest = String::new();
-        copy.read_to_string(&mut rest).unwrap();
-        assert_eq!(rest, "bytes");
-        std::fs::remove_dir_all(&dir).unwrap();
+        // The copies outlive the lent descriptor.
+        first.read_exact(&mut a).unwrap();
+        assert_eq!(&a, b"4567");
+        std::fs::remove_file(path).unwrap();
     }
 }

@@ -1,6 +1,7 @@
-// Storage Access Framework calls for backups: save a backup
+// Storage Access Framework calls for backups and instrumentals: save a backup
 // where the user chooses, and write to / list / prune a backup folder the
-// user granted once. Kalao never asks for broad storage permissions.
+// user granted once, and write new music-folder instrumentals where the user
+// chose (FEATURES 6.8). Kalao never asks for broad storage permissions.
 package com.brinsley.kalao
 
 import android.content.Intent
@@ -70,6 +71,43 @@ internal suspend fun MainActivity.handlePickDocumentTree(result: MethodChannel.R
     result.success(uri?.toString())
 }
 
+/** The document of the folder `dir` ("a/b") below `tree`, created when missing. */
+private fun MainActivity.treeDirectory(tree: Uri, dir: String): Uri {
+    var id = DocumentsContract.getTreeDocumentId(tree)
+    var uri = DocumentsContract.buildDocumentUriUsingTree(tree, id)
+    for (segment in dir.split('/').filter { it.isNotEmpty() }) {
+        val columns = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+        )
+        val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, id)
+        val found = contentResolver.query(children, columns, null, null, null)?.use {
+            var match: String? = null
+            while (match == null && it.moveToNext()) {
+                if (it.getString(1) == segment &&
+                    it.getString(2) == DocumentsContract.Document.MIME_TYPE_DIR
+                ) {
+                    match = it.getString(0)
+                }
+            }
+            match
+        }
+        uri = if (found != null) {
+            DocumentsContract.buildDocumentUriUsingTree(tree, found)
+        } else {
+            DocumentsContract.createDocument(
+                contentResolver,
+                uri,
+                DocumentsContract.Document.MIME_TYPE_DIR,
+                segment,
+            ) ?: throw IllegalStateException("Could not create the folder $segment")
+        }
+        id = DocumentsContract.getDocumentId(uri)
+    }
+    return uri
+}
+
 internal suspend fun MainActivity.handleCopyFileToDocument(call: MethodCall, result: MethodChannel.Result) {
     val path = call.argument<String>("path") ?: throw IllegalArgumentException("path")
     val uri = Uri.parse(call.argument<String>("uri") ?: throw IllegalArgumentException("uri"))
@@ -77,22 +115,26 @@ internal suspend fun MainActivity.handleCopyFileToDocument(call: MethodCall, res
     result.success(null)
 }
 
-/** Creates `name` in the granted folder and copies `path` into it. */
+/**
+ * Creates `name` in the granted folder and copies `path` into it. `dir` (a
+ * path below the folder, "" or absent for its top; missing folders are
+ * created) and `mimeType` are optional: music-folder instrumentals are
+ * written next to their original.
+ */
 internal suspend fun MainActivity.handleWriteFileToTree(call: MethodCall, result: MethodChannel.Result) {
     val tree = Uri.parse(call.argument<String>("treeUri") ?: throw IllegalArgumentException("treeUri"))
     val name = call.argument<String>("name") ?: throw IllegalArgumentException("name")
     val path = call.argument<String>("path") ?: throw IllegalArgumentException("path")
+    val dir = call.argument<String>("dir").orEmpty()
+    val mimeType = call.argument<String>("mimeType") ?: DocumentPickers.BACKUP_MIME
     val document = withContext(Dispatchers.IO) {
-        val parent = DocumentsContract.buildDocumentUriUsingTree(
-            tree,
-            DocumentsContract.getTreeDocumentId(tree),
-        )
+        val parent = treeDirectory(tree, dir)
         val created = DocumentsContract.createDocument(
             contentResolver,
             parent,
-            DocumentPickers.BACKUP_MIME,
+            mimeType,
             name,
-        ) ?: throw IllegalStateException("Could not create $name in the backup folder")
+        ) ?: throw IllegalStateException("Could not create $name in the folder")
         try {
             copyInto(File(path), created)
         } catch (e: Exception) {

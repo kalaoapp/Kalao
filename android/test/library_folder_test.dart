@@ -1,9 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/material.dart';
+import 'package:kalao/l10n/app_localizations.dart';
+import 'package:kalao/screens/settings/library_folders_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalao/models/library_folder.dart';
+import 'package:kalao/models/settings.dart';
 import 'package:kalao/models/song.dart';
 import 'package:kalao/providers/library_folder_provider.dart';
 import 'package:kalao/providers/library_provider.dart';
@@ -477,4 +481,163 @@ void main() {
       await deck.dispose();
     },
   );
+  testWidgets('the first music folder asks where instrumentals go', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.reset);
+    SharedPreferences.setMockInitialValues({});
+    final preferences = (await tester.runAsync(SharedPreferences.getInstance))!;
+    backend.nextTreeUri = tree;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(preferences),
+          ...testOverrides(services),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const LibraryFoldersScreen(),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Not chosen yet'), findsOneWidget);
+
+    await tester.tap(find.text('Add folder'));
+    await tester.pumpAndSettle();
+    expect(find.text('Where should instrumentals go?'), findsOneWidget);
+    // Cancelling adds nothing.
+    await tester.tap(find.byTooltip('Cancel'));
+    await tester.pumpAndSettle();
+    expect(backend.calls.where((c) => c.method == 'pickDocumentTree'), isEmpty);
+
+    await tester.tap(find.text('Add folder'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('placement-beside')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('placement-beside')));
+    await tester.pump();
+    await tester.ensureVisible(find.text('Continue'));
+    await tester.tap(find.text('Continue'));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 200)),
+    );
+    await tester.pumpAndSettle();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(LibraryFoldersScreen)),
+    );
+    expect(
+      container.read(settingsProvider).instrumentalPlacement,
+      InstrumentalPlacement.besideOriginal,
+    );
+    expect(find.text('Next to the original'), findsOneWidget);
+    expect(
+      backend.calls.where((c) => c.method == 'pickDocumentTree'),
+      hasLength(1),
+    );
+  });
+
+  group('new instrumentals follow the placement choice', () {
+    const instrumentals =
+        'content://com.android.externalstorage.documents/tree/primary%3AKaraoke';
+
+    Future<Song> folderSong() async {
+      put('Pop/Moon.flac');
+      await folders.scan(await added());
+      return (await services.library.songs(sort: SongSort.title)).single;
+    }
+
+    File picked() =>
+        File(p.join(disk.path, 'picked.flac'))..writeAsStringSync('backing');
+
+    test('nothing is written before the user chose', () async {
+      final song = await folderSong();
+      await expectLater(
+        folders.addInstrumental(
+          song,
+          path: picked().path,
+          name: 'backing.flac',
+          settings: const AppSettings(),
+        ),
+        throwsA(isA<InstrumentalPlacementUndecided>()),
+      );
+      expect(backend.writtenToTrees, isEmpty);
+    });
+
+    test('next to the original, and a rescan keeps it the song\'s', () async {
+      final song = await folderSong();
+      await folders.addInstrumental(
+        song,
+        path: picked().path,
+        name: 'backing.flac',
+        settings: const AppSettings(
+          instrumentalPlacement: InstrumentalPlacement.besideOriginal,
+        ),
+      );
+      expect(backend.writtenToTrees.single, (
+        tree: tree,
+        path: 'Pop/Moon (Instrumental).flac',
+      ));
+      var moon = (await services.library.song(song.id))!;
+      expect(
+        moon.file(MediaKind.instrumental)!.path,
+        uri('Pop/Moon (Instrumental).flac'),
+      );
+      expect(moon.file(MediaKind.instrumental)!.inFolder, isTrue);
+      // Nothing went to app storage.
+      expect(services.storage.media.listSync(), isEmpty);
+
+      final rescan = await folders.scan((await folders.folders()).single);
+      expect(rescan.added, isEmpty);
+      moon = (await services.library.song(song.id))!;
+      expect(
+        moon.file(MediaKind.instrumental)!.path,
+        uri('Pop/Moon (Instrumental).flac'),
+      );
+      expect(await services.library.songs(sort: SongSort.title), hasLength(1));
+    });
+
+    test('in the separate folder the user picked', () async {
+      final song = await folderSong();
+      await folders.addInstrumental(
+        song,
+        path: picked().path,
+        name: 'backing.m4a',
+        settings: const AppSettings(
+          instrumentalPlacement: InstrumentalPlacement.separateFolder,
+          instrumentalFolderUri: instrumentals,
+        ),
+      );
+      expect(backend.writtenToTrees.single, (
+        tree: instrumentals,
+        path: 'Moon (Instrumental).m4a',
+      ));
+      final moon = (await services.library.song(song.id))!;
+      expect(
+        moon.file(MediaKind.instrumental)!.path,
+        startsWith(instrumentals),
+      );
+      expect(backend.musicFolders[tree]!.keys, ['Pop/Moon.flac']);
+    });
+
+    test('the choice is kept on this device, not restored from backups', () {
+      const settings = AppSettings(
+        instrumentalPlacement: InstrumentalPlacement.separateFolder,
+        instrumentalFolderUri: instrumentals,
+      );
+      expect(AppSettings.fromJson(settings.toJson()), settings);
+      expect(
+        settings.toBackupJson().containsKey('instrumentalPlacement'),
+        isFalse,
+      );
+      final restored = AppSettings.restoredFrom(
+        settings.toBackupJson(),
+        const AppSettings(),
+      );
+      expect(restored.instrumentalPlacement, InstrumentalPlacement.undecided);
+    });
+  });
 }
