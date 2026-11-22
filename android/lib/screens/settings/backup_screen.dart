@@ -15,6 +15,7 @@ import 'package:kalao/services/backup_service.dart';
 import 'package:kalao/services/platform_bridge.dart';
 import 'package:kalao/services/poc_import_service.dart';
 import 'package:kalao/theme/app_tokens.dart';
+import 'package:kalao/widgets/app_page.dart';
 import 'package:kalao/utils/document_tree.dart';
 import 'package:kalao/widgets/settings_group.dart';
 import 'package:kalao/widgets/stepper_tile.dart';
@@ -126,135 +127,122 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
     final notifier = ref.read(settingsProvider.notifier);
     final last = ref.watch(lastScheduledBackupProvider).asData?.value;
     final folder = settings.backupFolderUri;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.backupTitle),
-        bottom: busy
-            ? const PreferredSize(
-                preferredSize: Size.fromHeight(4),
-                child: LinearProgressIndicator(),
-              )
-            : null,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.only(bottom: AppTokens.space24),
-        children: [
-          SettingsGroup(
-            title: l10n.backupNow,
-            children: [
-              SwitchListTile(
-                secondary: const Icon(Icons.audio_file_outlined),
-                title: Text(l10n.backupIncludeMedia),
-                subtitle: Text(l10n.backupIncludeMediaSubtitle),
-                value: _includeMedia,
-                onChanged: (value) => setState(() => _includeMedia = value),
-              ),
-              ListTile(
-                leading: const Icon(Icons.save_alt),
-                title: Text(l10n.backupSave),
-                subtitle: Text(l10n.backupUnencrypted),
-                enabled: !busy,
-                onTap: _save,
-              ),
-            ],
-          ),
-          SettingsGroup(
-            title: l10n.restoreTitle,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.settings_backup_restore),
-                title: Text(l10n.restoreFromFile),
-                subtitle: Text(l10n.restoreSubtitle),
-                enabled: !busy,
-                onTap: _restore,
-              ),
-              ListTile(
-                leading: const Icon(Icons.move_down),
-                title: Text(l10n.pocImport),
-                subtitle: Text(l10n.pocImportSubtitle),
-                enabled: !busy,
-                onTap: _importPoc,
-              ),
-            ],
-          ),
-          SettingsGroup(
-            title: l10n.backupScheduled,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.folder_outlined),
-                title: Text(l10n.backupFolder),
-                subtitle: Text(
-                  folder == null
-                      ? l10n.backupFolderNone
-                      : treeFolderName(folder),
-                ),
-                onTap: () async {
-                  final uri = await PlatformBridge.pickDocumentTree();
-                  if (uri != null) await notifier.setBackupFolderUri(uri);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.schedule),
-                title: Text(l10n.backupSchedule),
-                subtitle: Padding(
-                  padding: const EdgeInsets.only(top: AppTokens.space8),
-                  child: SegmentedButton<BackupSchedule>(
-                    segments: [
-                      ButtonSegment(
-                        value: BackupSchedule.off,
-                        label: Text(l10n.backupScheduleOff),
-                      ),
-                      ButtonSegment(
-                        value: BackupSchedule.daily,
-                        label: Text(l10n.backupScheduleDaily),
-                      ),
-                      ButtonSegment(
-                        value: BackupSchedule.weekly,
-                        label: Text(l10n.backupScheduleWeekly),
-                      ),
-                    ],
-                    selected: {settings.backupSchedule},
-                    onSelectionChanged: folder == null
-                        ? null
-                        : (value) async {
-                            await notifier.setBackupSchedule(value.first);
-                            unawaited(_controller.runScheduledIfDue());
-                          },
-                  ),
+    return AppPage(
+      title: l10n.backupTitle,
+      progress: busy ? double.nan : null,
+      padding: const EdgeInsets.only(bottom: AppTokens.space24),
+      children: [
+        SettingsGroup(
+          title: l10n.backupNow,
+          children: [
+            SettingsSwitchItem(
+              icon: Icons.audio_file_outlined,
+              title: l10n.backupIncludeMedia,
+              subtitle: l10n.backupIncludeMediaSubtitle,
+              value: _includeMedia,
+              onChanged: (value) => setState(() => _includeMedia = value),
+            ),
+            ListTile(
+              leading: const Icon(Icons.save_alt),
+              title: Text(l10n.backupSave),
+              subtitle: Text(l10n.backupUnencrypted),
+              enabled: !busy,
+              onTap: _save,
+            ),
+          ],
+        ),
+        SettingsGroup(
+          title: l10n.restoreTitle,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.settings_backup_restore),
+              title: Text(l10n.restoreFromFile),
+              subtitle: Text(l10n.restoreSubtitle),
+              enabled: !busy,
+              onTap: _restore,
+            ),
+            ListTile(
+              leading: const Icon(Icons.move_down),
+              title: Text(l10n.pocImport),
+              subtitle: Text(l10n.pocImportSubtitle),
+              enabled: !busy,
+              onTap: _importPoc,
+            ),
+          ],
+        ),
+        SettingsGroup(
+          title: l10n.backupScheduled,
+          children: [
+            SettingsItem(
+              icon: Icons.folder_outlined,
+              title: l10n.backupFolder,
+              subtitle: folder == null
+                  ? l10n.backupFolderNone
+                  : treeFolderName(folder),
+              onTap: () async {
+                final uri = await PlatformBridge.pickDocumentTree();
+                if (uri != null) await notifier.setBackupFolderUri(uri);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.schedule),
+              title: Text(l10n.backupSchedule),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: AppTokens.space8),
+                child: SegmentedButton<BackupSchedule>(
+                  segments: [
+                    ButtonSegment(
+                      value: BackupSchedule.off,
+                      label: Text(l10n.backupScheduleOff),
+                    ),
+                    ButtonSegment(
+                      value: BackupSchedule.daily,
+                      label: Text(l10n.backupScheduleDaily),
+                    ),
+                    ButtonSegment(
+                      value: BackupSchedule.weekly,
+                      label: Text(l10n.backupScheduleWeekly),
+                    ),
+                  ],
+                  selected: {settings.backupSchedule},
+                  onSelectionChanged: folder == null
+                      ? null
+                      : (value) async {
+                          await notifier.setBackupSchedule(value.first);
+                          unawaited(_controller.runScheduledIfDue());
+                        },
                 ),
               ),
-              StepperTile(
-                icon: Icons.layers_outlined,
-                title: l10n.backupKeep,
-                value: '${settings.backupKeep}',
-                decreaseTooltip: l10n.backupKeepFewer,
-                increaseTooltip: l10n.backupKeepMore,
-                onDecrease: settings.backupKeep > 1
-                    ? () => notifier.setBackupKeep(settings.backupKeep - 1)
-                    : null,
-                onIncrease: settings.backupKeep < 30
-                    ? () => notifier.setBackupKeep(settings.backupKeep + 1)
-                    : null,
+            ),
+            StepperTile(
+              icon: Icons.layers_outlined,
+              title: l10n.backupKeep,
+              value: '${settings.backupKeep}',
+              decreaseTooltip: l10n.backupKeepFewer,
+              increaseTooltip: l10n.backupKeepMore,
+              onDecrease: settings.backupKeep > 1
+                  ? () => notifier.setBackupKeep(settings.backupKeep - 1)
+                  : null,
+              onIncrease: settings.backupKeep < 30
+                  ? () => notifier.setBackupKeep(settings.backupKeep + 1)
+                  : null,
+            ),
+            SettingsSwitchItem(
+              icon: Icons.audio_file_outlined,
+              title: l10n.backupIncludeMedia,
+              value: settings.backupIncludeMedia,
+              onChanged: notifier.setBackupIncludeMedia,
+            ),
+            ListTile(
+              leading: Icon(
+                last?.status == 'failed' ? Icons.error_outline : Icons.history,
               ),
-              SwitchListTile(
-                secondary: const Icon(Icons.audio_file_outlined),
-                title: Text(l10n.backupIncludeMedia),
-                value: settings.backupIncludeMedia,
-                onChanged: notifier.setBackupIncludeMedia,
-              ),
-              ListTile(
-                leading: Icon(
-                  last?.status == 'failed'
-                      ? Icons.error_outline
-                      : Icons.history,
-                ),
-                title: Text(l10n.backupLast),
-                subtitle: Text(_lastRun(l10n, last)),
-              ),
-            ],
-          ),
-        ],
-      ),
+              title: Text(l10n.backupLast),
+              subtitle: Text(_lastRun(l10n, last)),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
