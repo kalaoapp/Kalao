@@ -48,6 +48,7 @@ class NewSong {
     required this.media,
     this.language,
     this.extRef,
+    this.tags = const SongTags(),
   });
 
   final String title;
@@ -61,6 +62,68 @@ class NewSong {
 
   /// For a song added from an extension (`origin = extension`).
   final ExtensionTrackRef? extRef;
+  final SongTags tags;
+}
+
+/// Tags beyond title, artist and album (FEATURES 6.10), from `probeAudio`.
+class SongTags {
+  const SongTags({
+    this.albumArtist,
+    this.trackNo,
+    this.discNo,
+    this.year,
+    this.genre,
+    this.composer,
+  });
+
+  factory SongTags.fromProbe(Map<String, dynamic> probe) {
+    String? text(String key) {
+      final value = (probe[key] as String?)?.trim();
+      return value == null || value.isEmpty ? null : value;
+    }
+
+    int? number(String key) => (probe[key] as num?)?.toInt();
+    return SongTags(
+      albumArtist: text('albumArtist'),
+      trackNo: number('trackNo'),
+      discNo: number('discNo'),
+      year: number('year'),
+      genre: text('genre'),
+      composer: text('composer'),
+    );
+  }
+
+  final String? albumArtist;
+  final int? trackNo;
+  final int? discNo;
+  final int? year;
+  final String? genre;
+  final String? composer;
+
+  Map<String, Object?> toRow() => {
+    'album_artist': albumArtist,
+    'track_no': trackNo,
+    'disc_no': discNo,
+    'year': year,
+    'genre': genre,
+    'composer': composer,
+  };
+}
+
+/// Runs [body] over [values] in slices small enough for SQLite's variable
+/// limit (999 on Android 8); [marks] is the `?, ?, …` list of a slice.
+Future<List<R>> inChunks<T, R>(
+  List<T> values,
+  Future<List<R>> Function(List<T> chunk, String marks) body, {
+  int size = 500,
+}) async {
+  final results = <R>[];
+  for (var start = 0; start < values.length; start += size) {
+    final end = start + size > values.length ? values.length : start + size;
+    final chunk = values.sublist(start, end);
+    results.addAll(await body(chunk, List.filled(chunk.length, '?').join(',')));
+  }
+  return results;
 }
 
 class NewMediaFile {
@@ -72,6 +135,7 @@ class NewMediaFile {
     this.codec = '',
     this.sampleRate,
     this.source = 'import',
+    this.decodable = true,
   });
 
   final MediaKind kind;
@@ -80,6 +144,9 @@ class NewMediaFile {
   final int bytes;
   final String codec;
   final int? sampleRate;
+
+  /// False for a music-folder file converted on first play.
+  final bool decodable;
 
   /// `media_file.source`: `import`, `extension` for offline downloads, or
   /// `folder` for a music-folder file played in place (FEATURES 6.8).
@@ -140,6 +207,7 @@ class LibraryDatabase {
       'ext_ref': song.extRef == null ? null : jsonEncode(song.extRef!.toJson()),
       'song_key': songKey(song.title, song.artist, song.durationMs, song.isrc),
       'added_at': (now ?? DateTime.now()).millisecondsSinceEpoch,
+      ...song.tags.toRow(),
     });
     for (final file in song.media) {
       await _insertMedia(txn, id, file);
@@ -184,7 +252,74 @@ class LibraryDatabase {
     'codec': file.codec,
     'sample_rate': file.sampleRate,
     'source': file.source,
+    'available': 1,
+    'decodable': file.decodable ? 1 : 0,
   }, conflictAlgorithm: ConflictAlgorithm.replace);
+
+  /// Fills the tags a song has none of (a newer reader, M5B); tags it has
+  /// are kept.
+  Future<void> fillTags(int songId, SongTags tags) async {
+    final rows = await db.query('song', where: 'id = ?', whereArgs: [songId]);
+    if (rows.isEmpty) return;
+    final values = {
+      for (final MapEntry(:key, :value) in tags.toRow().entries)
+        if (value != null && rows.first[key] == null) key: value,
+    };
+    if (values.isEmpty) return;
+    await db.update('song', values, where: 'id = ?', whereArgs: [songId]);
+  }
+
+  /// Marks the media files at [paths] (music-folder document URIs) present
+  /// or not (FEATURES 6.9).
+  Future<void> setAvailable(Iterable<String> paths, bool available) =>
+      inChunks<String, void>(paths.toSet().toList(), (chunk, marks) async {
+        await db.update(
+          'media_file',
+          {'available': available ? 1 : 0},
+          where: 'path IN ($marks)',
+          whereArgs: chunk,
+        );
+        return const [];
+      });
+
+  /// Music-folder songs whose original is gone, not merely offline: the
+  /// file is unavailable and no folder lists it any more.
+  static const missingWhere = '''
+id IN (SELECT m.song_id FROM media_file m
+  WHERE m.kind = 'original' AND m.source = 'folder' AND m.available = 0
+    AND NOT EXISTS (SELECT 1 FROM folder_file f WHERE f.uri = m.path))''';
+
+  Future<List<int>> missingSongIds() async => [
+    for (final row in await db.query(
+      'song',
+      columns: ['id'],
+      where: missingWhere,
+    ))
+      row['id']! as int,
+  ];
+
+  /// The missing song a new file with [songKey] stands in for (a moved or
+  /// renamed file, or a song restored from a backup), if any.
+  Future<int?> missingSongIdForKey(String songKey) async {
+    final rows = await db.query(
+      'song',
+      columns: ['id'],
+      where: 'song_key = ? AND $missingWhere',
+      whereArgs: [songKey],
+      orderBy: 'id',
+      limit: 1,
+    );
+    return rows.firstOrNull?['id'] as int?;
+  }
+
+  /// How many of [ids] have lyrics (for the cleanup prompt).
+  Future<int> countWithLyrics(List<int> ids) async => (await inChunks(
+    ids,
+    (chunk, marks) => db.rawQuery(
+      'SELECT DISTINCT song_id FROM lyric_doc WHERE song_id IN ($marks)',
+      chunk,
+    ),
+  )).length;
 
   /// Applies details from a metadata extension (FEATURES 6.4); null
   /// arguments keep what the song has. The song key is recomputed.
@@ -260,7 +395,7 @@ class LibraryDatabase {
       orderBy: order,
       limit: limit,
     );
-    return _withMedia(rows);
+    return songsFromRows(rows);
   }
 
   // Favorites (Mornye's loved-tracks pattern on `song.id`)
@@ -281,12 +416,12 @@ class LibraryDatabase {
 
   Future<List<Song>> songsByIds(List<int> ids) async {
     if (ids.isEmpty) return const [];
-    final rows = await db.query(
-      'song',
-      where: 'id IN (${List.filled(ids.length, '?').join(',')})',
-      whereArgs: ids,
+    final rows = await inChunks(
+      ids,
+      (chunk, marks) =>
+          db.query('song', where: 'id IN ($marks)', whereArgs: chunk),
     );
-    final byId = {for (final song in await _withMedia(rows)) song.id: song};
+    final byId = {for (final song in await songsFromRows(rows)) song.id: song};
     return [for (final id in ids) ?byId[id]];
   }
 
@@ -304,6 +439,18 @@ class LibraryDatabase {
     return rows.isEmpty ? null : rows.first['song_id'] as int;
   }
 
+  /// Which of [paths] some song still has as its cover.
+  Future<Set<String>> usedCovers(Iterable<String> paths) async {
+    final rows = await inChunks(
+      paths.toSet().toList(),
+      (chunk, marks) => db.rawQuery(
+        'SELECT DISTINCT cover_path FROM song WHERE cover_path IN ($marks)',
+        chunk,
+      ),
+    );
+    return {for (final row in rows) row['cover_path']! as String};
+  }
+
   /// Which of [shas] some song still uses (before deleting their files).
   Future<Set<String>> usedShas(Iterable<String> shas) async {
     final distinct = shas.toSet().toList();
@@ -318,14 +465,11 @@ class LibraryDatabase {
     return {for (final row in rows) row['sha256']! as String};
   }
 
-  Future<void> deleteSongs(List<int> ids) async {
-    if (ids.isEmpty) return;
-    await db.delete(
-      'song',
-      where: 'id IN (${List.filled(ids.length, '?').join(',')})',
-      whereArgs: ids,
-    );
-  }
+  Future<void> deleteSongs(List<int> ids) =>
+      inChunks<int, void>(ids, (chunk, marks) async {
+        await db.delete('song', where: 'id IN ($marks)', whereArgs: chunk);
+        return const [];
+      });
 
   Future<void> setLastMode(int songId, String mode) => db.update(
     'song',
@@ -334,24 +478,35 @@ class LibraryDatabase {
     whereArgs: [songId],
   );
 
-  Future<List<Song>> _withMedia(List<Map<String, Object?>> rows) async {
+  /// [rows] of `song` as songs with their files and flags.
+  Future<List<Song>> songsFromRows(List<Map<String, Object?>> rows) async {
     if (rows.isEmpty) return const [];
     final ids = [for (final row in rows) row['id'] as int];
-    final marks = List.filled(ids.length, '?').join(',');
-    final media = await db.query(
-      'media_file',
-      where: 'song_id IN ($marks)',
-      whereArgs: ids,
-    );
-    final lyrics = await db.rawQuery(
-      'SELECT DISTINCT song_id FROM lyric_doc WHERE song_id IN ($marks)',
+    final media = await inChunks(
       ids,
+      (chunk, marks) => db.query(
+        'media_file',
+        where: 'song_id IN ($marks)',
+        whereArgs: chunk,
+      ),
     );
-    final withLyrics = {for (final row in lyrics) row['song_id'] as int};
-    final favorites = {
-      for (final row in await db.rawQuery(
-        'SELECT song_id FROM favorite WHERE song_id IN ($marks)',
+    final withLyrics = {
+      for (final row in await inChunks(
         ids,
+        (chunk, marks) => db.rawQuery(
+          'SELECT DISTINCT song_id FROM lyric_doc WHERE song_id IN ($marks)',
+          chunk,
+        ),
+      ))
+        row['song_id'] as int,
+    };
+    final favorites = {
+      for (final row in await inChunks(
+        ids,
+        (chunk, marks) => db.rawQuery(
+          'SELECT song_id FROM favorite WHERE song_id IN ($marks)',
+          chunk,
+        ),
       ))
         row['song_id'] as int,
     };
@@ -365,6 +520,9 @@ class LibraryDatabase {
           path: row['path'] as String,
           sha256: row['sha256'] as String,
           codec: row['codec'] as String? ?? '',
+          bytes: row['bytes'] as int? ?? 0,
+          available: (row['available'] as int? ?? 1) != 0,
+          decodable: (row['decodable'] as int? ?? 1) != 0,
         ),
       );
     }
@@ -386,6 +544,12 @@ class LibraryDatabase {
           isrc: row['isrc'] as String?,
           language: row['language'] as String?,
           extRef: Song.parseExtRef(row['ext_ref'] as String?),
+          albumArtist: row['album_artist'] as String?,
+          trackNo: row['track_no'] as int?,
+          discNo: row['disc_no'] as int?,
+          year: row['year'] as int?,
+          genre: row['genre'] as String?,
+          composer: row['composer'] as String?,
         ),
     ];
   }
@@ -554,27 +718,66 @@ class LibraryDatabase {
     await batch.commit(noResult: true);
   });
 
-  /// Songs whose title, artist, pinyin, initials or romaji key contains the
-  /// normalised [query], best matches first (prefix before substring).
+  /// Songs where every word of [query] is in some title, artist, pinyin,
+  /// initials or romaji key, in any order (Mornye's word rule; punctuation
+  /// separates words). Songs with a key that starts with the whole query
+  /// come first, then those containing it, then the rest.
   Future<List<Song>> search(String query, {int limit = 100}) async {
-    final key = normalizeSearchText(query);
-    if (key.isEmpty) return const [];
-    final escaped = key
-        .replaceAll(r'\', r'\\')
-        .replaceAll('%', r'\%')
-        .replaceAll('_', r'\_');
+    final words = searchWords(query);
+    if (words.isEmpty) return const [];
+    final full = _likeEscape(normalizeSearchText(query));
     final rows = await db.rawQuery(
       '''
-SELECT song_id, MIN(CASE WHEN key LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END) AS rank
+SELECT song_id, MIN(CASE WHEN key LIKE ? ESCAPE '\\' THEN 0
+  WHEN key LIKE ? ESCAPE '\\' THEN 1 ELSE 2 END) AS rank
 FROM song_search
-WHERE key LIKE ? ESCAPE '\\'
+WHERE ${[for (final _ in words) "song_id IN (SELECT song_id FROM song_search WHERE key LIKE ? ESCAPE '\\')"].join(' AND ')}
 GROUP BY song_id
 ORDER BY rank, song_id DESC
 LIMIT ?''',
-      ['$escaped%', '%$escaped%', limit],
+      [
+        '$full%',
+        '%$full%',
+        for (final word in words) '%${_likeEscape(word)}%',
+        limit,
+      ],
     );
     return songsByIds([for (final row in rows) row['song_id'] as int]);
   }
+
+  /// Songs whose current lyrics contain every word of [query] (FEATURES
+  /// 6.12), most recently added first.
+  Future<List<Song>> searchLyrics(String query, {int limit = 100}) async {
+    final words = [
+      for (final word in query.trim().split(RegExp(r'\s+')))
+        if (word.isNotEmpty) _likeEscape(word),
+    ];
+    if (words.isEmpty) return const [];
+    final rows = await db.rawQuery(
+      '''
+SELECT d.song_id FROM lyric_doc d
+JOIN song s ON s.id = d.song_id
+WHERE d.version = (SELECT MAX(version) FROM lyric_doc WHERE song_id = d.song_id)
+  AND ${[for (final _ in words) "d.json LIKE ? ESCAPE '\\'"].join(' AND ')}
+ORDER BY s.added_at DESC
+LIMIT ?''',
+      [for (final word in words) '%$word%', limit],
+    );
+    return songsByIds([for (final row in rows) row['song_id'] as int]);
+  }
+
+  /// The normalised words of a search query.
+  static List<String> searchWords(String query) => [
+    for (final word in query.split(
+      RegExp(r'[^\p{Alphabetic}\p{N}]+', unicode: true),
+    ))
+      if (normalizeSearchText(word) case final key when key.isNotEmpty) key,
+  ];
+
+  static String _likeEscape(String text) => text
+      .replaceAll(r'\', r'\\')
+      .replaceAll('%', r'\%')
+      .replaceAll('_', r'\_');
 
   /// `{id, title, artist}` for every song, for the `rebuildSearchKeys` job.
   Future<List<Map<String, Object?>>> searchSources([List<int>? ids]) =>

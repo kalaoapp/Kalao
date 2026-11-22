@@ -21,6 +21,14 @@ class AppStorage {
   /// Streamed extension audio; finished streams are kept up to 1 GiB.
   Directory get streamCache => Directory(p.join(root.path, 'stream_cache'));
 
+  /// FLAC copies of music-folder files the engine cannot decode, made on
+  /// first play; the newest 1 GiB is kept (never backed up).
+  Directory get converted => Directory(p.join(root.path, 'converted'));
+
+  /// Scratch copies of music-folder lyrics files and images while a scan
+  /// reads them.
+  Directory get folderScratch => Directory(p.join(root.path, 'folder_scratch'));
+
   /// Snapshots and extracted archives while a backup or restore runs; on the
   /// same volume as [media] so restored files are moved, not copied.
   Directory get backupWork => Directory(p.join(root.path, 'backup_work'));
@@ -40,6 +48,8 @@ class AppStorage {
       importStaging,
       extensions,
       streamCache,
+      converted,
+      folderScratch,
       backupWork,
       safetyBackups,
       Directory(p.dirname(libraryDb)),

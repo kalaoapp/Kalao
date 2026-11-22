@@ -5,11 +5,13 @@
 
 mod clock;
 mod decoder;
+mod lent;
 mod mixer;
 mod output;
 mod source;
 
 pub use decoder::{Probe, probe_file, probe_media};
+pub use lent::open_file;
 pub use mixer::{Layout, soft_limit};
 pub use symphonia::core::io::MediaSource;
 

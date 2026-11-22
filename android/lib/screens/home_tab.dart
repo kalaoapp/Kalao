@@ -8,10 +8,12 @@ import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/models/extension.dart';
 import 'package:kalao/models/song.dart';
 import 'package:kalao/providers/extension_provider.dart';
+import 'package:kalao/providers/library_browse_provider.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/player_provider.dart';
 import 'package:kalao/screens/import_sheet.dart';
 import 'package:kalao/screens/song_detail_screen.dart';
+import 'package:kalao/services/library_database.dart';
 import 'package:kalao/theme/app_tokens.dart';
 import 'package:kalao/widgets/empty_state.dart';
 import 'package:kalao/widgets/song_widgets.dart';
@@ -145,6 +147,7 @@ class _SearchResults extends ConsumerWidget {
               onTap: () => openSong(context, ref, song),
               onLongPress: () => showAddToQueueSheet(context, ref, song),
             ),
+          _LyricsResults(query: query, shown: {for (final s in value) s.id}),
           if (ref.watch(extensionsProvider).has(ExtensionCapability.metadata))
             _OnlineResults(query: query),
         ],
@@ -158,6 +161,53 @@ class _SearchResults extends ConsumerWidget {
         child: LinearProgressIndicator(),
       ),
     };
+  }
+}
+
+/// Songs whose lyrics have the query (FEATURES 6.12), less those [shown]
+/// above already.
+class _LyricsResults extends ConsumerWidget {
+  const _LyricsResults({required this.query, required this.shown});
+
+  final String query;
+  final Set<int> shown;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final songs = [
+      for (final song
+          in ref.watch(lyricsSearchProvider(query)).asData?.value ??
+              const <Song>[])
+        if (!shown.contains(song.id)) song,
+    ];
+    if (songs.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppTokens.space16,
+            AppTokens.space16,
+            AppTokens.space16,
+            AppTokens.space4,
+          ),
+          child: Semantics(
+            header: true,
+            child: Text(
+              l10n.searchInLyrics,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+        ),
+        for (final song in songs)
+          SongListTile(
+            song: song,
+            onTap: () => openSong(context, ref, song),
+            onLongPress: () => showAddToQueueSheet(context, ref, song),
+          ),
+      ],
+    );
   }
 }
 
@@ -245,14 +295,36 @@ class _OnlineResultsState extends ConsumerState<_OnlineResults> {
             padding: const EdgeInsets.all(AppTokens.space16),
             child: Text(l10n.searchNoResults),
           ),
-          AsyncData(:final value) => Column(
-            children: [
-              for (final track in value.tracks)
-                TrackTile(
-                  track: track,
-                  onTap: () => context.push('/track', extra: track),
-                ),
-            ],
+          AsyncData(:final value) => Builder(
+            builder: (context) {
+              String key(TrackResult track) => LibraryDatabase.songKey(
+                track.title,
+                track.artist,
+                track.durationMs,
+                track.isrc,
+              );
+              // "In Library" by ISRC or song key (FEATURES 6.12).
+              final known =
+                  ref
+                      .watch(
+                        knownSongKeysProvider(value.tracks.map(key).join('\n')),
+                      )
+                      .asData
+                      ?.value ??
+                  const <String>{};
+              return Column(
+                children: [
+                  for (final track in value.tracks)
+                    TrackTile(
+                      track: track,
+                      trailing: known.contains(key(track))
+                          ? Chip(label: Text(l10n.inLibrary))
+                          : null,
+                      onTap: () => context.push('/track', extra: track),
+                    ),
+                ],
+              );
+            },
           ),
           AsyncError(:final error) => Padding(
             padding: const EdgeInsets.all(AppTokens.space16),
