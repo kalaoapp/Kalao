@@ -46,8 +46,9 @@ class _MainShellState extends ConsumerState<MainShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _onForeground();
       unawaited(_offerUpdate());
-      // Music folders catch up with what changed while Kalao was closed.
-      unawaited(ref.read(libraryFoldersProvider.notifier).scanAll());
+      // Music folders catch up with what changed while Kalao was closed
+      // (as often as the auto-scan setting says).
+      unawaited(ref.read(libraryFoldersProvider.notifier).scanDue());
     });
   }
 
@@ -65,6 +66,8 @@ class _MainShellState extends ConsumerState<MainShell> {
     unawaited(ref.read(extensionServiceProvider).deliverCallbacks());
     unawaited(handleSharedFiles(context, ref));
     unawaited(ref.read(backupControllerProvider.notifier).runScheduledIfDue());
+    // An SD card or USB drive may be back.
+    unawaited(ref.read(libraryFoldersProvider.notifier).scanOffline());
   }
 
   @override

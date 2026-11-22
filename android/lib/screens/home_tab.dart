@@ -7,6 +7,7 @@ import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/models/extension.dart';
 import 'package:kalao/models/song.dart';
 import 'package:kalao/providers/extension_provider.dart';
+import 'package:kalao/providers/library_browse_provider.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/player_provider.dart';
 import 'package:kalao/providers/queue_provider.dart';
@@ -422,6 +423,7 @@ class _SearchResults extends ConsumerWidget {
                 onLongPress: () => showAddToQueueSheet(context, ref, song),
               ),
           ],
+          _LyricsResults(query: query, shown: {for (final s in value) s.id}),
           if (online)
             _OnlineResults(query: query)
           else if (value.isEmpty)
@@ -461,6 +463,38 @@ class _SectionTitle extends StatelessWidget {
       child: Text(title, style: Theme.of(context).textTheme.titleMedium),
     ),
   );
+}
+
+/// Songs whose lyrics have the query (FEATURES 6.12), less those [shown]
+/// above already.
+class _LyricsResults extends ConsumerWidget {
+  const _LyricsResults({required this.query, required this.shown});
+
+  final String query;
+  final Set<int> shown;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final songs = [
+      for (final song
+          in ref.watch(lyricsSearchProvider(query)).asData?.value ??
+              const <Song>[])
+        if (!shown.contains(song.id)) song,
+    ];
+    if (songs.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SectionTitle(AppLocalizations.of(context).searchInLyrics),
+        for (final song in songs)
+          SongListTile(
+            song: song,
+            onTap: () => openSong(context, ref, song),
+            onLongPress: () => showAddToQueueSheet(context, ref, song),
+          ),
+      ],
+    );
+  }
 }
 
 final _onlineSearchProvider = FutureProvider.autoDispose
@@ -533,14 +567,36 @@ class _OnlineResultsState extends ConsumerState<_OnlineResults> {
             padding: const EdgeInsets.all(AppTokens.space16),
             child: Text(l10n.searchNoResults),
           ),
-          AsyncData(:final value) => Column(
-            children: [
-              for (final track in value.tracks)
-                TrackTile(
-                  track: track,
-                  onTap: () => context.push('/track', extra: track),
-                ),
-            ],
+          AsyncData(:final value) => Builder(
+            builder: (context) {
+              String key(TrackResult track) => LibraryDatabase.songKey(
+                track.title,
+                track.artist,
+                track.durationMs,
+                track.isrc,
+              );
+              // "In Library" by ISRC or song key (FEATURES 6.12).
+              final known =
+                  ref
+                      .watch(
+                        knownSongKeysProvider(value.tracks.map(key).join('\n')),
+                      )
+                      .asData
+                      ?.value ??
+                  const <String>{};
+              return Column(
+                children: [
+                  for (final track in value.tracks)
+                    TrackTile(
+                      track: track,
+                      trailing: known.contains(key(track))
+                          ? Chip(label: Text(l10n.inLibrary))
+                          : null,
+                      onTap: () => context.push('/track', extra: track),
+                    ),
+                ],
+              );
+            },
           ),
           AsyncError(:final error) => Padding(
             padding: const EdgeInsets.all(AppTokens.space16),

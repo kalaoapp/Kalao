@@ -21,9 +21,10 @@ class FakeBackend {
   Directory? documentRoot;
 
   /// Music folders by tree URI: path below the folder (`dir/name`) → file.
-  /// A tree that is not here has lost its access (`listLibraryFolder`
-  /// returns null).
+  /// A tree that is not here has lost its access, unless it is in
+  /// [offlineFolders] (its storage is not mounted).
   final musicFolders = <String, Map<String, File>>{};
+  final offlineFolders = <String>{};
 
   /// Descriptors `openDocument` handed out and not closed yet.
   final openDocuments = <int, String>{};
@@ -499,21 +500,38 @@ class FakeBackend {
         return documents.remove(args['uri'] as String)?.existsSync() ?? false;
       case 'listLibraryFolder':
         final tree = args['treeUri'] as String;
+        if (offlineFolders.contains(tree)) return {'state': 'offline'};
         final files = musicFolders[tree];
-        if (files == null) return null;
-        return [
-          for (final MapEntry(key: path, value: file) in files.entries)
-            if (file.existsSync())
-              {
-                'uri': folderUri(tree, path),
-                'name': path.split('/').last,
-                'dir': path.contains('/')
-                    ? path.substring(0, path.lastIndexOf('/'))
-                    : '',
-                'bytes': file.lengthSync(),
-                'modified': file.lastModifiedSync().millisecondsSinceEpoch,
-              },
-        ];
+        if (files == null) return {'state': 'access'};
+        return {
+          'state': 'ok',
+          'files': [
+            for (final MapEntry(key: path, value: file) in files.entries)
+              if (file.existsSync())
+                {
+                  'uri': folderUri(tree, path),
+                  'name': path.split('/').last,
+                  'dir': path.contains('/')
+                      ? path.substring(0, path.lastIndexOf('/'))
+                      : '',
+                  'bytes': file.lengthSync(),
+                  'modified': file.lastModifiedSync().millisecondsSinceEpoch,
+                },
+          ],
+        };
+      case 'copyDocumentToFile':
+        final uri = args['uri'] as String;
+        for (final MapEntry(key: tree, value: files) in musicFolders.entries) {
+          for (final MapEntry(key: path, value: file) in files.entries) {
+            if (folderUri(tree, path) == uri && file.existsSync()) {
+              final target = File(args['path'] as String)
+                ..parent.createSync(recursive: true);
+              file.copySync(target.path);
+              return target.lengthSync();
+            }
+          }
+        }
+        throw PlatformException(code: 'ERROR', message: 'No document $uri');
       case 'openDocument':
         final uri = args['uri'] as String;
         for (final MapEntry(key: tree, value: files) in musicFolders.entries) {
@@ -557,8 +575,13 @@ class FakeBackend {
     }
   }
 
+  /// Tags `probeAudio` reports, by file name (title and artist are null
+  /// otherwise).
+  final probeTags = <String, Map<String, Object?>>{};
+
   Map<String, Object?> _probe(String path) {
     final extension = path.split('.').last.toLowerCase();
+    final name = path.split(RegExp(r'[/\\]')).last;
     return {
       'codec': extension,
       'sampleRate': 44100,
@@ -567,6 +590,7 @@ class FakeBackend {
       'title': null,
       'artist': null,
       'decodable': !undecodable.contains(extension),
+      ...?probeTags[name],
     };
   }
 

@@ -77,7 +77,13 @@ Each feature lists its milestone (see ROADMAP.md). **Source:** P = in the POC, R
 | 6.5 | Song queue (add, reorder, remove; per-singer in parties) | R | M3 |
 | 6.6 | Offline downloads: tracks, stems, lyrics and annotations | N | M5 |
 | 6.7 | Stats screen: recent activity, play counts, top songs, scores (replaces the POC dashboard and public-profile stats; local only) | P | M4 |
-| 6.8 | **Music folders** (Mornye's local library): folders granted once with SAF are scanned and kept in step with the library — new audio becomes songs (paired with an instrumental and a lyrics file from the same directory), changed files are read again, removed files leave the library. Songs play in place: Kalao only reads the files and never copies, moves or deletes them | N (Mornye) | M4 |
+| 6.8 | **Music folders** (Mornye's local library): folders granted once with SAF are scanned and kept in step with the library — new audio becomes songs (paired with an instrumental and a lyrics file from the same directory), changed files are read again, removed files leave the library. Songs play in place: Kalao only reads the files and never copies, moves or deletes them. M5B adds offline folders, auto-scan frequency, Force Full Scan, folder-image covers, and formats converted on first play | N (Mornye) | M4/M5B |
+| 6.9 | Folder songs whose file is gone or whose storage is unplugged stay in the library, unavailable, with their lyrics and plays; a moved or renamed file is relinked; Cleanup Missing Files removes them (replaces "removed files leave the library") | N (Mornye) | M5B |
+| 6.10 | Album artist, track and disc numbers, year, genre and composer read from tags | N (Mornye) | M5B |
+| 6.11 | Browse by Albums, Artists, Genres and Folders; album and artist pages; paged lists with a fast scroller; filters (origin, format, lyrics timing, instrumental, favorites, unavailable, missing artwork/genre/year) and sorts | N (Mornye) | M5B |
+| 6.12 | Search matches every word in any order (pinyin and romaji included) and lyric lines; "In Library" on extension results | N (Mornye) | M5B |
+| 6.13 | Review duplicates (keeping lyrics and plays) and Find Missing Artwork through artwork extensions | N (Mornye) | M5B |
+| 6.14 | Local playlists: create, reorder, sing or queue all; in backups | N (Mornye) | M5B |
 
 ## 7. Backup and restore (replaces accounts and sync)
 

@@ -29,6 +29,12 @@ class Song {
     this.isrc,
     this.language,
     this.extRef,
+    this.albumArtist,
+    this.trackNo,
+    this.discNo,
+    this.year,
+    this.genre,
+    this.composer,
   });
 
   final int id;
@@ -56,12 +62,28 @@ class Song {
   /// they stream until downloaded (FEATURES 1.8, 6.6).
   final ExtensionTrackRef? extRef;
 
+  /// Tags read from the file (FEATURES 6.10).
+  final String? albumArtist;
+  final int? trackNo;
+  final int? discNo;
+  final int? year;
+  final String? genre;
+  final String? composer;
+
   bool get fromExtension => extRef != null;
+
+  /// The album's artist: the album-artist tag, else the song's artist.
+  String get albumArtistOrArtist =>
+      albumArtist?.trim().isNotEmpty ?? false ? albumArtist!.trim() : artist;
 
   /// Plays from a stream: an extension song with no downloaded files.
   bool get streams => media.isEmpty && extRef != null;
 
-  bool get playable => media.isNotEmpty || extRef != null;
+  /// A music-folder song whose original is gone or whose folder is offline
+  /// (FEATURES 6.9): kept with its lyrics and plays, but it cannot play.
+  bool get unavailable => !(file(MediaKind.original)?.available ?? true);
+
+  bool get playable => !unavailable && (media.isNotEmpty || extRef != null);
 
   /// `song.ext_ref` text as stored.
   static ExtensionTrackRef? parseExtRef(String? json) {
@@ -111,6 +133,12 @@ class Song {
     isrc: isrc,
     language: language,
     extRef: extRef,
+    albumArtist: albumArtist,
+    trackNo: trackNo,
+    discNo: discNo,
+    year: year,
+    genre: genre,
+    composer: composer,
   );
 
   @override
@@ -120,8 +148,11 @@ class Song {
       other.title == title &&
       other.artist == artist &&
       other.coverPath == coverPath &&
+      other.album == album &&
       other.hasLyrics == hasLyrics &&
       other.favorite == favorite &&
+      other.genre == genre &&
+      other.year == year &&
       listEquals(other.media, media);
 
   @override
@@ -143,6 +174,9 @@ class MediaFile {
     required this.path,
     required this.sha256,
     this.codec = '',
+    this.bytes = 0,
+    this.available = true,
+    this.decodable = true,
   });
 
   final MediaKind kind;
@@ -153,6 +187,14 @@ class MediaFile {
   /// Empty for music-folder files, which are not hashed.
   final String sha256;
   final String codec;
+  final int bytes;
+
+  /// False while a music-folder file is gone or its folder is offline.
+  final bool available;
+
+  /// False for a music-folder file the engine cannot decode: it plays from
+  /// a FLAC copy made on first play (`converted/`).
+  final bool decodable;
 
   bool get inFolder => isDocumentUri(path);
 
@@ -161,8 +203,10 @@ class MediaFile {
       other is MediaFile &&
       other.kind == kind &&
       other.path == path &&
-      other.sha256 == sha256;
+      other.sha256 == sha256 &&
+      other.available == available &&
+      other.decodable == decodable;
 
   @override
-  int get hashCode => Object.hash(kind, path, sha256);
+  int get hashCode => Object.hash(kind, path, sha256, available, decodable);
 }

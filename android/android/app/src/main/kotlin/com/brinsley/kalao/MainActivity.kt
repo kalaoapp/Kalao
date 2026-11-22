@@ -51,6 +51,7 @@ class MainActivity : AudioServiceFragmentActivity() {
         "listDocumentTree",
         "deleteDocument",
         "listLibraryFolder",
+        "copyDocumentToFile",
         "openDocument",
         "closeDocuments",
         "releaseDocumentTree",
@@ -148,6 +149,7 @@ class MainActivity : AudioServiceFragmentActivity() {
                         "listDocumentTree" -> handleListDocumentTree(call, result)
                         "deleteDocument" -> handleDeleteDocument(call, result)
                         "listLibraryFolder" -> handleListLibraryFolder(call, result)
+                        "copyDocumentToFile" -> handleCopyDocumentToFile(call, result)
                         "openDocument" -> handleOpenDocument(call, result)
                         "closeDocuments" -> handleCloseDocuments(call, result)
                         "releaseDocumentTree" -> handleReleaseDocumentTree(call, result)
