@@ -43,6 +43,11 @@ enum BackupSchedule {
   final Duration? interval;
 }
 
+/// Where new instrumentals of music-folder songs are written (FEATURES
+/// 6.8). Chosen once, before the first music folder is added, and followed
+/// by every later write; [undecided] until then.
+enum InstrumentalPlacement { undecided, separateFolder, besideOriginal }
+
 /// When music folders are scanned (Mornye's auto scan). A due scan runs
 /// when the app is opened (ADR-016); a folder whose storage was offline is
 /// also scanned when the app resumes.
@@ -91,6 +96,8 @@ class AppSettings {
     this.checkUpdates = true,
     this.autoFetchLyrics = true,
     this.extensionDeveloperMode = false,
+    this.instrumentalPlacement = InstrumentalPlacement.undecided,
+    this.instrumentalFolderUri,
     this.folderScanSchedule = FolderScanSchedule.onOpen,
     this.libraryTab = LibraryTab.songs,
   });
@@ -127,6 +134,11 @@ class AppSettings {
     checkUpdates: json['checkUpdates'] as bool? ?? true,
     autoFetchLyrics: json['autoFetchLyrics'] as bool? ?? true,
     extensionDeveloperMode: json['extensionDeveloperMode'] as bool? ?? false,
+    instrumentalPlacement:
+        InstrumentalPlacement.values
+            .asNameMap()[json['instrumentalPlacement']] ??
+        InstrumentalPlacement.undecided,
+    instrumentalFolderUri: json['instrumentalFolderUri'] as String?,
     folderScanSchedule:
         FolderScanSchedule.values.asNameMap()[json['folderScanSchedule']] ??
         FolderScanSchedule.onOpen,
@@ -147,6 +159,9 @@ class AppSettings {
     'backupIncludeMedia',
     'extensionDeveloperMode',
     'libraryTab',
+    // Folder grants belong to this device; another device asks again.
+    'instrumentalPlacement',
+    'instrumentalFolderUri',
   };
 
   /// `settings.json` in a backup (DATA_MODEL.md §3).
@@ -241,6 +256,11 @@ class AppSettings {
   /// installs from a folder.
   final bool extensionDeveloperMode;
 
+  final InstrumentalPlacement instrumentalPlacement;
+
+  /// The SAF folder (tree URI) for [InstrumentalPlacement.separateFolder].
+  final String? instrumentalFolderUri;
+
   /// When music folders are scanned.
   final FolderScanSchedule folderScanSchedule;
 
@@ -273,6 +293,8 @@ class AppSettings {
     'checkUpdates': checkUpdates,
     'autoFetchLyrics': autoFetchLyrics,
     'extensionDeveloperMode': extensionDeveloperMode,
+    'instrumentalPlacement': instrumentalPlacement.name,
+    'instrumentalFolderUri': instrumentalFolderUri,
     'folderScanSchedule': folderScanSchedule.name,
     'libraryTab': libraryTab.name,
   };
@@ -303,6 +325,8 @@ class AppSettings {
     bool? checkUpdates,
     bool? autoFetchLyrics,
     bool? extensionDeveloperMode,
+    InstrumentalPlacement? instrumentalPlacement,
+    String? Function()? instrumentalFolderUri,
     FolderScanSchedule? folderScanSchedule,
     LibraryTab? libraryTab,
   }) => AppSettings(
@@ -338,6 +362,10 @@ class AppSettings {
     autoFetchLyrics: autoFetchLyrics ?? this.autoFetchLyrics,
     extensionDeveloperMode:
         extensionDeveloperMode ?? this.extensionDeveloperMode,
+    instrumentalPlacement: instrumentalPlacement ?? this.instrumentalPlacement,
+    instrumentalFolderUri: instrumentalFolderUri != null
+        ? instrumentalFolderUri()
+        : this.instrumentalFolderUri,
     folderScanSchedule: folderScanSchedule ?? this.folderScanSchedule,
     libraryTab: libraryTab ?? this.libraryTab,
   );
@@ -370,6 +398,8 @@ class AppSettings {
       other.checkUpdates == checkUpdates &&
       other.autoFetchLyrics == autoFetchLyrics &&
       other.extensionDeveloperMode == extensionDeveloperMode &&
+      other.instrumentalPlacement == instrumentalPlacement &&
+      other.instrumentalFolderUri == instrumentalFolderUri &&
       other.folderScanSchedule == folderScanSchedule &&
       other.libraryTab == libraryTab;
 
@@ -400,6 +430,8 @@ class AppSettings {
     checkUpdates,
     autoFetchLyrics,
     extensionDeveloperMode,
+    instrumentalPlacement,
+    instrumentalFolderUri,
     folderScanSchedule,
     libraryTab,
   ]);

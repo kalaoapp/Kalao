@@ -31,6 +31,9 @@ class FakeBackend {
   var _nextHandle = 3;
   final releasedTrees = <String>[];
 
+  /// Every `writeFileToTree`: the tree and the path below it.
+  final writtenToTrees = <({String tree, String path})>[];
+
   /// The document URI of [path] in the music folder [tree].
   static String folderUri(String tree, String path) =>
       '$tree/document/${Uri.encodeComponent(path)}';
@@ -478,8 +481,23 @@ class FakeBackend {
         _storeDocument(args['uri'] as String, args['path'] as String);
         return null;
       case 'writeFileToTree':
-        final uri = '${args['treeUri']}/document/${args['name']}';
+        final tree = args['treeUri'] as String;
+        final dir = args['dir'] as String? ?? '';
+        final name = args['name'] as String;
+        final relative = dir.isEmpty ? name : '$dir/$name';
+        // Into a music folder: the next listing shows it.
+        if (musicFolders[tree] case final files?) {
+          final copy = File(
+            '${Directory.systemTemp.createTempSync('kalao_tree_').path}/$name',
+          );
+          File(args['path'] as String).copySync(copy.path);
+          files[relative] = copy;
+          writtenToTrees.add((tree: tree, path: relative));
+          return folderUri(tree, relative);
+        }
+        final uri = '$tree/document/$relative';
         _storeDocument(uri, args['path'] as String);
+        writtenToTrees.add((tree: tree, path: relative));
         return uri;
       case 'listDocumentTree':
         final prefix = '${args['treeUri']}/document/';
