@@ -258,7 +258,7 @@ class _UrlDialog extends StatefulWidget {
 }
 
 class _UrlDialogState extends State<_UrlDialog> {
-  final _url = TextEditingController(text: 'https://');
+  final _url = TextEditingController();
 
   @override
   void dispose() {
@@ -278,6 +278,7 @@ class _UrlDialogState extends State<_UrlDialog> {
         autocorrect: false,
         decoration: InputDecoration(
           labelText: l10n.repositoryUrl,
+          hintText: 'https://…/index.json',
           helperText: l10n.repositoryUrlHelp,
         ),
       ),
