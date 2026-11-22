@@ -9,6 +9,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:kalao/models/library_folder.dart';
+import 'package:kalao/models/settings.dart';
 import 'package:kalao/models/song.dart';
 import 'package:kalao/services/app_storage.dart';
 import 'package:kalao/services/import_service.dart';
@@ -83,6 +84,23 @@ class FolderScanResult {
       added.isNotEmpty || updated > 0 || removed > 0 || relinked > 0;
 }
 
+/// A music-folder song was given a new instrumental before the user chose
+/// where those go (`InstrumentalPlacementScreen`).
+class InstrumentalPlacementUndecided implements Exception {
+  const InstrumentalPlacementUndecided();
+}
+
+/// The MIME type a new instrumental document is created with. Other
+/// formats keep their name as written (`application/octet-stream`).
+String instrumentalMimeType(String extension) => switch (extension) {
+  'flac' => 'audio/flac',
+  'mp3' => 'audio/mpeg',
+  'm4a' || 'aac' || 'mp4' => 'audio/mp4',
+  'wav' => 'audio/wav',
+  'ogg' || 'oga' || 'opus' => 'audio/ogg',
+  _ => 'application/octet-stream',
+};
+
 class FolderOverlapException implements Exception {
   const FolderOverlapException(this.other);
 
@@ -148,6 +166,100 @@ class LibraryFolderService {
     await importer.deleteSongs(songs);
     await store.removeFolder(folder.id);
     return songs.length;
+  }
+
+  /// Writes the audio file [path] as the new instrumental of the
+  /// music-folder song [song], where [settings] say (FEATURES 6.8): next to
+  /// its original, or in the separate folder the user granted. Every new
+  /// instrumental of a folder song (picked files, and stems in M6) goes
+  /// through here, so the choice is always followed. Kalao's own storage is
+  /// never used for them. Throws [InstrumentalPlacementUndecided] until the
+  /// user has chosen.
+  Future<void> addInstrumental(
+    Song song, {
+    required String path,
+    required String name,
+    required AppSettings settings,
+  }) async {
+    final original = song.file(MediaKind.original);
+    if (original == null || !original.inFolder) {
+      throw ArgumentError.value(song.id, 'song', 'not a music-folder song');
+    }
+    final row = await store.file(original.path);
+    if (row == null) throw StateError('${original.path} is not in a folder');
+    final extension = p.extension(name).replaceFirst('.', '').toLowerCase();
+    final probe = await PlatformBridge.probeAudio(path);
+    if (probe['decodable'] != true) {
+      throw FormatException('Cannot play $name');
+    }
+    final fileName =
+        '${p.basenameWithoutExtension(row.name)} (Instrumental).$extension';
+    final String uri;
+    switch (settings.instrumentalPlacement) {
+      case InstrumentalPlacement.undecided:
+        throw const InstrumentalPlacementUndecided();
+      case InstrumentalPlacement.besideOriginal:
+        final folder = await store.folder(row.folderId);
+        if (folder == null) throw StateError('No folder ${row.folderId}');
+        uri = await PlatformBridge.writeFileToTree(
+          treeUri: folder.treeUri,
+          dir: row.dir,
+          name: fileName,
+          path: path,
+          mimeType: instrumentalMimeType(extension),
+        );
+      case InstrumentalPlacement.separateFolder:
+        final tree = settings.instrumentalFolderUri;
+        if (tree == null) throw const InstrumentalPlacementUndecided();
+        uri = await PlatformBridge.writeFileToTree(
+          treeUri: tree,
+          name: fileName,
+          path: path,
+          mimeType: instrumentalMimeType(extension),
+        );
+    }
+    // The old instrumental file stays where it is, no longer this song's.
+    for (final old in await store.instrumentalsOf(song.id)) {
+      await store.putFile(
+        FolderFile(
+          uri: old.uri,
+          folderId: old.folderId,
+          dir: old.dir,
+          name: old.name,
+          role: FolderFileRole.instrumental,
+          bytes: old.bytes,
+          modified: old.modified,
+        ),
+      );
+    }
+    await library.setMedia(
+      song.id,
+      NewMediaFile(
+        kind: MediaKind.instrumental,
+        path: uri,
+        sha256: '',
+        bytes: await File(path).length(),
+        codec: probe['codec'] as String? ?? '',
+        sampleRate: (probe['sampleRate'] as num?)?.toInt(),
+        source: folderSource,
+      ),
+    );
+    if (settings.instrumentalPlacement ==
+        InstrumentalPlacement.besideOriginal) {
+      // The next scan sees the real size and time and reads it again; the
+      // row keeps it this song's instrumental.
+      await store.putFile(
+        FolderFile(
+          uri: uri,
+          folderId: row.folderId,
+          dir: row.dir,
+          name: fileName,
+          role: FolderFileRole.instrumental,
+          songId: song.id,
+        ),
+      );
+    }
+    _log.i('Instrumental for ${song.title} written to $uri');
   }
 
   Future<List<SkippedFolderFile>> skipped(LibraryFolder folder) =>

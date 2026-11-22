@@ -1,4 +1,7 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:kalao/screens/settings/instrumental_placement_screen.dart';
+import 'package:kalao/providers/library_folder_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kalao/l10n/app_localizations.dart';
@@ -49,6 +52,34 @@ class _SongDetailScreenState extends ConsumerState<SongDetailScreen> {
       );
     } finally {
       if (mounted) setState(() => _downloading = false);
+    }
+  }
+
+  /// Picks an audio file as [song]'s instrumental. A music-folder song asks
+  /// where instrumentals go first, if that was never chosen.
+  Future<void> _addInstrumental(Song song) async {
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final inFolder = song.file(MediaKind.original)?.inFolder ?? false;
+    if (inFolder && !await ensureInstrumentalPlacement(context, ref)) return;
+    final picked = await FilePicker.pickFiles(type: FileType.audio);
+    if (picked.isEmpty) return;
+    final file = picked.first;
+    try {
+      await ref
+          .read(libraryFoldersProvider.notifier)
+          .addInstrumental(
+            song,
+            name: file.name,
+            bytes: file.readAsByteStream(),
+          );
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.songInstrumentalAdded)),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.songInstrumentalFailed('$error'))),
+      );
     }
   }
 
@@ -139,6 +170,17 @@ class _SongDetailScreenState extends ConsumerState<SongDetailScreen> {
                 : l10n.songSourceDownloaded(source),
           ),
           const Divider(),
+          if (song.file(MediaKind.original) != null)
+            ListTile(
+              leading: const Icon(Icons.music_note_outlined),
+              title: Text(
+                song.file(MediaKind.instrumental) == null
+                    ? l10n.songAddInstrumental
+                    : l10n.songReplaceInstrumental,
+              ),
+              subtitle: Text(l10n.songInstrumentalBody),
+              onTap: () => _addInstrumental(song),
+            ),
           if (extensions.has(ExtensionCapability.metadata))
             ListTile(
               leading: const Icon(Icons.manage_search),

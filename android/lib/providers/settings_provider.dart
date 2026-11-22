@@ -92,6 +92,19 @@ class SettingsNotifier extends Notifier<AppSettings> {
   Future<void> setWhatsNewVersion(String version) =>
       _save(state.copyWith(whatsNewVersion: () => version));
 
+  /// Remembers where new music-folder instrumentals go; [folderUri] is the
+  /// granted folder for [InstrumentalPlacement.separateFolder].
+  Future<void> setInstrumentalPlacement(
+    InstrumentalPlacement placement, {
+    String? folderUri,
+  }) => _save(
+    state.copyWith(
+      instrumentalPlacement: placement,
+      instrumentalFolderUri: () =>
+          placement == InstrumentalPlacement.separateFolder ? folderUri : null,
+    ),
+  );
+
   Future<void> setBackupFolderUri(String? uri) =>
       _save(state.copyWith(backupFolderUri: () => uri));
 
