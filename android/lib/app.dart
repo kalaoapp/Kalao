@@ -25,6 +25,7 @@ import 'package:kalao/screens/song_detail_screen.dart';
 import 'package:kalao/screens/tutorial_screen.dart';
 import 'package:kalao/screens/whats_new_screen.dart';
 import 'package:kalao/theme/app_theme.dart';
+import 'package:kalao/widgets/player_orientation.dart';
 
 /// First screen for the current app state, as in Mornye's
 /// `initialLocationForAppState`: setup, then the tutorial (once), then
@@ -65,7 +66,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/setup', builder: (context, state) => const SetupScreen()),
       GoRoute(
         path: '/player',
-        builder: (context, state) => const NowPlayingScreen(),
+        // The player and its sync editor may rotate; the rest is portrait.
+        builder: (context, state) =>
+            const AnyOrientation(child: NowPlayingScreen()),
         routes: [
           GoRoute(
             path: 'sync',
