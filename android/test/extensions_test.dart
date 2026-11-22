@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kalao/constants/app_info.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/models/extension.dart';
 import 'package:kalao/models/settings.dart';
@@ -38,6 +39,16 @@ const _region = {
 
 /// Extensions (M5): the Dart side over a fake extension manager.
 void main() {
+  test('developer mode is offered only in alpha and beta builds', () {
+    for (final version in ['0.2.0-alpha', '1.0.0-beta.2', '1.0.0-Alpha+3']) {
+      expect(isTestBuild(version), isTrue, reason: version);
+    }
+    for (final version in ['1.0.0', '1.0.0-rc.1', '1.0.0+5', '2.0.0-dev']) {
+      expect(isTestBuild(version), isFalse, reason: version);
+    }
+    expect(AppInfo.developerModeAvailable, isTestBuild(AppInfo.version));
+  });
+
   TestWidgetsFlutterBinding.ensureInitialized();
   late FakeBackend backend;
   late LibraryServices services;
