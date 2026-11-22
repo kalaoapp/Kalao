@@ -202,6 +202,14 @@ pub struct Probe {
     pub album: Option<String>,
     pub isrc: Option<String>,
     pub lyrics: Option<String>,
+    pub album_artist: Option<String>,
+    pub genre: Option<String>,
+    pub composer: Option<String>,
+    /// `TRACKNUMBER` / `DISCNUMBER` without a total ("3/12" → 3).
+    pub track_no: Option<u32>,
+    pub disc_no: Option<u32>,
+    /// The year of the release date ("2019-05-10" → 2019).
+    pub year: Option<u32>,
     /// Embedded front cover (or the first picture), not serialized.
     #[serde(skip)]
     pub cover: Option<(String, Vec<u8>)>,
@@ -260,6 +268,21 @@ fn apply_revision(result: &mut Probe, revision: &MetadataRevision) {
         if value.is_empty() {
             continue;
         }
+        let number = match tag.std_key {
+            Some(StandardTagKey::TrackNumber) => Some(&mut result.track_no),
+            Some(StandardTagKey::DiscNumber) => Some(&mut result.disc_no),
+            Some(StandardTagKey::Date | StandardTagKey::ReleaseDate) => Some(&mut result.year),
+            _ => None,
+        };
+        if let Some(slot) = number {
+            if slot.is_none() {
+                *slot = leading_number(&value);
+            }
+            continue;
+        }
+        if tag.std_key == Some(StandardTagKey::AlbumArtist) {
+            result.album_artist.get_or_insert(value.clone());
+        }
         let slot = match tag.std_key {
             Some(StandardTagKey::TrackTitle) => &mut result.title,
             Some(StandardTagKey::Artist) => &mut result.artist,
@@ -267,6 +290,8 @@ fn apply_revision(result: &mut Probe, revision: &MetadataRevision) {
             Some(StandardTagKey::Album) => &mut result.album,
             Some(StandardTagKey::IdentIsrc) => &mut result.isrc,
             Some(StandardTagKey::Lyrics) => &mut result.lyrics,
+            Some(StandardTagKey::Genre) => &mut result.genre,
+            Some(StandardTagKey::Composer) => &mut result.composer,
             _ => continue,
         };
         slot.get_or_insert(value);
@@ -280,5 +305,30 @@ fn apply_revision(result: &mut Probe, revision: &MetadataRevision) {
         && let Some(visual) = front
     {
         result.cover = Some((visual.media_type.clone(), visual.data.to_vec()));
+    }
+}
+
+/// The number a tag starts with: "3/12" → 3, "2019-05-10" → 2019; zero and
+/// text are none.
+fn leading_number(value: &str) -> Option<u32> {
+    let digits: String = value
+        .trim()
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
+    digits.parse().ok().filter(|number| *number > 0)
+}
+
+#[cfg(test)]
+mod tag_tests {
+    use super::leading_number;
+
+    #[test]
+    fn numbers_drop_totals_and_dates() {
+        assert_eq!(leading_number("3/12"), Some(3));
+        assert_eq!(leading_number(" 07 "), Some(7));
+        assert_eq!(leading_number("2019-05-10"), Some(2019));
+        assert_eq!(leading_number("0"), None);
+        assert_eq!(leading_number("Side A"), None);
     }
 }

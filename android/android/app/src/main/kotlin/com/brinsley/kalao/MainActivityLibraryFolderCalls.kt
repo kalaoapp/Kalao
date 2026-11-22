@@ -1,21 +1,22 @@
 // Music folders (FEATURES 6.8): list a folder the user granted with
-// Storage Access Framework and hand its audio files to Rust as
-// `/proc/self/fd/<n>` paths (Rust duplicates them, never reopens them:
-// ADR-018), so songs play in place without a copy. Lyrics files are read
-// here (`readDocument`). The walk follows Mornye's SAF scan (`MainActivitySafScan.kt`): one
+// Storage Access Framework and hand its files to Rust and Dart as
+// `/proc/self/fd/<n>` paths, so songs play in place without a copy. The
+// walk follows Mornye's SAF scan (`MainActivitySafScan.kt`): one
 // DocumentsContract query per directory, change detection by size and
 // modification time in Dart.
 package com.brinsley.kalao
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Environment
 import android.os.ParcelFileDescriptor
+import android.os.storage.StorageManager
 import android.provider.DocumentsContract
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.FileNotFoundException
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -35,32 +36,72 @@ internal object OpenDocuments {
     }
 }
 
-/** Audio and lyrics extensions (`import_service.dart` and `core::pairing`). */
+/**
+ * Audio, lyrics and folder-image extensions (`import_service.dart`,
+ * `core::pairing`, `utils/folder_cover.dart`).
+ */
 private val folderExtensions = setOf(
     "mp3", "m4a", "aac", "flac", "wav", "ogg", "oga", "opus", "alac", "mp4", "wma", "ape",
-    "aiff", "aif", "lrc", "txt", "ttml",
+    "aiff", "aif", "wv", "mpc", "dsf", "dff", "lrc", "txt", "ttml", "jpg", "jpeg", "png", "webp",
 )
 
 /**
- * `[{uri, name, dir, bytes, modified}]` for every audio and lyrics file under
- * the granted folder (`dir` is the path below it, "" at the top). Folders
- * whose name starts with a dot are skipped. Null when Kalao no longer holds
- * read access (the user revoked it, or the folder is gone).
+ * `{state, files}` for the granted folder. `files` is
+ * `[{uri, name, dir, bytes, modified}]` for every audio, lyrics and image file
+ * under it (`dir` is the path below it, "" at the top); folders whose name
+ * starts with a dot are skipped. `state` is `ok`, `offline` when the storage
+ * volume the folder is on is not mounted (an SD card or USB drive taken
+ * out), or `access` when Kalao no longer holds read access or the folder is
+ * gone. Only `ok` has files.
  */
 internal suspend fun MainActivity.handleListLibraryFolder(call: MethodCall, result: MethodChannel.Result) {
     val tree = Uri.parse(call.argument<String>("treeUri") ?: throw IllegalArgumentException("treeUri"))
-    val files = withContext(Dispatchers.IO) {
+    val reply = withContext(Dispatchers.IO) {
         val granted = contentResolver.persistedUriPermissions.any { it.uri == tree && it.isReadPermission }
-        if (!granted) return@withContext null
+        if (!granted) return@withContext mapOf("state" to "access")
         try {
-            listTree(tree)
-        } catch (e: SecurityException) {
-            null
-        } catch (e: FileNotFoundException) {
-            null
+            mapOf("state" to "ok", "files" to listTree(tree))
+        } catch (e: Exception) {
+            when (e) {
+                is SecurityException, is FileNotFoundException, is IllegalArgumentException, is IllegalStateException ->
+                    mapOf("state" to if (volumeMounted(tree)) "access" else "offline")
+                else -> throw e
+            }
         }
     }
-    result.success(files)
+    result.success(reply)
+}
+
+/**
+ * Whether the volume of [tree] is mounted. External-storage tree ids are
+ * `<volume>:<path>` (`primary` for internal storage, a UUID for an SD card or
+ * USB drive); other providers count as mounted.
+ */
+private fun MainActivity.volumeMounted(tree: Uri): Boolean {
+    if (tree.authority != "com.android.externalstorage.documents") return true
+    val volume = DocumentsContract.getTreeDocumentId(tree).substringBefore(':')
+    if (volume == "primary") return true
+    val storage = getSystemService(StorageManager::class.java) ?: return true
+    return storage.storageVolumes.any {
+        it.uuid.equals(volume, ignoreCase = true) && it.state == Environment.MEDIA_MOUNTED
+    }
+}
+
+/**
+ * Copies a document to [path] (a lyrics file or a folder image Dart reads).
+ * The bytes are streamed from the provider, so it works for providers that
+ * refuse to reopen a lent descriptor (ADR-018).
+ */
+internal suspend fun MainActivity.handleCopyDocumentToFile(call: MethodCall, result: MethodChannel.Result) {
+    val uri = Uri.parse(call.argument<String>("uri") ?: throw IllegalArgumentException("uri"))
+    val path = call.argument<String>("path") ?: throw IllegalArgumentException("path")
+    val bytes = withContext(Dispatchers.IO) {
+        val target = File(path)
+        target.parentFile?.mkdirs()
+        val input = contentResolver.openInputStream(uri) ?: throw FileNotFoundException("Cannot open $uri")
+        input.use { source -> target.outputStream().use { source.copyTo(it) } }
+    }
+    result.success(bytes)
 }
 
 private fun MainActivity.listTree(tree: Uri): List<Map<String, Any?>> {
@@ -104,7 +145,7 @@ private fun MainActivity.listTree(tree: Uri): List<Map<String, Any?>> {
 
 /**
  * Opens a document for reading and returns `{path, handle}`: `path` is
- * `/proc/self/fd/<handle>`, which Rust duplicates (never reopens: ADR-018)
+ * `/proc/self/fd/<handle>`, which Rust duplicates (never reopens, ADR-018)
  * while the descriptor stays open. Dart closes it with `closeDocuments`.
  */
 internal suspend fun MainActivity.handleOpenDocument(call: MethodCall, result: MethodChannel.Result) {
@@ -115,34 +156,6 @@ internal suspend fun MainActivity.handleOpenDocument(call: MethodCall, result: M
         OpenDocuments.add(descriptor)
     }
     result.success(mapOf("path" to "/proc/self/fd/$fd", "handle" to fd))
-}
-
-/** Larger lyrics files are not lyrics. */
-private const val MAX_READ_DOCUMENT_BYTES = 4 * 1024 * 1024
-
-/**
- * The bytes of a small document (a lyrics file), read through the content
- * resolver. Dart cannot read a lent `/proc/self/fd` path: opening it again is
- * refused for SAF documents (ADR-018).
- */
-internal suspend fun MainActivity.handleReadDocument(call: MethodCall, result: MethodChannel.Result) {
-    val uri = Uri.parse(call.argument<String>("uri") ?: throw IllegalArgumentException("uri"))
-    val bytes = withContext(Dispatchers.IO) {
-        val stream = contentResolver.openInputStream(uri)
-            ?: throw FileNotFoundException("Cannot open $uri")
-        stream.use {
-            val out = ByteArrayOutputStream()
-            val buffer = ByteArray(64 * 1024)
-            while (true) {
-                val read = it.read(buffer)
-                if (read < 0) break
-                out.write(buffer, 0, read)
-                require(out.size() <= MAX_READ_DOCUMENT_BYTES) { "Document too large: $uri" }
-            }
-            out.toByteArray()
-        }
-    }
-    result.success(bytes)
 }
 
 internal fun handleCloseDocuments(call: MethodCall, result: MethodChannel.Result) {

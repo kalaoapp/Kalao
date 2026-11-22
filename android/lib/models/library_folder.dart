@@ -26,7 +26,8 @@ class LibraryFolder {
   /// When the last scan finished; null before the first.
   final DateTime? scannedAt;
 
-  /// [lostAccess] when the last scan could not read the folder.
+  /// [lostAccess] when the last scan could not read the folder, [offline]
+  /// when its storage (an SD card or USB drive) was not mounted.
   final String? error;
 
   /// Songs from this folder in the library.
@@ -37,8 +38,10 @@ class LibraryFolder {
   final int skipped;
 
   static const lostAccess = 'access';
+  static const offline = 'offline';
 
   bool get accessLost => error == lostAccess;
+  bool get isOffline => error == offline;
 
   @override
   bool operator ==(Object other) =>

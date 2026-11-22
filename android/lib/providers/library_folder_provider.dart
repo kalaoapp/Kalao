@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/l10n/supported_locales.dart';
 import 'package:kalao/models/library_folder.dart';
+import 'package:kalao/models/settings.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
 import 'package:kalao/services/library_folder_service.dart';
@@ -119,16 +120,61 @@ class LibraryFoldersController extends Notifier<LibraryFoldersState> {
   Future<FolderScanResult?> scan(LibraryFolder folder) async =>
       (await _run([folder], foreground: true)).firstOrNull;
 
-  /// Scans every folder that is not known to be out of reach (the scan on
-  /// app start); [foreground] when the user asked for it.
-  Future<List<FolderScanResult>> scanAll({bool foreground = false}) async {
+  /// Scans every folder; [foreground] when the user asked for it, [full]
+  /// to read every file again (Force Full Scan).
+  Future<List<FolderScanResult>> scanAll({
+    bool foreground = false,
+    bool full = false,
+  }) async {
     final folders = await _service.folders();
-    return _run(folders, foreground: foreground);
+    return _run(folders, foreground: foreground, full: full);
+  }
+
+  /// The scan on app start: the folders the auto-scan setting says are due
+  /// ([FolderScanSchedule]); none when it is manual.
+  Future<List<FolderScanResult>> scanDue({DateTime? now}) async {
+    final interval = ref.read(settingsProvider).folderScanSchedule.interval;
+    if (interval == null) return const [];
+    final at = now ?? DateTime.now();
+    final due = [
+      for (final folder in await _service.folders())
+        if (folder.scannedAt == null ||
+            folder.error != null ||
+            at.difference(folder.scannedAt!) >= interval)
+          folder,
+    ];
+    return _run(due, foreground: false);
+  }
+
+  /// On resume: folders whose storage was offline, in case it is back.
+  Future<List<FolderScanResult>> scanOffline() async {
+    final offline = [
+      for (final folder in await _service.folders())
+        if (folder.isOffline) folder,
+    ];
+    return _run(offline, foreground: false);
+  }
+
+  /// Songs whose original is gone (FEATURES 6.9), and how many of them have
+  /// lyrics, for the cleanup prompt.
+  Future<({int songs, int withLyrics})> missing() async {
+    final ids = await _service.missingSongs();
+    final library = ref.read(libraryServicesProvider).library;
+    return (songs: ids.length, withLyrics: await library.countWithLyrics(ids));
+  }
+
+  /// Deletes the songs whose original is gone (Cleanup Missing Files).
+  Future<int> cleanupMissing() async {
+    final removed = await _service.cleanupMissing();
+    if (removed > 0) ref.read(libraryRevisionProvider.notifier).bump();
+    await _reload();
+    return removed;
   }
 
   Future<List<FolderScanResult>> _run(
     List<LibraryFolder> folders, {
     required bool foreground,
+    bool full = false,
   }) async {
     if (state.scanning || folders.isEmpty) return const [];
     _cancel = false;
@@ -154,6 +200,7 @@ class LibraryFoldersController extends Notifier<LibraryFoldersState> {
           final result = await _service.scan(
             folder,
             cancelled: () => _cancel,
+            full: full,
             onProgress: (done, total) =>
                 _progress(folder, done, total, foreground),
           );

@@ -171,6 +171,7 @@ class _RepositoriesScreenState extends ConsumerState<RepositoriesScreen> {
             ),
           for (final listing in listings)
             Card(
+              clipBehavior: Clip.antiAlias,
               margin: const EdgeInsets.symmetric(
                 horizontal: AppTokens.space16,
                 vertical: AppTokens.space8,
@@ -178,19 +179,31 @@ class _RepositoriesScreenState extends ConsumerState<RepositoriesScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ListTile(
-                    title: Text(listing.repository.name),
-                    subtitle: Text(listing.repository.url),
-                    trailing: IconButton(
-                      tooltip: l10n.repositoryRemove,
-                      icon: const Icon(Icons.delete_outline),
-                      onPressed: () => _remove(listing.repository),
+                  // The repository itself, set apart from its extensions.
+                  ColoredBox(
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    child: ListTile(
+                      leading: const Icon(Icons.storefront_outlined),
+                      title: Text(
+                        listing.repository.name,
+                        style: theme.textTheme.titleMedium,
+                      ),
+                      subtitle: Text(listing.repository.url),
+                      trailing: IconButton(
+                        tooltip: l10n.repositoryRemove,
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () => _remove(listing.repository),
+                      ),
                     ),
                   ),
+                  const Divider(height: 1),
                   if (listing.error case final error?)
                     Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppTokens.space16,
+                      padding: const EdgeInsets.fromLTRB(
+                        AppTokens.space16,
+                        AppTokens.space8,
+                        AppTokens.space16,
+                        0,
                       ),
                       child: Text(
                         error,
@@ -258,7 +271,7 @@ class _UrlDialog extends StatefulWidget {
 }
 
 class _UrlDialogState extends State<_UrlDialog> {
-  final _url = TextEditingController(text: 'https://');
+  final _url = TextEditingController();
 
   @override
   void dispose() {
@@ -278,6 +291,7 @@ class _UrlDialogState extends State<_UrlDialog> {
         autocorrect: false,
         decoration: InputDecoration(
           labelText: l10n.repositoryUrl,
+          hintText: 'https://…/index.json',
           helperText: l10n.repositoryUrlHelp,
         ),
       ),

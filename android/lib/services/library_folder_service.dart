@@ -1,8 +1,10 @@
 // Music folders follow Mornye's local library (`local_library_provider_scan
-// .dart`, `MainActivitySafScan.kt`): folders granted once with SAF, files
-// read in place through descriptors, incremental rescans by size and
-// modification time, removed files leave the library. Written Kalao-sized:
-// pairing per directory, lyrics files and no tag cache.
+// .dart`, `MainActivitySafScan.kt`, `library_cleanup.dart`, `cover/folder.rs`):
+// folders granted once with SAF, files read in place through descriptors,
+// incremental rescans by size, modification time and reader version, offline
+// sources kept, missing files cleaned up on request. Written Kalao-sized:
+// pairing per directory, lyrics files, relinking by song key, no tag cache
+// (MORNYE_REUSE.md §7).
 import 'dart:convert';
 import 'dart:io';
 
@@ -14,6 +16,7 @@ import 'package:kalao/services/library_database.dart';
 import 'package:kalao/services/library_folder_store.dart';
 import 'package:kalao/services/platform_bridge.dart';
 import 'package:kalao/utils/document_tree.dart';
+import 'package:kalao/utils/folder_cover.dart';
 import 'package:kalao/utils/logger.dart';
 import 'package:path/path.dart' as p;
 
@@ -22,26 +25,62 @@ const _log = AppLogger('Folders');
 /// `media_file.source` and `lyric_doc.source_kind` of music-folder files.
 const folderSource = 'folder';
 
+/// Formats the engine cannot decode that FFmpegKit converts on first play
+/// (FEATURES 6.8).
+const convertedExtensions = {
+  'opus', 'ape', 'wv', 'mpc', 'dsf', 'dff', 'wma', //
+};
+
+/// The newest converted copies kept, in bytes.
+const convertedCacheBytes = 1024 * 1024 * 1024;
+
+/// FFprobe and FFmpeg over a music-folder document (`main.dart` passes
+/// FFmpegKit's; tests pass stand-ins). [probe] returns `probeAudio`-shaped
+/// tags (title, artist, album, albumArtist, genre, year, trackNo, discNo,
+/// durationMs, codec) or null when the file cannot be read; [convert] writes
+/// a FLAC copy to `output`.
+class FolderTranscoder {
+  const FolderTranscoder({required this.probe, required this.convert});
+
+  final Future<Map<String, dynamic>?> Function(String uri) probe;
+  final Future<bool> Function(String uri, String output) convert;
+
+  /// No FFmpegKit: undecodable formats stay skipped.
+  static final none = FolderTranscoder(
+    probe: (_) async => null,
+    convert: (_, _) async => false,
+  );
+}
+
 /// What one scan changed.
 class FolderScanResult {
   const FolderScanResult({
     this.added = const [],
     this.updated = 0,
     this.removed = 0,
+    this.relinked = 0,
     this.skipped = 0,
     this.lostAccess = false,
+    this.offline = false,
     this.cancelled = false,
   });
 
   /// Ids of the songs the scan added.
   final List<int> added;
   final int updated;
+
+  /// Songs whose original disappeared (now unavailable, FEATURES 6.9).
   final int removed;
+
+  /// Missing songs a new file stood in for.
+  final int relinked;
   final int skipped;
   final bool lostAccess;
+  final bool offline;
   final bool cancelled;
 
-  bool get changed => added.isNotEmpty || updated > 0 || removed > 0;
+  bool get changed =>
+      added.isNotEmpty || updated > 0 || removed > 0 || relinked > 0;
 }
 
 class FolderOverlapException implements Exception {
@@ -54,23 +93,36 @@ class FolderOverlapException implements Exception {
   String toString() => 'Overlaps the music folder $other';
 }
 
+/// The song cannot play: its original is gone or its folder is offline.
+class SongUnavailableException implements Exception {
+  const SongUnavailableException(this.title);
+
+  final String title;
+
+  @override
+  String toString() => '$title is not available';
+}
+
 /// Reports scan progress: audio files read so far of [total].
 typedef FolderScanProgress = void Function(int done, int total);
 
-/// Adds, scans and removes music folders (FEATURES 6.8). Songs from a folder
-/// keep their files where they are: `media_file.path` is the document URI,
-/// `source` is [folderSource] and `sha256` is empty. Lyrics, layers,
-/// favorites and plays are the library's like any song's.
+/// Adds, scans and removes music folders (FEATURES 6.8, 6.9). Songs from a
+/// folder keep their files where they are: `media_file.path` is the
+/// document URI, `source` is [folderSource] and `sha256` is empty. Lyrics,
+/// layers, favorites and plays are the library's like any song's, and stay
+/// while the file is gone until [cleanupMissing].
 class LibraryFolderService {
   LibraryFolderService({
     required this.library,
     required this.importer,
     required this.storage,
-  });
+    FolderTranscoder? transcoder,
+  }) : transcoder = transcoder ?? FolderTranscoder.none;
 
   final LibraryDatabase library;
   final ImportService importer;
   final AppStorage storage;
+  final FolderTranscoder transcoder;
   late final store = LibraryFolderStore(library.db);
 
   Future<List<LibraryFolder>> folders() => store.folders();
@@ -101,23 +153,53 @@ class LibraryFolderService {
   Future<List<SkippedFolderFile>> skipped(LibraryFolder folder) =>
       store.skipped(folder.id);
 
+  /// Music-folder songs whose original is gone (FEATURES 6.9).
+  Future<List<int>> missingSongs() => library.missingSongIds();
+
+  /// Deletes the songs whose original is gone, with their lyrics and plays
+  /// in this library; the files of their other parts are forgotten so a
+  /// later scan pairs them again. Returns how many songs were deleted.
+  Future<int> cleanupMissing() async {
+    final ids = await library.missingSongIds();
+    if (ids.isEmpty) return 0;
+    await store.deleteFilesOfSongs(ids);
+    await importer.deleteSongs(await library.songsByIds(ids));
+    return ids.length;
+  }
+
   /// Brings the library in line with the folder: songs for new audio files
   /// (paired with an instrumental and a lyrics file from the same
   /// directory), updated details for changed ones, and songs whose original
-  /// is gone removed. When the folder cannot be read nothing is removed.
-  /// [cancelled] is checked between files; what was done stays.
+  /// is gone marked unavailable; a new file with the key of such a song is
+  /// relinked to it. When the folder cannot be read (offline storage, lost
+  /// access) its songs are unavailable and nothing is removed. [full] reads
+  /// every file again (Force Full Scan). [cancelled] is checked between
+  /// files; what was done stays.
   Future<FolderScanResult> scan(
     LibraryFolder folder, {
     FolderScanProgress? onProgress,
     bool Function()? cancelled,
+    bool full = false,
   }) async {
     final listing = await PlatformBridge.listLibraryFolder(folder.treeUri);
-    if (listing == null) {
-      _log.w('No access to ${folder.name}');
-      await store.setScanned(folder.id, error: LibraryFolder.lostAccess);
-      return const FolderScanResult(lostAccess: true);
+    if (listing.state != FolderListingState.ok) {
+      final offline = listing.state == FolderListingState.offline;
+      _log.w('${folder.name} is ${offline ? 'offline' : 'not accessible'}');
+      await library.setAvailable(await store.mediaUris(folder.id), false);
+      await store.setScanned(
+        folder.id,
+        error: offline ? LibraryFolder.offline : LibraryFolder.lostAccess,
+      );
+      return FolderScanResult(lostAccess: !offline, offline: offline);
     }
-    final scan = _Scan(this, folder, listing, onProgress, cancelled);
+    final scan = _Scan(
+      this,
+      folder,
+      listing.files,
+      onProgress,
+      cancelled,
+      full,
+    );
     final result = await scan.run();
     await store.setScanned(
       folder.id,
@@ -126,43 +208,110 @@ class LibraryFolderService {
     if (result.added.isNotEmpty) await importer.refreshSearchKeys(result.added);
     _log.i(
       '${folder.name}: ${result.added.length} added, ${result.updated} '
-      'updated, ${result.removed} removed, ${result.skipped} skipped',
+      'updated, ${result.relinked} relinked, ${result.removed} gone, '
+      '${result.skipped} skipped',
     );
     return result;
   }
+
+  /// The files to load for [song] (kind → path), with a FLAC copy in place
+  /// of a music-folder file the engine cannot decode (converted once, on
+  /// first play). Throws [SongUnavailableException] when the original is
+  /// gone or offline; an unavailable instrumental is left out.
+  Future<Map<String, String>> playableSources(Song song) async {
+    if (song.unavailable) throw SongUnavailableException(song.title);
+    final sources = <String, String>{};
+    for (final file in song.media) {
+      if (!file.available) continue;
+      sources[file.kind.name] = file.decodable || !file.inFolder
+          ? file.path
+          : await _converted(file);
+    }
+    return sources;
+  }
+
+  Future<String> _converted(MediaFile file) async {
+    await storage.converted.create(recursive: true);
+    final target = File(
+      p.join(storage.converted.path, '${_fnv(file.path)}-${file.bytes}.flac'),
+    );
+    if (target.existsSync()) {
+      await target.setLastModified(DateTime.now());
+      return target.path;
+    }
+    final partial = File('${target.path}.part');
+    if (!await transcoder.convert(file.path, partial.path) ||
+        !partial.existsSync()) {
+      if (partial.existsSync()) await partial.delete();
+      throw StateError('Cannot convert ${file.path} to a playable format');
+    }
+    await partial.rename(target.path);
+    await _pruneConverted(keep: target.path);
+    return target.path;
+  }
+
+  /// Keeps the newest [convertedCacheBytes] of converted copies.
+  Future<void> _pruneConverted({required String keep}) async {
+    final files = storage.converted.listSync().whereType<File>().toList()
+      ..sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+    var total = 0;
+    for (final file in files) {
+      total += file.lengthSync();
+      if (total > convertedCacheBytes && file.path != keep) await file.delete();
+    }
+  }
+
+  /// FNV-1a over the URI: a stable file name for its converted copy.
+  static String _fnv(String text) {
+    var hash = 0xcbf29ce484222325;
+    for (final unit in utf8.encode(text)) {
+      hash = (hash ^ unit) * 0x100000001b3;
+    }
+    return hash.toUnsigned(64).toRadixString(16);
+  }
 }
 
-bool _isAudio(String name) => audioExtensions.contains(
-  p.extension(name).replaceFirst('.', '').toLowerCase(),
-);
+bool _isAudio(String name) {
+  final extension = _extension(name);
+  return audioExtensions.contains(extension) ||
+      convertedExtensions.contains(extension);
+}
 
-bool _isLyrics(String name) => lyricsExtensions.contains(
-  p.extension(name).replaceFirst('.', '').toLowerCase(),
-);
+bool _isLyrics(String name) => lyricsExtensions.contains(_extension(name));
+
+String _extension(String name) =>
+    p.extension(name).replaceFirst('.', '').toLowerCase();
 
 /// An audio file read for this scan.
 class _Probed {
-  _Probed(this.entry, this.probe);
+  _Probed(this.entry, this.probe, {this.decodable = true});
 
   final FolderEntry entry;
   final Map<String, dynamic> probe;
 
+  /// False when FFprobe read it and it plays from a converted copy.
+  final bool decodable;
+
   int? get durationMs => (probe['durationMs'] as num?)?.toInt();
   String? get coverPath => probe['coverPath'] as String?;
+  set coverPath(String? path) => probe['coverPath'] = path;
 
   String? tag(String key) {
     final value = (probe[key] as String?)?.trim();
     return value == null || value.isEmpty ? null : value;
   }
 
+  SongTags get tags => SongTags.fromProbe(probe);
+
   NewMediaFile media(MediaKind kind) => NewMediaFile(
     kind: kind,
     path: entry.uri,
     sha256: '',
     bytes: entry.bytes,
-    codec: probe['codec'] as String? ?? '',
+    codec: probe['codec'] as String? ?? _extension(entry.name),
     sampleRate: (probe['sampleRate'] as num?)?.toInt(),
     source: folderSource,
+    decodable: decodable,
   );
 }
 
@@ -174,6 +323,7 @@ class _Scan {
     this.listing,
     this.onProgress,
     this.cancelled,
+    this.full,
   );
 
   final LibraryFolderService service;
@@ -181,6 +331,7 @@ class _Scan {
   final List<FolderEntry> listing;
   final FolderScanProgress? onProgress;
   final bool Function()? cancelled;
+  final bool full;
 
   LibraryDatabase get library => service.library;
   LibraryFolderStore get store => service.store;
@@ -188,10 +339,14 @@ class _Scan {
   final added = <int>[];
   int updated = 0;
   int removed = 0;
+  int relinked = 0;
   int skipped = 0;
   int done = 0;
   int total = 0;
   bool stopped = false;
+
+  /// Folder images copied into `covers/` this scan, by document URI.
+  final _folderCovers = <String, String?>{};
 
   bool get _stop => stopped = stopped || (cancelled?.call() ?? false);
 
@@ -200,14 +355,20 @@ class _Scan {
     final seen = {for (final entry in listing) entry.uri: entry};
     await _removeGone(known, seen);
     known = await store.files(folder.id);
+    // The folder is readable again: its files are back.
+    await library.setAvailable([
+      for (final file in known.values)
+        if (file.songId != null && seen.containsKey(file.uri)) file.uri,
+    ], true);
 
     final changed = <(FolderEntry, FolderFile)>[];
     final fresh = <FolderEntry>[];
     for (final entry in listing) {
+      if (folderImageRank(entry.name) != null) continue;
       final file = known[entry.uri];
       if (file == null || file.role == FolderFileRole.skipped) {
-        if (file == null || _differs(entry, file)) fresh.add(entry);
-      } else if (_differs(entry, file)) {
+        if (file == null || full || _differs(entry, file)) fresh.add(entry);
+      } else if (full || _differs(entry, file)) {
         changed.add((entry, file));
       }
     }
@@ -232,20 +393,24 @@ class _Scan {
       added: added,
       updated: updated,
       removed: removed,
+      relinked: relinked,
       skipped: skipped,
       cancelled: stopped,
     );
   }
 
+  /// Changed since it was read, or read by an older reader.
   static bool _differs(FolderEntry entry, FolderFile file) =>
-      entry.bytes != file.bytes || entry.modified != file.modified;
+      entry.bytes != file.bytes ||
+      entry.modified != file.modified ||
+      (file.role != FolderFileRole.lyrics &&
+          file.scanVersion < folderScanVersion);
 
   void _progress() => onProgress?.call(++done, total);
 
-  /// A song whose original is gone leaves the library; its other files are
-  /// forgotten so this scan pairs them again (a renamed original keeps its
-  /// instrumental and lyrics). A gone instrumental leaves its song; lyrics
-  /// stay in the library.
+  /// A song whose original is gone stays in the library, unavailable, with
+  /// its other files (FEATURES 6.9); a file with its key relinks it. A gone
+  /// instrumental leaves its song; lyrics stay in the library.
   Future<void> _removeGone(
     Map<String, FolderFile> known,
     Map<String, FolderEntry> seen,
@@ -255,13 +420,14 @@ class _Scan {
         if (!seen.containsKey(file.uri)) file,
     ];
     if (gone.isEmpty) return;
-    final songs = <int>{};
+    final originals = <String>[];
     for (final file in gone) {
       final songId = file.songId;
       if (songId == null) continue;
       switch (file.role) {
         case FolderFileRole.original:
-          songs.add(songId);
+          originals.add(file.uri);
+          removed++;
         case FolderFileRole.instrumental:
           await library.removeMedia(songId, MediaKind.instrumental);
           updated++;
@@ -269,29 +435,16 @@ class _Scan {
           break;
       }
     }
+    await library.setAvailable(originals, false);
     await store.deleteFiles([for (final file in gone) file.uri]);
-    if (songs.isEmpty) return;
-    await store.deleteFilesOfSongs(songs);
-    await service.importer.deleteSongs(
-      await library.songsByIds(songs.toList()),
-    );
-    removed += songs.length;
   }
 
-  /// Reads a changed file again: new codec, size and duration for audio,
-  /// new lyrics unless the song's lyrics were edited or fetched since.
+  /// Reads a changed file again: new codec, size and duration for audio
+  /// (tags the song lacks are filled in), new lyrics unless the song's
+  /// lyrics were edited or fetched since.
   Future<void> _update(FolderEntry entry, FolderFile file) async {
     final songId = file.songId;
-    var next = FolderFile(
-      uri: entry.uri,
-      folderId: folder.id,
-      dir: entry.dir,
-      name: entry.name,
-      role: file.role,
-      songId: songId,
-      bytes: entry.bytes,
-      modified: entry.modified,
-    );
+    var next = _row(entry, file.role, songId);
     if (songId == null) {
       // Its song was deleted: only remember the new size.
       if (_isAudio(entry.name)) _progress();
@@ -306,11 +459,17 @@ class _Scan {
           songId,
           kind,
           bytes: entry.bytes,
-          codec: probed.probe['codec'] as String? ?? '',
+          codec: probed.media(kind).codec,
           sampleRate: (probed.probe['sampleRate'] as num?)?.toInt(),
         );
-        if (kind == MediaKind.original && probed.durationMs != null) {
-          await library.updateDetails(songId, durationMs: probed.durationMs);
+        if (kind == MediaKind.original) {
+          if (probed.durationMs != null) {
+            await library.updateDetails(songId, durationMs: probed.durationMs);
+          }
+          await library.fillTags(songId, probed.tags);
+          await _fillCover(songId, probed);
+        } else {
+          await _deleteCover(probed.coverPath);
         }
         updated++;
       } else {
@@ -334,6 +493,18 @@ class _Scan {
       }
     }
     await store.putFile(next);
+  }
+
+  /// A song without a cover takes [probed]'s embedded one, else its
+  /// folder image.
+  Future<void> _fillCover(int songId, _Probed probed) async {
+    final song = await library.song(songId);
+    if (song == null || song.coverPath != null) {
+      await _deleteCover(probed.coverPath);
+      return;
+    }
+    final cover = probed.coverPath ?? await _folderCover(probed.entry.dir);
+    if (cover != null) await library.updateDetails(songId, coverPath: cover);
   }
 
   /// New files of one directory: originals become songs with a paired
@@ -365,7 +536,7 @@ class _Scan {
         await _skip(entry, 'unreadable');
         continue;
       }
-      if (read.probe['decodable'] != true) {
+      if (!read.decodable && !_canConvert(entry)) {
         await _deleteCover(read.coverPath);
         await _skip(entry, 'format');
         continue;
@@ -452,16 +623,17 @@ class _Scan {
     }
   }
 
-  /// Adds [instrumental] (when the song has none) and [lyric] (when it has
-  /// no lyrics) to a song already in the library; whether the instrumental
-  /// was added.
+  /// Adds [instrumental] (when the song has none, or its own is gone) and
+  /// [lyric] (when it has no lyrics) to a song already in the library;
+  /// whether the instrumental was added.
   Future<bool> _join(
     Song song,
     _Probed? instrumental,
     FolderEntry? lyric,
   ) async {
     var joined = false;
-    if (instrumental != null && song.file(MediaKind.instrumental) == null) {
+    if (instrumental != null &&
+        !(song.file(MediaKind.instrumental)?.available ?? false)) {
       await library.setMedia(
         song.id,
         instrumental.media(MediaKind.instrumental),
@@ -485,24 +657,51 @@ class _Scan {
     FolderEntry? lyric,
     String? guessedTitle,
   ) async {
-    final title =
+    final rawTitle =
         original.tag('title') ??
         (guessedTitle ?? p.basenameWithoutExtension(original.entry.name))
             .replaceFirst(RegExp(r'^\d+\s*[-._]\s*'), '')
             .trim();
+    final title = rawTitle.isEmpty ? original.entry.name : rawTitle;
+    final artist = original.tag('artist') ?? '';
     if (instrumental != null) await _deleteCover(instrumental.coverPath);
+
+    // A moved or renamed file, or a song restored from a backup: the missing
+    // song with this key takes the file and keeps its lyrics and plays.
+    final missing = await library.missingSongIdForKey(
+      LibraryDatabase.songKey(
+        title,
+        artist,
+        original.durationMs,
+        original.tag('isrc'),
+      ),
+    );
+    if (missing != null) {
+      await library.setMedia(missing, original.media(MediaKind.original));
+      await store.putFile(
+        _row(original.entry, FolderFileRole.original, missing),
+      );
+      await library.fillTags(missing, original.tags);
+      await _fillCover(missing, original);
+      final song = await library.song(missing);
+      if (song != null) await _join(song, instrumental, lyric);
+      relinked++;
+      return;
+    }
+
     final id = await library.insertSong(
       NewSong(
-        title: title.isEmpty ? original.entry.name : title,
-        artist: original.tag('artist') ?? '',
+        title: title,
+        artist: artist,
         album: original.tag('album') ?? '',
         durationMs: original.durationMs,
         isrc: original.tag('isrc'),
-        coverPath: original.coverPath,
+        coverPath: original.coverPath ?? await _folderCover(original.entry.dir),
         media: [
           original.media(MediaKind.original),
           ?instrumental?.media(MediaKind.instrumental),
         ],
+        tags: original.tags,
       ),
     );
     added.add(id);
@@ -521,6 +720,44 @@ class _Scan {
         source: 'embedded',
       );
     }
+  }
+
+  /// The folder image of [dir] (or of its parent, for a disc folder such
+  /// as `CD1`), copied once into `covers/` and shared by its songs.
+  Future<String?> _folderCover(String dir) async {
+    FolderEntry? image(String directory) {
+      final here = [
+        for (final entry in listing)
+          if (entry.dir == directory) entry,
+      ];
+      final name = folderImage([for (final entry in here) entry.name]);
+      return name == null ? null : here.firstWhere((e) => e.name == name);
+    }
+
+    var found = image(dir);
+    if (found == null &&
+        dir.isNotEmpty &&
+        isDiscFolder(p.posix.basename(dir))) {
+      found = image(dir.contains('/') ? p.posix.dirname(dir) : '');
+    }
+    if (found == null) return null;
+    final entry = found;
+    if (_folderCovers.containsKey(entry.uri)) return _folderCovers[entry.uri];
+    final target = p.join(
+      service.storage.covers.path,
+      'folder_${LibraryFolderService._fnv(entry.uri)}_${entry.modified}'
+      '${p.extension(entry.name).toLowerCase()}',
+    );
+    String? path;
+    try {
+      if (!File(target).existsSync()) {
+        await PlatformBridge.copyDocumentToFile(entry.uri, target);
+      }
+      path = File(target).existsSync() ? target : null;
+    } catch (error) {
+      _log.w('Cannot read ${entry.dir}/${entry.name}', error);
+    }
+    return _folderCovers[entry.uri] = path;
   }
 
   Future<bool> _importLyrics(int songId, FolderEntry entry) async {
@@ -568,30 +805,66 @@ class _Scan {
     );
   }
 
-  /// Tags, duration and decodability through a descriptor; null when it
-  /// cannot be read.
+  /// Whether FFmpegKit can convert [entry] on first play.
+  bool _canConvert(FolderEntry entry) =>
+      convertedExtensions.contains(_extension(entry.name)) &&
+      transcoderAvailable;
+
+  bool get transcoderAvailable =>
+      !identical(service.transcoder, FolderTranscoder.none);
+
+  /// Tags, duration and decodability through a descriptor (FFprobe for a
+  /// format Symphonia cannot open); null when it cannot be read.
   Future<_Probed?> _probe(FolderEntry entry, {String? coverBase}) async {
+    Map<String, dynamic>? symphonia;
     try {
-      final probe = await _withDocument(
+      final read = await _withDocument(
         entry,
         (path) => PlatformBridge.probeAudio(path, coverBase: coverBase),
       );
-      return _Probed(entry, probe);
+      if (read['decodable'] == true) return _Probed(entry, read);
+      symphonia = read;
     } catch (error) {
-      _log.w('Cannot read ${entry.dir}/${entry.name}', error);
-      return null;
+      if (!convertedExtensions.contains(_extension(entry.name))) {
+        _log.w('Cannot read ${entry.dir}/${entry.name}', error);
+        return null;
+      }
     }
+    if (convertedExtensions.contains(_extension(entry.name)) &&
+        transcoderAvailable) {
+      try {
+        final tags = await service.transcoder.probe(entry.uri);
+        if (tags != null) {
+          return _Probed(entry, {
+            ...?symphonia,
+            ...tags,
+            'coverPath': symphonia?['coverPath'],
+          }, decodable: false);
+        }
+      } catch (error) {
+        _log.w('FFprobe cannot read ${entry.dir}/${entry.name}', error);
+      }
+    }
+    if (symphonia != null) return _Probed(entry, symphonia, decodable: false);
+    return null;
   }
 
+  /// A lyrics file's text, streamed through the host (no descriptor
+  /// reopen, ADR-018).
   Future<String?> _readText(FolderEntry entry) async {
+    final scratch = service.storage.folderScratch;
+    final copy = File(
+      p.join(scratch.path, 'lyrics_${DateTime.now().microsecondsSinceEpoch}'),
+    );
     try {
-      return utf8.decode(
-        await PlatformBridge.readDocument(entry.uri),
-        allowMalformed: true,
-      );
+      await scratch.create(recursive: true);
+      await PlatformBridge.copyDocumentToFile(entry.uri, copy.path);
+      return utf8.decode(await copy.readAsBytes(), allowMalformed: true);
     } catch (error) {
       _log.w('Cannot read ${entry.dir}/${entry.name}', error);
       return null;
+    } finally {
+      if (copy.existsSync()) await copy.delete();
     }
   }
 

@@ -128,10 +128,14 @@ class FolderEntry {
   final int modified;
 }
 
-/// A document opened for reading: Rust reads [path] (`/proc/self/fd/<n>`)
-/// until [handle] is closed with [PlatformBridge.closeDocuments]. Dart cannot
-/// open it again (ADR-018); it reads documents with
-/// [PlatformBridge.readDocument].
+/// What `listLibraryFolder` found: [files] when the folder could be read,
+/// otherwise why not.
+enum FolderListingState { ok, offline, access }
+
+typedef FolderListing = ({FolderListingState state, List<FolderEntry> files});
+
+/// A document opened for reading: [path] (`/proc/self/fd/<n>`) opens like a
+/// file until [handle] is closed with [PlatformBridge.closeDocuments].
 typedef OpenedDocument = ({String path, int handle});
 
 /// The only caller of the backend. Every method is a typed wrapper over one
@@ -786,20 +790,34 @@ class PlatformBridge {
       await backendChannel.invokeMethod<bool>('deleteDocument', {'uri': uri}) ??
       false;
 
-  /// Every audio and lyrics file under the music folder [treeUri], or null
-  /// when Kalao no longer has access to it.
-  static Future<List<FolderEntry>?> listLibraryFolder(String treeUri) async {
-    final rows = await backendChannel.invokeMethod<List<Object?>>(
+  /// Every audio, lyrics and image file under the music folder [treeUri];
+  /// none when its storage is not mounted (`offline`) or Kalao has no access
+  /// any more (`access`).
+  static Future<FolderListing> listLibraryFolder(String treeUri) async {
+    final reply = await backendChannel.invokeMethod<Map<Object?, Object?>>(
       'listLibraryFolder',
       {'treeUri': treeUri},
     );
-    return rows == null
-        ? null
-        : [
-            for (final row in rows)
-              FolderEntry.fromMap((row! as Map).cast<String, Object?>()),
-          ];
+    final state =
+        FolderListingState.values.asNameMap()[reply?['state']] ??
+        FolderListingState.access;
+    return (
+      state: state,
+      files: [
+        for (final row in reply?['files'] as List<Object?>? ?? const [])
+          FolderEntry.fromMap((row! as Map).cast<String, Object?>()),
+      ],
+    );
   }
+
+  /// Copies the document [uri] to [path] (streamed, so it works for every
+  /// provider); the number of bytes copied.
+  static Future<int> copyDocumentToFile(String uri, String path) async =>
+      await backendChannel.invokeMethod<int>('copyDocumentToFile', {
+        'uri': uri,
+        'path': path,
+      }) ??
+      0;
 
   /// Opens the document [uri] for reading (a music-folder file).
   static Future<OpenedDocument> openDocument(String uri) async {
@@ -811,17 +829,6 @@ class PlatformBridge {
       return (path: path, handle: handle);
     }
     throw StateError('openDocument returned no descriptor for $uri');
-  }
-
-  /// The bytes of the small document [uri] (a lyrics file, 4 MiB at most).
-  static Future<Uint8List> readDocument(String uri) async {
-    final bytes = await backendChannel.invokeMethod<Uint8List>('readDocument', {
-      'uri': uri,
-    });
-    if (bytes == null) {
-      throw StateError('readDocument returned nothing for $uri');
-    }
-    return bytes;
   }
 
   static Future<void> closeDocuments(List<int> handles) => handles.isEmpty

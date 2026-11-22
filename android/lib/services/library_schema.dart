@@ -3,7 +3,7 @@
 
 /// `kalao_library.db`. Bump [libraryVersion] and add a step to
 /// [libraryMigrations] for every change; never edit a released step.
-const libraryVersion = 3;
+const libraryVersion = 4;
 
 const libraryMigrations = <int, List<String>>{
   1: [
@@ -110,6 +110,42 @@ CREATE TABLE folder_file (
 )''',
     'CREATE INDEX folder_file_folder_idx ON folder_file(folder_id)',
     'CREATE INDEX folder_file_song_idx ON folder_file(song_id)',
+  ],
+  // v4: the rest of Mornye's Local Library (M5B): richer tags, unavailable
+  // folder files, reader versions, playlists, artwork lookups.
+  4: [
+    'ALTER TABLE song ADD COLUMN album_artist TEXT',
+    'ALTER TABLE song ADD COLUMN track_no INTEGER',
+    'ALTER TABLE song ADD COLUMN disc_no INTEGER',
+    'ALTER TABLE song ADD COLUMN year INTEGER',
+    'ALTER TABLE song ADD COLUMN genre TEXT',
+    'ALTER TABLE song ADD COLUMN composer TEXT',
+    'CREATE INDEX song_album_idx ON song(album COLLATE NOCASE)',
+    'ALTER TABLE media_file ADD COLUMN available INTEGER NOT NULL DEFAULT 1',
+    'ALTER TABLE media_file ADD COLUMN decodable INTEGER NOT NULL DEFAULT 1',
+    'CREATE INDEX media_path_idx ON media_file(path)',
+    'ALTER TABLE folder_file ADD COLUMN scan_version INTEGER NOT NULL DEFAULT 0',
+    '''
+CREATE TABLE playlist (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+)''',
+    '''
+CREATE TABLE playlist_item (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  playlist_id INTEGER NOT NULL REFERENCES playlist(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL,
+  song_id INTEGER NOT NULL REFERENCES song(id) ON DELETE CASCADE
+)''',
+    'CREATE INDEX playlist_item_idx ON playlist_item(playlist_id, position)',
+    '''
+CREATE TABLE album_artwork (
+  album_key TEXT PRIMARY KEY,
+  state TEXT NOT NULL,
+  checked_at INTEGER NOT NULL
+)''',
   ],
 };
 
