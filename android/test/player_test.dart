@@ -14,6 +14,7 @@ import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/player_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
 import 'package:kalao/screens/now_playing_screen.dart';
+import 'package:kalao/screens/queue_tab.dart';
 import 'package:kalao/services/history_database.dart';
 import 'package:kalao/services/karaoke_deck.dart';
 import 'package:kalao/services/library_database.dart';
@@ -250,7 +251,9 @@ void main() {
     );
   });
 
-  testWidgets('landscape puts the controls beside the lyrics', (tester) async {
+  testWidgets('landscape floats compact controls that a tap hides', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(2400, 1080);
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
@@ -280,16 +283,34 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
+    expect(find.byType(PlayerControls), findsNothing);
     final lyrics = tester.getRect(find.byType(LyricsView));
-    final controls = tester.getRect(find.byType(PlayerControls));
-    expect(controls.left, greaterThanOrEqualTo(lyrics.right));
-    // The lyrics keep the full body height (the screen is ~393 dp tall).
+    // The lyrics keep the whole body (the screen is ~873 × 393 dp).
+    expect(lyrics.width, greaterThan(800));
     expect(lyrics.height, greaterThan(300));
+    final mode = tester.getRect(find.byType(PlayModeButton));
+    final play = tester.getRect(find.byIcon(Icons.replay_10));
+    final seek = tester.getRect(find.byType(Slider));
+    expect(mode.left, lessThan(lyrics.width / 4));
+    expect(play.bottom, lessThanOrEqualTo(seek.top + 1));
+    expect(seek.center.dx, closeTo(lyrics.center.dx, 2));
+    expect(seek.width, lessThan(lyrics.width / 2));
+
+    // A tap beside the text hides the controls; another brings them back.
+    await tester.tapAt(Offset(lyrics.right - 8, lyrics.top + 8));
+    await tester.pump();
+    expect(find.byType(PlayModeButton), findsNothing);
+    await tester.tapAt(Offset(lyrics.right - 8, lyrics.top + 8));
+    await tester.pump();
+    expect(find.byType(PlayModeButton), findsOneWidget);
   });
 
   testWidgets('now playing shows pinyin and steps untimed lines', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
     final song = (await tester.runAsync(() async {
       final song = await addSong();
       await services.lyrics.importText(song.id, '[Verse]\n月亮\n你好\nlast line');

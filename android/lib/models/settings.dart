@@ -43,6 +43,23 @@ enum BackupSchedule {
   final Duration? interval;
 }
 
+/// When music folders are scanned (Mornye's auto scan). A due scan runs
+/// when the app is opened (ADR-016); a folder whose storage was offline is
+/// also scanned when the app resumes.
+enum FolderScanSchedule {
+  onOpen(Duration.zero),
+  daily(Duration(days: 1)),
+  weekly(Duration(days: 7)),
+  manual(null);
+
+  const FolderScanSchedule(this.interval);
+
+  final Duration? interval;
+}
+
+/// The Library tab's views (FEATURES 6.11); the last one is remembered.
+enum LibraryTab { songs, albums, artists, genres, folders, playlists }
+
 /// App preferences, stored as one JSON object in shared_preferences.
 /// Unknown or missing keys fall back to defaults, so adding a field never
 /// breaks an existing install. Secrets never go here (secure storage).
@@ -74,6 +91,8 @@ class AppSettings {
     this.checkUpdates = true,
     this.autoFetchLyrics = true,
     this.extensionDeveloperMode = false,
+    this.folderScanSchedule = FolderScanSchedule.onOpen,
+    this.libraryTab = LibraryTab.songs,
   });
 
   factory AppSettings.fromJson(Map<String, dynamic> json) => AppSettings(
@@ -108,6 +127,11 @@ class AppSettings {
     checkUpdates: json['checkUpdates'] as bool? ?? true,
     autoFetchLyrics: json['autoFetchLyrics'] as bool? ?? true,
     extensionDeveloperMode: json['extensionDeveloperMode'] as bool? ?? false,
+    folderScanSchedule:
+        FolderScanSchedule.values.asNameMap()[json['folderScanSchedule']] ??
+        FolderScanSchedule.onOpen,
+    libraryTab:
+        LibraryTab.values.asNameMap()[json['libraryTab']] ?? LibraryTab.songs,
   );
 
   /// Keys that describe this device or this install rather than the user's
@@ -122,6 +146,7 @@ class AppSettings {
     'backupKeep',
     'backupIncludeMedia',
     'extensionDeveloperMode',
+    'libraryTab',
   };
 
   /// `settings.json` in a backup (DATA_MODEL.md §3).
@@ -216,6 +241,12 @@ class AppSettings {
   /// installs from a folder.
   final bool extensionDeveloperMode;
 
+  /// When music folders are scanned.
+  final FolderScanSchedule folderScanSchedule;
+
+  /// The Library view shown last.
+  final LibraryTab libraryTab;
+
   Map<String, dynamic> toJson() => {
     'setupCompleted': setupCompleted,
     'themeMode': themeMode.name,
@@ -242,6 +273,8 @@ class AppSettings {
     'checkUpdates': checkUpdates,
     'autoFetchLyrics': autoFetchLyrics,
     'extensionDeveloperMode': extensionDeveloperMode,
+    'folderScanSchedule': folderScanSchedule.name,
+    'libraryTab': libraryTab.name,
   };
 
   AppSettings copyWith({
@@ -270,6 +303,8 @@ class AppSettings {
     bool? checkUpdates,
     bool? autoFetchLyrics,
     bool? extensionDeveloperMode,
+    FolderScanSchedule? folderScanSchedule,
+    LibraryTab? libraryTab,
   }) => AppSettings(
     setupCompleted: setupCompleted ?? this.setupCompleted,
     themeMode: themeMode ?? this.themeMode,
@@ -303,6 +338,8 @@ class AppSettings {
     autoFetchLyrics: autoFetchLyrics ?? this.autoFetchLyrics,
     extensionDeveloperMode:
         extensionDeveloperMode ?? this.extensionDeveloperMode,
+    folderScanSchedule: folderScanSchedule ?? this.folderScanSchedule,
+    libraryTab: libraryTab ?? this.libraryTab,
   );
 
   @override
@@ -332,7 +369,9 @@ class AppSettings {
       other.backupIncludeMedia == backupIncludeMedia &&
       other.checkUpdates == checkUpdates &&
       other.autoFetchLyrics == autoFetchLyrics &&
-      other.extensionDeveloperMode == extensionDeveloperMode;
+      other.extensionDeveloperMode == extensionDeveloperMode &&
+      other.folderScanSchedule == folderScanSchedule &&
+      other.libraryTab == libraryTab;
 
   @override
   int get hashCode => Object.hashAll([
@@ -361,5 +400,7 @@ class AppSettings {
     checkUpdates,
     autoFetchLyrics,
     extensionDeveloperMode,
+    folderScanSchedule,
+    libraryTab,
   ]);
 }

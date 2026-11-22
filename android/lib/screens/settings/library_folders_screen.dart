@@ -3,12 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/models/library_folder.dart';
+import 'package:kalao/models/settings.dart';
 import 'package:kalao/providers/library_folder_provider.dart';
+import 'package:kalao/providers/settings_provider.dart';
+import 'package:kalao/screens/library/library_pages.dart';
 import 'package:kalao/services/library_folder_service.dart';
 import 'package:kalao/theme/app_tokens.dart';
 
-/// Music folders (FEATURES 6.8): add, scan and remove folders whose songs
-/// play in place.
+enum _LibraryAction { fullScan, cleanup, duplicates, artwork }
+
+/// Music folders (FEATURES 6.8, 6.9, 6.13): add, scan and remove folders
+/// whose songs play in place, choose how often they are scanned, and the
+/// Library's maintenance (Mornye's Local Library settings).
 class LibraryFoldersScreen extends ConsumerWidget {
   const LibraryFoldersScreen({super.key});
 
@@ -24,9 +30,12 @@ class LibraryFoldersScreen extends ConsumerWidget {
       context,
       result.lostAccess
           ? l10n.foldersAccessLost
-          : l10n.foldersScanResult(
+          : result.offline
+          ? l10n.foldersOffline
+          : l10n.foldersScanSummary(
               result.added.length,
               result.updated,
+              result.relinked,
               result.removed,
             ),
     );
@@ -71,10 +80,77 @@ class LibraryFoldersScreen extends ConsumerWidget {
     await ref.read(libraryFoldersProvider.notifier).remove(folder);
   }
 
+  static FolderScanResult _sum(List<FolderScanResult> results) =>
+      FolderScanResult(
+        added: [for (final r in results) ...r.added],
+        updated: results.fold(0, (n, r) => n + r.updated),
+        relinked: results.fold(0, (n, r) => n + r.relinked),
+        removed: results.fold(0, (n, r) => n + r.removed),
+      );
+
+  Future<void> _cleanup(BuildContext context, WidgetRef ref) async {
+    final l10n = AppLocalizations.of(context);
+    final controller = ref.read(libraryFoldersProvider.notifier);
+    final missing = await controller.missing();
+    if (!context.mounted) return;
+    if (missing.songs == 0) {
+      _show(context, l10n.foldersCleanupNone);
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.foldersCleanup),
+        content: Text(
+          l10n.foldersCleanupConfirm(missing.songs, missing.withLyrics),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l10n.actionCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(l10n.actionDelete),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final removed = await controller.cleanupMissing();
+    if (context.mounted) _show(context, l10n.foldersCleanupDone(removed));
+  }
+
+  Future<void> _action(
+    BuildContext context,
+    WidgetRef ref,
+    _LibraryAction action,
+  ) async {
+    final controller = ref.read(libraryFoldersProvider.notifier);
+    switch (action) {
+      case _LibraryAction.fullScan:
+        final results = await controller.scanAll(foreground: true, full: true);
+        if (context.mounted && results.isNotEmpty) {
+          _report(context, _sum(results));
+        }
+      case _LibraryAction.cleanup:
+        await _cleanup(context, ref);
+      case _LibraryAction.duplicates:
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const DuplicatesScreen()),
+        );
+      case _LibraryAction.artwork:
+        await findMissingArtwork(context, ref);
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final state = ref.watch(libraryFoldersProvider);
+    final schedule = ref.watch(
+      settingsProvider.select((settings) => settings.folderScanSchedule),
+    );
     final controller = ref.read(libraryFoldersProvider.notifier);
     final scan = state.scan;
     return Scaffold(
@@ -89,15 +165,31 @@ class LibraryFoldersScreen extends ConsumerWidget {
                 : () async {
                     final results = await controller.scanAll(foreground: true);
                     if (!context.mounted || results.isEmpty) return;
-                    _report(
-                      context,
-                      FolderScanResult(
-                        added: [for (final r in results) ...r.added],
-                        updated: results.fold(0, (n, r) => n + r.updated),
-                        removed: results.fold(0, (n, r) => n + r.removed),
-                      ),
-                    );
+                    _report(context, _sum(results));
                   },
+          ),
+          PopupMenuButton<_LibraryAction>(
+            onSelected: (action) => _action(context, ref, action),
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: _LibraryAction.fullScan,
+                enabled: !state.scanning && state.folders.isNotEmpty,
+                child: Text(l10n.foldersFullScan),
+              ),
+              PopupMenuItem(
+                value: _LibraryAction.cleanup,
+                enabled: !state.scanning,
+                child: Text(l10n.foldersCleanup),
+              ),
+              PopupMenuItem(
+                value: _LibraryAction.duplicates,
+                child: Text(l10n.duplicatesTitle),
+              ),
+              PopupMenuItem(
+                value: _LibraryAction.artwork,
+                child: Text(l10n.artworkTitle),
+              ),
+            ],
           ),
         ],
         bottom: scan == null
@@ -125,6 +217,28 @@ class LibraryFoldersScreen extends ConsumerWidget {
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.schedule),
+            title: Text(l10n.foldersAutoScan),
+            trailing: DropdownButton<FolderScanSchedule>(
+              value: schedule,
+              onChanged: (value) {
+                if (value == null) return;
+                ref
+                    .read(settingsProvider.notifier)
+                    .setFolderScanSchedule(value);
+              },
+              items: [
+                for (final (value, label) in [
+                  (FolderScanSchedule.onOpen, l10n.foldersAutoScanOnOpen),
+                  (FolderScanSchedule.daily, l10n.foldersAutoScanDaily),
+                  (FolderScanSchedule.weekly, l10n.foldersAutoScanWeekly),
+                  (FolderScanSchedule.manual, l10n.foldersAutoScanManual),
+                ])
+                  DropdownMenuItem(value: value, child: Text(label)),
+              ],
             ),
           ),
           for (final folder in state.folders)
@@ -184,11 +298,14 @@ class _FolderTile extends ConsumerWidget {
       if (scan case final scan? when scan.total > 0)
         l10n.foldersProgress(scan.done, scan.total),
       if (folder.accessLost) l10n.foldersAccessLost,
+      if (folder.isOffline) l10n.foldersOffline,
       if (folder.skipped > 0) l10n.foldersSkipped(folder.skipped),
     ];
     return ListTile(
       leading: Icon(
-        folder.accessLost ? Icons.folder_off_outlined : Icons.folder_outlined,
+        folder.accessLost || folder.isOffline
+            ? Icons.folder_off_outlined
+            : Icons.folder_outlined,
         color: folder.accessLost ? colors.error : null,
       ),
       title: Text(folder.name),

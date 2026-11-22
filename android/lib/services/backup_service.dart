@@ -523,6 +523,9 @@ class BackupService {
     'favorite',
     'library_folder',
     'folder_file',
+    'playlist',
+    'playlist_item',
+    'album_artwork',
   ];
 
   Future<T> _withAttached<T>(
@@ -594,67 +597,125 @@ class BackupService {
       p.join(services.storage.covers.path, p.basename(path));
 
   /// Returns the ids of the songs added.
-  Future<List<int>> _mergeLibrary(String path) =>
-      _withAttached(services.library.db, path, (txn) async {
-        final byKey = <String, int>{
-          for (final row in await txn.rawQuery(
-            'SELECT song_key, MIN(id) AS id FROM main.song GROUP BY song_key',
-          ))
-            row['song_key']! as String: row['id']! as int,
-        };
-        final songColumns = (await _columns(
-          txn,
-          'song',
-        )).where((c) => c != 'id').toList();
-        final ids = <int, int>{};
-        final added = <int>[];
-        for (final row in await txn.rawQuery(
-          'SELECT * FROM src.song ORDER BY id',
-        )) {
-          final key = row['song_key']! as String;
-          final existing = byKey[key];
-          if (existing != null) {
-            ids[row['id']! as int] = existing;
-            continue;
-          }
-          final cover = row['cover_path'] as String?;
-          final id = await txn.insert('song', {
-            for (final column in songColumns) column: row[column],
-            'cover_path': cover == null ? null : _coverPath(cover),
-          });
-          ids[row['id']! as int] = id;
-          byKey[key] = id;
-          added.add(id);
-        }
-
-        final mediaColumns = (await _columns(
-          txn,
-          'media_file',
-        )).where((c) => c != 'id').toList();
-        for (final row in await txn.rawQuery('SELECT * FROM src.media_file')) {
-          final songId = ids[row['song_id']];
-          if (songId == null) continue;
-          await txn.insert('media_file', {
-            for (final column in mediaColumns) column: row[column],
-            'song_id': songId,
-            'path': _mediaPath(row['path']! as String),
-          }, conflictAlgorithm: ConflictAlgorithm.ignore);
-        }
-
-        for (final row in await txn.rawQuery('SELECT * FROM src.favorite')) {
-          final songId = ids[row['song_id']];
-          if (songId == null) continue;
-          await txn.insert('favorite', {
-            'song_id': songId,
-            'created_at': row['created_at'],
-          }, conflictAlgorithm: ConflictAlgorithm.ignore);
-        }
-
-        for (final MapEntry(key: from, value: to) in ids.entries) {
-          await _mergeLyrics(txn, from, to);
-        }
-        return added;
+  Future<List<int>> _mergeLibrary(
+    String path,
+  ) => _withAttached(services.library.db, path, (txn) async {
+    final byKey = <String, int>{
+      for (final row in await txn.rawQuery(
+        'SELECT song_key, MIN(id) AS id FROM main.song GROUP BY song_key',
+      ))
+        row['song_key']! as String: row['id']! as int,
+    };
+    final songColumns = (await _columns(
+      txn,
+      'song',
+    )).where((c) => c != 'id').toList();
+    final ids = <int, int>{};
+    final added = <int>[];
+    for (final row in await txn.rawQuery(
+      'SELECT * FROM src.song ORDER BY id',
+    )) {
+      final key = row['song_key']! as String;
+      final existing = byKey[key];
+      if (existing != null) {
+        ids[row['id']! as int] = existing;
+        continue;
+      }
+      final cover = row['cover_path'] as String?;
+      final id = await txn.insert('song', {
+        for (final column in songColumns) column: row[column],
+        'cover_path': cover == null ? null : _coverPath(cover),
       });
+      ids[row['id']! as int] = id;
+      byKey[key] = id;
+      added.add(id);
+    }
+
+    final mediaColumns = (await _columns(
+      txn,
+      'media_file',
+    )).where((c) => c != 'id').toList();
+    for (final row in await txn.rawQuery('SELECT * FROM src.media_file')) {
+      final songId = ids[row['song_id']];
+      if (songId == null) continue;
+      await txn.insert('media_file', {
+        for (final column in mediaColumns) column: row[column],
+        'song_id': songId,
+        'path': _mediaPath(row['path']! as String),
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
+
+    for (final row in await txn.rawQuery('SELECT * FROM src.favorite')) {
+      final songId = ids[row['song_id']];
+      if (songId == null) continue;
+      await txn.insert('favorite', {
+        'song_id': songId,
+        'created_at': row['created_at'],
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
+
+    for (final MapEntry(key: from, value: to) in ids.entries) {
+      await _mergeLyrics(txn, from, to);
+    }
+    await _mergePlaylists(txn, ids);
+    await txn.execute(
+      'INSERT OR IGNORE INTO main.album_artwork SELECT * FROM src.album_artwork',
+    );
+    return added;
+  });
+
+  /// Playlists match by name (FEATURES 6.14); a matched playlist gets the
+  /// backup's songs it does not have yet, at its end.
+  Future<void> _mergePlaylists(Transaction txn, Map<int, int> songIds) async {
+    final byName = <String, int>{
+      for (final row in await txn.rawQuery(
+        'SELECT id, name FROM main.playlist',
+      ))
+        (row['name']! as String).toLowerCase(): row['id']! as int,
+    };
+    for (final playlist in await txn.rawQuery(
+      'SELECT * FROM src.playlist ORDER BY id',
+    )) {
+      final name = playlist['name']! as String;
+      var id = byName[name.toLowerCase()];
+      if (id == null) {
+        id = await txn.insert('playlist', {
+          'name': name,
+          'created_at': playlist['created_at'],
+          'updated_at': playlist['updated_at'],
+        });
+        byName[name.toLowerCase()] = id;
+      }
+      final present = {
+        for (final row in await txn.rawQuery(
+          'SELECT song_id FROM main.playlist_item WHERE playlist_id = ?',
+          [id],
+        ))
+          row['song_id']! as int,
+      };
+      var position =
+          Sqflite.firstIntValue(
+            await txn.rawQuery(
+              'SELECT MAX(position) FROM main.playlist_item WHERE playlist_id = ?',
+              [id],
+            ),
+          ) ??
+          -1;
+      for (final item in await txn.rawQuery(
+        'SELECT song_id FROM src.playlist_item WHERE playlist_id = ? '
+        'ORDER BY position, id',
+        [playlist['id']],
+      )) {
+        final songId = songIds[item['song_id']];
+        if (songId == null || !present.add(songId)) continue;
+        await txn.insert('playlist_item', {
+          'playlist_id': id,
+          'position': ++position,
+          'song_id': songId,
+        });
+      }
+    }
+  }
 
   /// The backup's current lyrics become a new version when they are newer
   /// than the library's; the library's `human` layers are kept on lines
