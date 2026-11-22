@@ -47,7 +47,7 @@ fn probe(media: &Media) -> Result<ProbeResult, AudioError> {
                 hint.with_extension(&extension);
             }
             Box::new(
-                crate::lent::open_file(path)
+                crate::lent::open_lent(path)
                     .map_err(|error| AudioError::Open(error.to_string()))?,
             )
         }
