@@ -7,7 +7,7 @@ class AppInfo {
 
   /// Strict semver (the extension engine parses it). Set it with
   /// `scripts/bump_version.sh`, which also updates pubspec.yaml.
-  static const String version = '0.2.0-alpha';
+  static const String version = '0.2.1-alpha';
 
   /// Extension developer mode exists only in alpha and beta builds; a
   /// stable release never offers it, whatever the settings say.
