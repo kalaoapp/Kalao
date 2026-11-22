@@ -1,11 +1,12 @@
 // Derived from Mornye (https://github.com/mornyeapp/Mornye), Copyright 2026 zarzet,
 // LGPL-3.0-only. Modified for Kalao.
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart' as material_ui;
 import 'package:kalao/theme/app_tokens.dart';
 
-/// Builds the Material 3 theme. Only Mornye's Material style is used; its iOS
-/// glass style is not part of Kalao.
+/// Builds the Material 3 theme: Mornye's Material style (its iOS glass style
+/// is not part of Kalao) over the Kalao or Material You scheme.
 class AppTheme {
   AppTheme._();
 
@@ -82,33 +83,189 @@ class AppTheme {
         scrim: scheme.scrim,
       );
 
+  /// Mornye's Material component themes (`lib/theme/app_theme.dart`):
+  /// stadium buttons, filled borderless fields, 20dp cards, 28dp sheets and
+  /// dialogs, a container-toned navigation bar and floating snack bars.
   static ThemeData build(ColorScheme scheme) {
-    final base = ThemeData(useMaterial3: true, colorScheme: scheme);
-    return base.copyWith(
+    final dark = scheme.brightness == Brightness.dark;
+    final control = BorderRadius.circular(AppTokens.radiusControl);
+    const stadiumPadding = EdgeInsets.symmetric(horizontal: 24, vertical: 12);
+    OutlineInputBorder field([BorderSide side = BorderSide.none]) =>
+        OutlineInputBorder(borderRadius: control, borderSide: side);
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: scheme,
       scaffoldBackgroundColor: scheme.surface,
       appBarTheme: AppBarTheme(
+        elevation: 0,
+        scrolledUnderElevation: 3,
         backgroundColor: scheme.surface,
         foregroundColor: scheme.onSurface,
-        surfaceTintColor: Colors.transparent,
+        surfaceTintColor: scheme.surfaceTint,
         centerTitle: false,
+        systemOverlayStyle: SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+          systemNavigationBarColor: scheme.surfaceContainer,
+          systemNavigationBarIconBrightness: dark
+              ? Brightness.light
+              : Brightness.dark,
+        ),
       ),
       cardTheme: CardThemeData(
         elevation: 0,
         color: scheme.surfaceContainerLow,
+        surfaceTintColor: scheme.surfaceTint,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppTokens.radiusLarge),
+          borderRadius: BorderRadius.circular(AppTokens.radiusCard),
         ),
         margin: EdgeInsets.zero,
       ),
-      listTileTheme: const ListTileThemeData(
-        contentPadding: EdgeInsets.symmetric(horizontal: AppTokens.space16),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          elevation: 1,
+          shape: const StadiumBorder(),
+          padding: stadiumPadding,
+        ),
       ),
-      snackBarTheme: const SnackBarThemeData(
-        behavior: SnackBarBehavior.floating,
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          shape: const StadiumBorder(),
+          padding: stadiumPadding,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          shape: const StadiumBorder(),
+          padding: stadiumPadding,
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          shape: const StadiumBorder(),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        ),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        elevation: 3,
+        shape: RoundedRectangleBorder(borderRadius: control),
+        backgroundColor: scheme.primaryContainer,
+        foregroundColor: scheme.onPrimaryContainer,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: scheme.surfaceContainerHigh,
+        border: field(),
+        enabledBorder: field(),
+        focusedBorder: field(BorderSide(color: scheme.primary, width: 2)),
+        errorBorder: field(BorderSide(color: scheme.error)),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 16,
+        ),
+      ),
+      listTileTheme: ListTileThemeData(
+        shape: RoundedRectangleBorder(borderRadius: control),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppTokens.space16,
+          vertical: AppTokens.space4,
+        ),
+      ),
+      dialogTheme: DialogThemeData(
+        elevation: 6,
+        backgroundColor: scheme.surfaceContainerHigh,
+        surfaceTintColor: scheme.surfaceTint,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTokens.radiusSheet),
+        ),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        constraints: BoxConstraints(maxWidth: 640),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppTokens.radiusSheet),
+          ),
+        ),
       ),
       navigationBarTheme: NavigationBarThemeData(
+        elevation: 0,
         backgroundColor: scheme.surfaceContainer,
         indicatorColor: scheme.secondaryContainer,
+        surfaceTintColor: scheme.surfaceTint,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: control),
+        backgroundColor: scheme.inverseSurface,
+        contentTextStyle: TextStyle(color: scheme.onInverseSurface),
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: scheme.primary,
+        linearTrackColor: scheme.surfaceContainerHighest,
+        circularTrackColor: scheme.surfaceContainerHighest,
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? scheme.onPrimary
+              : scheme.outline,
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? scheme.primary
+              : scheme.surfaceContainerHighest,
+        ),
+        thumbIcon: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? Icon(Icons.check, color: scheme.primary)
+              : null,
+        ),
+      ),
+      chipTheme: ChipThemeData(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTokens.radiusCard),
+        ),
+        backgroundColor: scheme.surfaceContainerLow,
+        selectedColor: scheme.secondaryContainer,
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: scheme.surfaceContainerLow,
+        surfaceTintColor: Colors.transparent,
+        elevation: 3,
+        shape: RoundedRectangleBorder(borderRadius: control),
+        menuPadding: const EdgeInsets.symmetric(vertical: AppTokens.space8),
+      ),
+      menuTheme: MenuThemeData(
+        style: MenuStyle(
+          backgroundColor: WidgetStatePropertyAll(scheme.surfaceContainerLow),
+          surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+          elevation: const WidgetStatePropertyAll(3),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.all(AppTokens.space4),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: control),
+          ),
+        ),
+      ),
+      tabBarTheme: TabBarThemeData(
+        indicatorSize: TabBarIndicatorSize.label,
+        indicator: UnderlineTabIndicator(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
+          borderSide: BorderSide(color: scheme.primary, width: 3),
+        ),
+        labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+      ),
+      dividerTheme: DividerThemeData(
+        color: scheme.outlineVariant,
+        thickness: 1,
+        space: 1,
+      ),
+      searchBarTheme: SearchBarThemeData(
+        elevation: const WidgetStatePropertyAll(0),
+        backgroundColor: WidgetStatePropertyAll(scheme.surfaceContainerHigh),
+        shape: const WidgetStatePropertyAll(StadiumBorder()),
       ),
     );
   }

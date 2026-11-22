@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/services/platform_bridge.dart';
 import 'package:kalao/theme/app_tokens.dart';
+import 'package:kalao/widgets/app_page.dart';
 import 'package:kalao/utils/logger.dart';
 import 'package:path/path.dart' as p;
 import 'package:share_plus/share_plus.dart';
@@ -119,27 +120,25 @@ class _LogScreenState extends State<LogScreen> {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final entries = _entries;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.logsTitle),
-        actions: [
-          IconButton(
-            tooltip: l10n.logsCopy,
-            icon: const Icon(Icons.copy_all_outlined),
-            onPressed: entries.isEmpty ? null : _copy,
-          ),
-          IconButton(
-            tooltip: l10n.logsShare,
-            icon: const Icon(Icons.share_outlined),
-            onPressed: entries.isEmpty ? null : _share,
-          ),
-          IconButton(
-            tooltip: l10n.logsClear,
-            icon: const Icon(Icons.delete_sweep_outlined),
-            onPressed: entries.isEmpty ? null : _clear,
-          ),
-        ],
-      ),
+    return AppScrollPage(
+      title: l10n.logsTitle,
+      actions: [
+        IconButton(
+          tooltip: l10n.logsCopy,
+          icon: const Icon(Icons.copy_all_outlined),
+          onPressed: entries.isEmpty ? null : _copy,
+        ),
+        IconButton(
+          tooltip: l10n.logsShare,
+          icon: const Icon(Icons.share_outlined),
+          onPressed: entries.isEmpty ? null : _share,
+        ),
+        IconButton(
+          tooltip: l10n.logsClear,
+          icon: const Icon(Icons.delete_sweep_outlined),
+          onPressed: entries.isEmpty ? null : _clear,
+        ),
+      ],
       body: entries.isEmpty
           ? Center(child: Text(l10n.logsEmpty))
           : RefreshIndicator(

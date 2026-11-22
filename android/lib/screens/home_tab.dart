@@ -15,6 +15,7 @@ import 'package:kalao/screens/queue_tab.dart';
 import 'package:kalao/screens/song_detail_screen.dart';
 import 'package:kalao/services/library_database.dart';
 import 'package:kalao/theme/app_tokens.dart';
+import 'package:kalao/widgets/app_sliver_header.dart';
 import 'package:kalao/widgets/empty_state.dart';
 import 'package:kalao/widgets/song_widgets.dart';
 
@@ -187,10 +188,12 @@ class _HomeTabState extends ConsumerState<HomeTab> {
         if (!didPop) setState(_selected.clear);
       },
       child: Scaffold(
-        appBar: _selecting
-            ? _selectionBar(list)
-            : AppBar(
-                title: Text(l10n.navHome),
+        appBar: _selecting ? _selectionBar(list) : null,
+        body: CustomScrollView(
+          slivers: [
+            if (!_selecting)
+              AppSliverHeader.tabRoot(
+                title: l10n.navHome,
                 actions: [
                   IconButton(
                     tooltip: l10n.statsTitle,
@@ -199,8 +202,6 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                   ),
                 ],
               ),
-        body: CustomScrollView(
-          slivers: [
             if (!_selecting)
               SliverToBoxAdapter(
                 child: Padding(

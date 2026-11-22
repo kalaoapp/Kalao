@@ -5,6 +5,7 @@ import 'package:kalao/models/extension.dart';
 import 'package:kalao/providers/extension_provider.dart';
 import 'package:kalao/screens/extensions/add_repository.dart';
 import 'package:kalao/theme/app_tokens.dart';
+import 'package:kalao/widgets/app_page.dart';
 import 'package:kalao/widgets/empty_state.dart';
 
 /// Browse the trusted repositories (EXTENSIONS.md §7): install and update
@@ -59,123 +60,118 @@ class _RepositoriesScreenState extends ConsumerState<RepositoriesScreen> {
     final listings = ref.watch(
       extensionsProvider.select((state) => state.repositories),
     );
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.extensionRepositories),
-        actions: [
-          IconButton(
-            tooltip: l10n.repositoryRefresh,
-            icon: const Icon(Icons.refresh),
-            onPressed: _refreshing ? null : _refresh,
-          ),
-        ],
-      ),
+    return AppPage(
+      title: l10n.extensionRepositories,
+      actions: [
+        IconButton(
+          tooltip: l10n.repositoryRefresh,
+          icon: const Icon(Icons.refresh),
+          onPressed: _refreshing ? null : _refresh,
+        ),
+      ],
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => addRepository(context, ref),
         icon: const Icon(Icons.add_link),
         label: Text(l10n.repositoryAdd),
       ),
-      body: ListView(
-        padding: const EdgeInsets.only(bottom: 96),
-        children: [
-          if (_refreshing) const LinearProgressIndicator(),
-          if (listings.isEmpty && !_refreshing)
-            EmptyState(
-              icon: Icons.storefront_outlined,
-              title: l10n.repositoryEmptyTitle,
-              body: l10n.repositoryEmptyBody,
+      progress: _refreshing ? double.nan : null,
+      padding: const EdgeInsets.only(bottom: 96),
+      children: [
+        if (_refreshing) const LinearProgressIndicator(),
+        if (listings.isEmpty && !_refreshing)
+          EmptyState(
+            icon: Icons.storefront_outlined,
+            title: l10n.repositoryEmptyTitle,
+            body: l10n.repositoryEmptyBody,
+          ),
+        for (final listing in listings)
+          Card(
+            clipBehavior: Clip.antiAlias,
+            margin: const EdgeInsets.symmetric(
+              horizontal: AppTokens.space16,
+              vertical: AppTokens.space8,
             ),
-          for (final listing in listings)
-            Card(
-              clipBehavior: Clip.antiAlias,
-              margin: const EdgeInsets.symmetric(
-                horizontal: AppTokens.space16,
-                vertical: AppTokens.space8,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // The repository itself, set apart from its extensions.
-                  ColoredBox(
-                    color: theme.colorScheme.surfaceContainerHighest,
-                    child: ListTile(
-                      leading: const Icon(Icons.storefront_outlined),
-                      title: Text(
-                        listing.repository.name,
-                        style: theme.textTheme.titleMedium,
-                      ),
-                      subtitle: Text(listing.repository.url),
-                      trailing: IconButton(
-                        tooltip: l10n.repositoryRemove,
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () =>
-                            removeRepository(context, ref, listing.repository),
-                      ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // The repository itself, set apart from its extensions.
+                ColoredBox(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  child: ListTile(
+                    leading: const Icon(Icons.storefront_outlined),
+                    title: Text(
+                      listing.repository.name,
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    subtitle: Text(listing.repository.url),
+                    trailing: IconButton(
+                      tooltip: l10n.repositoryRemove,
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () =>
+                          removeRepository(context, ref, listing.repository),
                     ),
                   ),
-                  const Divider(height: 1),
-                  if (listing.error case final error?)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppTokens.space16,
-                        AppTokens.space8,
-                        AppTokens.space16,
-                        0,
-                      ),
-                      child: Text(
-                        error,
-                        style: TextStyle(color: theme.colorScheme.error),
-                      ),
+                ),
+                const Divider(height: 1),
+                if (listing.error case final error?)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppTokens.space16,
+                      AppTokens.space8,
+                      AppTokens.space16,
+                      0,
                     ),
-                  for (final entry in listing.entries)
-                    ListTile(
-                      title: Text(entry.name ?? entry.id),
-                      subtitle: Text(
-                        [
-                          l10n.extensionVersion(entry.version),
-                          if (entry.installedVersion case final installed?)
-                            l10n.extensionInstalledVersion(installed),
-                          if (entry.description case final description?
-                              when description.isNotEmpty)
-                            description,
-                        ].join(' · '),
-                      ),
-                      trailing: _installing.contains(entry.id)
-                          ? const SizedBox.square(
-                              dimension: 24,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : switch (entry.status) {
-                              RepositoryEntryStatus.installed => const Icon(
-                                Icons.check,
-                              ),
-                              RepositoryEntryStatus.update => FilledButton(
+                    child: Text(
+                      error,
+                      style: TextStyle(color: theme.colorScheme.error),
+                    ),
+                  ),
+                for (final entry in listing.entries)
+                  ListTile(
+                    title: Text(entry.name ?? entry.id),
+                    subtitle: Text(
+                      [
+                        l10n.extensionVersion(entry.version),
+                        if (entry.installedVersion case final installed?)
+                          l10n.extensionInstalledVersion(installed),
+                        if (entry.description case final description?
+                            when description.isNotEmpty)
+                          description,
+                      ].join(' · '),
+                    ),
+                    trailing: _installing.contains(entry.id)
+                        ? const SizedBox.square(
+                            dimension: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : switch (entry.status) {
+                            RepositoryEntryStatus.installed => const Icon(
+                              Icons.check,
+                            ),
+                            RepositoryEntryStatus.update => FilledButton(
+                              onPressed: listing.repository.keyChanged
+                                  ? null
+                                  : () =>
+                                        _install(listing.repository.url, entry),
+                              child: Text(l10n.extensionUpdate),
+                            ),
+                            RepositoryEntryStatus.available =>
+                              FilledButton.tonal(
                                 onPressed: listing.repository.keyChanged
                                     ? null
                                     : () => _install(
                                         listing.repository.url,
                                         entry,
                                       ),
-                                child: Text(l10n.extensionUpdate),
+                                child: Text(l10n.extensionInstall),
                               ),
-                              RepositoryEntryStatus.available =>
-                                FilledButton.tonal(
-                                  onPressed: listing.repository.keyChanged
-                                      ? null
-                                      : () => _install(
-                                          listing.repository.url,
-                                          entry,
-                                        ),
-                                  child: Text(l10n.extensionInstall),
-                                ),
-                            },
-                    ),
-                  const SizedBox(height: AppTokens.space8),
-                ],
-              ),
+                          },
+                  ),
+                const SizedBox(height: AppTokens.space8),
+              ],
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 }

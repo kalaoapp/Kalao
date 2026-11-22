@@ -6,6 +6,7 @@ import 'package:kalao/models/extension.dart';
 import 'package:kalao/providers/extension_provider.dart';
 import 'package:kalao/services/external_links.dart';
 import 'package:kalao/theme/app_tokens.dart';
+import 'package:kalao/widgets/app_page.dart';
 import 'package:kalao/widgets/extension_widgets.dart';
 import 'package:kalao/widgets/settings_group.dart';
 
@@ -115,192 +116,183 @@ class _ExtensionDetailScreenState extends ConsumerState<ExtensionDetailScreen> {
     final manifest = extension.manifest;
     final status = extensionStatus(l10n, extension);
     final health = extension.health;
-    return Scaffold(
-      appBar: AppBar(title: Text(manifest.name)),
-      body: ListView(
-        padding: const EdgeInsets.only(bottom: AppTokens.space24),
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(AppTokens.space16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  [
-                    l10n.extensionVersion(manifest.version),
-                    if (manifest.author.isNotEmpty) manifest.author,
-                  ].join(' · '),
-                  style: theme.textTheme.bodyMedium,
-                ),
-                if (manifest.description.isNotEmpty) ...[
-                  const SizedBox(height: AppTokens.space8),
-                  Text(manifest.description),
-                ],
-                if (manifest.homepage case final homepage?)
-                  TextButton.icon(
-                    onPressed: () => openExternalUrl(Uri.parse(homepage)),
-                    icon: const Icon(Icons.open_in_new),
-                    label: Text(homepage),
-                  ),
-                if (status != null) ...[
-                  const SizedBox(height: AppTokens.space8),
-                  Text(
-                    status,
-                    style: TextStyle(color: theme.colorScheme.error),
-                  ),
-                ],
-                if (extension.lastError case final error?
-                    when extension.degraded) ...[
-                  const SizedBox(height: AppTokens.space4),
-                  Text(error, style: theme.textTheme.bodySmall),
-                ],
+    return AppPage(
+      title: manifest.name,
+      padding: const EdgeInsets.only(bottom: AppTokens.space24),
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(AppTokens.space16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                [
+                  l10n.extensionVersion(manifest.version),
+                  if (manifest.author.isNotEmpty) manifest.author,
+                ].join(' · '),
+                style: theme.textTheme.bodyMedium,
+              ),
+              if (manifest.description.isNotEmpty) ...[
                 const SizedBox(height: AppTokens.space8),
-                CapabilityChips(capabilities: manifest.capabilities),
+                Text(manifest.description),
               ],
-            ),
-          ),
-          SwitchListTile(
-            title: Text(l10n.extensionEnabled),
-            value: extension.enabled,
-            onChanged: (enabled) =>
-                _guard(() => _controller.setEnabled(extension.id, enabled)),
-          ),
-          if (manifest.settings.isNotEmpty)
-            SettingsGroup(
-              title: l10n.extensionSettings,
-              children: [
-                ExtensionSettingsForm(
-                  extension: extension,
-                  busyAction: _busyAction,
-                  onChanged: (setting, value) => _guard(
-                    () => _controller.setSetting(extension, setting, value),
-                  ),
-                  onAction: (button) => _action(extension, button),
+              if (manifest.homepage case final homepage?)
+                TextButton.icon(
+                  onPressed: () => openExternalUrl(Uri.parse(homepage)),
+                  icon: const Icon(Icons.open_in_new),
+                  label: Text(homepage),
                 ),
+              if (status != null) ...[
+                const SizedBox(height: AppTokens.space8),
+                Text(status, style: TextStyle(color: theme.colorScheme.error)),
               ],
-            ),
+              if (extension.lastError case final error?
+                  when extension.degraded) ...[
+                const SizedBox(height: AppTokens.space4),
+                Text(error, style: theme.textTheme.bodySmall),
+              ],
+              const SizedBox(height: AppTokens.space8),
+              CapabilityChips(capabilities: manifest.capabilities),
+            ],
+          ),
+        ),
+        SettingsSwitchItem(
+          title: l10n.extensionEnabled,
+          value: extension.enabled,
+          onChanged: (enabled) =>
+              _guard(() => _controller.setEnabled(extension.id, enabled)),
+        ),
+        if (manifest.settings.isNotEmpty)
           SettingsGroup(
-            title: l10n.extensionPermissions,
+            title: l10n.extensionSettings,
             children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppTokens.space16,
-                  vertical: AppTokens.space8,
+              ExtensionSettingsForm(
+                extension: extension,
+                busyAction: _busyAction,
+                onChanged: (setting, value) => _guard(
+                  () => _controller.setSetting(extension, setting, value),
                 ),
-                child: HostList(manifest: manifest),
+                onAction: (button) => _action(extension, button),
               ),
             ],
           ),
-          if (manifest.healthChecks > 0)
-            SettingsGroup(
-              title: l10n.extensionHealth,
-              children: [
-                ListTile(
-                  leading: Icon(
-                    health == null
-                        ? Icons.help_outline
-                        : health.ok
-                        ? Icons.check_circle_outline
-                        : Icons.error_outline,
-                    color: health == null
-                        ? null
-                        : health.ok
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.error,
-                  ),
-                  title: Text(
-                    health == null
-                        ? l10n.extensionHealthUnknown
-                        : health.ok
-                        ? l10n.extensionHealthOk
-                        : l10n.extensionHealthFailed,
-                  ),
-                  subtitle: health == null
+        SettingsGroup(
+          title: l10n.extensionPermissions,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppTokens.space16,
+                vertical: AppTokens.space8,
+              ),
+              child: HostList(manifest: manifest),
+            ),
+          ],
+        ),
+        if (manifest.healthChecks > 0)
+          SettingsGroup(
+            title: l10n.extensionHealth,
+            children: [
+              ListTile(
+                leading: Icon(
+                  health == null
+                      ? Icons.help_outline
+                      : health.ok
+                      ? Icons.check_circle_outline
+                      : Icons.error_outline,
+                  color: health == null
                       ? null
-                      : Text(
-                          [
-                            for (final check in health.checks)
-                              '${check.id}: ${check.ok ? '${check.status} · ${check.latencyMs} ms' : check.error ?? '${check.status}'}',
-                          ].join('\n'),
-                        ),
-                  trailing: _checking
-                      ? const SizedBox.square(
-                          dimension: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : TextButton(
-                          onPressed: _health,
-                          child: Text(l10n.extensionHealthCheck),
-                        ),
+                      : health.ok
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.error,
                 ),
-              ],
-            ),
-          SettingsGroup(
-            title: l10n.extensionAbout,
-            children: [
-              ListTile(
-                title: Text(l10n.extensionSource),
-                subtitle: Text(switch (extension.sourceKind) {
-                  'repository' => extension.repository ?? '',
-                  'folder' => l10n.extensionSourceFolder(
-                    extension.folder ?? '',
-                  ),
-                  _ => l10n.extensionSourceFile,
-                }),
-                trailing: extension.sourceKind == 'folder'
-                    ? IconButton(
-                        tooltip: l10n.extensionReload,
-                        icon: const Icon(Icons.refresh),
-                        onPressed: () => _guard(() async {
-                          await _controller.installFolder(extension.folder!);
-                        }),
-                      )
-                    : null,
-              ),
-              ListTile(
-                title: Text(l10n.extensionFingerprint),
-                subtitle: SelectableText(extension.sha256),
-              ),
-              ListTile(
-                title: Text(l10n.extensionStorage),
-                subtitle: Text(
-                  l10n.extensionStorageBytes(extension.storageBytes),
+                title: Text(
+                  health == null
+                      ? l10n.extensionHealthUnknown
+                      : health.ok
+                      ? l10n.extensionHealthOk
+                      : l10n.extensionHealthFailed,
                 ),
-              ),
-              ExpansionTile(
-                title: Text(l10n.extensionLog),
-                onExpansionChanged: (open) {
-                  if (open) _loadLogs();
-                },
-                children: [
-                  if (_logs == null)
-                    const LinearProgressIndicator()
-                  else if (_logs!.isEmpty)
-                    ListTile(title: Text(l10n.extensionLogEmpty))
-                  else
-                    for (final entry in _logs!.take(100))
-                      ListTile(
-                        dense: true,
-                        title: Text(entry.message),
-                        subtitle: Text('${entry.timestamp} · ${entry.level}'),
+                subtitle: health == null
+                    ? null
+                    : Text(
+                        [
+                          for (final check in health.checks)
+                            '${check.id}: ${check.ok ? '${check.status} · ${check.latencyMs} ms' : check.error ?? '${check.status}'}',
+                        ].join('\n'),
                       ),
-                ],
+                trailing: _checking
+                    ? const SizedBox.square(
+                        dimension: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : TextButton(
+                        onPressed: _health,
+                        child: Text(l10n.extensionHealthCheck),
+                      ),
               ),
             ],
           ),
-          Padding(
-            padding: const EdgeInsets.all(AppTokens.space16),
-            child: OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: theme.colorScheme.error,
-              ),
-              onPressed: () => _uninstall(extension),
-              icon: const Icon(Icons.delete_outline),
-              label: Text(l10n.extensionUninstall),
+        SettingsGroup(
+          title: l10n.extensionAbout,
+          children: [
+            SettingsItem(
+              title: l10n.extensionSource,
+              subtitle: switch (extension.sourceKind) {
+                'repository' => extension.repository ?? '',
+                'folder' => l10n.extensionSourceFolder(extension.folder ?? ''),
+                _ => l10n.extensionSourceFile,
+              },
+              trailing: extension.sourceKind == 'folder'
+                  ? IconButton(
+                      tooltip: l10n.extensionReload,
+                      icon: const Icon(Icons.refresh),
+                      onPressed: () => _guard(() async {
+                        await _controller.installFolder(extension.folder!);
+                      }),
+                    )
+                  : null,
             ),
+            ListTile(
+              title: Text(l10n.extensionFingerprint),
+              subtitle: SelectableText(extension.sha256),
+            ),
+            SettingsItem(
+              title: l10n.extensionStorage,
+              subtitle: l10n.extensionStorageBytes(extension.storageBytes),
+            ),
+            ExpansionTile(
+              title: Text(l10n.extensionLog),
+              onExpansionChanged: (open) {
+                if (open) _loadLogs();
+              },
+              children: [
+                if (_logs == null)
+                  const LinearProgressIndicator()
+                else if (_logs!.isEmpty)
+                  SettingsItem(title: l10n.extensionLogEmpty)
+                else
+                  for (final entry in _logs!.take(100))
+                    ListTile(
+                      dense: true,
+                      title: Text(entry.message),
+                      subtitle: Text('${entry.timestamp} · ${entry.level}'),
+                    ),
+              ],
+            ),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.all(AppTokens.space16),
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: theme.colorScheme.error,
+            ),
+            onPressed: () => _uninstall(extension),
+            icon: const Icon(Icons.delete_outline),
+            label: Text(l10n.extensionUninstall),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
