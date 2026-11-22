@@ -5,8 +5,10 @@ import 'package:kalao/l10n/app_localizations.dart';
 import 'package:kalao/models/extension.dart';
 import 'package:kalao/providers/extension_provider.dart';
 import 'package:kalao/theme/app_tokens.dart';
+import 'package:kalao/widgets/app_page.dart';
 import 'package:kalao/widgets/empty_state.dart';
 import 'package:kalao/widgets/extension_widgets.dart';
+import 'package:kalao/widgets/settings_group.dart';
 
 /// The Extensions tab (FEATURES 5.x): installed extensions and the
 /// repositories' store. Install from a file, order, repository management and
@@ -19,26 +21,24 @@ class ExtensionsTab extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final state = ref.watch(extensionsProvider);
     final notifier = ref.read(extensionsProvider.notifier);
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.navExtensions),
-        actions: [
-          IconButton(
-            tooltip: l10n.extensionRepositories,
-            icon: Badge(
-              isLabelVisible: state.updates > 0,
-              label: Text('${state.updates}'),
-              child: const Icon(Icons.storefront_outlined),
-            ),
-            onPressed: () => context.push('/extensions/repositories'),
+    return AppScrollPage.tab(
+      title: l10n.navExtensions,
+      actions: [
+        IconButton(
+          tooltip: l10n.extensionRepositories,
+          icon: Badge(
+            isLabelVisible: state.updates > 0,
+            label: Text('${state.updates}'),
+            child: const Icon(Icons.storefront_outlined),
           ),
-          IconButton(
-            tooltip: l10n.settingsTitle,
-            icon: const Icon(Icons.tune),
-            onPressed: () => context.push('/settings/extensions'),
-          ),
-        ],
-      ),
+          onPressed: () => context.push('/extensions/repositories'),
+        ),
+        IconButton(
+          tooltip: l10n.settingsTitle,
+          icon: const Icon(Icons.tune),
+          onPressed: () => context.push('/settings/extensions'),
+        ),
+      ],
       body: RefreshIndicator(
         onRefresh: () async {
           await notifier.refresh();
@@ -64,8 +64,17 @@ class ExtensionsTab extends ConsumerWidget {
                 body: l10n.extensionsEmptyBody,
               )
             else
-              for (final extension in state.extensions)
-                _ExtensionTile(extension: extension),
+              SettingsGroup(
+                connected: true,
+                margin: const EdgeInsets.symmetric(
+                  horizontal: AppTokens.space16,
+                  vertical: AppTokens.space8,
+                ),
+                children: [
+                  for (final extension in state.extensions)
+                    _ExtensionTile(extension: extension),
+                ],
+              ),
           ],
         ),
       ),

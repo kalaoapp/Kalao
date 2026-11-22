@@ -10,6 +10,8 @@ import 'package:kalao/screens/settings/instrumental_placement_screen.dart';
 import 'package:kalao/screens/library/library_pages.dart';
 import 'package:kalao/services/library_folder_service.dart';
 import 'package:kalao/theme/app_tokens.dart';
+import 'package:kalao/widgets/settings_group.dart';
+import 'package:kalao/widgets/app_page.dart';
 import 'package:kalao/utils/document_tree.dart';
 
 enum _LibraryAction { fullScan, cleanup, duplicates, artwork }
@@ -158,109 +160,100 @@ class LibraryFoldersScreen extends ConsumerWidget {
     );
     final controller = ref.read(libraryFoldersProvider.notifier);
     final scan = state.scan;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.foldersTitle),
-        actions: [
-          IconButton(
-            tooltip: l10n.foldersScanAll,
-            icon: const Icon(Icons.refresh),
-            onPressed: state.scanning || state.folders.isEmpty
-                ? null
-                : () async {
-                    final results = await controller.scanAll(foreground: true);
-                    if (!context.mounted || results.isEmpty) return;
-                    _report(context, _sum(results));
-                  },
-          ),
-          PopupMenuButton<_LibraryAction>(
-            onSelected: (action) => _action(context, ref, action),
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: _LibraryAction.fullScan,
-                enabled: !state.scanning && state.folders.isNotEmpty,
-                child: Text(l10n.foldersFullScan),
-              ),
-              PopupMenuItem(
-                value: _LibraryAction.cleanup,
-                enabled: !state.scanning,
-                child: Text(l10n.foldersCleanup),
-              ),
-              PopupMenuItem(
-                value: _LibraryAction.duplicates,
-                child: Text(l10n.duplicatesTitle),
-              ),
-              PopupMenuItem(
-                value: _LibraryAction.artwork,
-                child: Text(l10n.artworkTitle),
-              ),
-            ],
-          ),
-        ],
-        bottom: scan == null
-            ? null
-            : PreferredSize(
-                preferredSize: const Size.fromHeight(4),
-                child: LinearProgressIndicator(
-                  value: scan.total == 0 ? null : scan.done / scan.total,
-                ),
-              ),
-      ),
+    return AppPage(
+      title: l10n.foldersTitle,
+      actions: [
+        IconButton(
+          tooltip: l10n.foldersScanAll,
+          icon: const Icon(Icons.refresh),
+          onPressed: state.scanning || state.folders.isEmpty
+              ? null
+              : () async {
+                  final results = await controller.scanAll(foreground: true);
+                  if (!context.mounted || results.isEmpty) return;
+                  _report(context, _sum(results));
+                },
+        ),
+        PopupMenuButton<_LibraryAction>(
+          onSelected: (action) => _action(context, ref, action),
+          itemBuilder: (context) => [
+            PopupMenuItem(
+              value: _LibraryAction.fullScan,
+              enabled: !state.scanning && state.folders.isNotEmpty,
+              child: Text(l10n.foldersFullScan),
+            ),
+            PopupMenuItem(
+              value: _LibraryAction.cleanup,
+              enabled: !state.scanning,
+              child: Text(l10n.foldersCleanup),
+            ),
+            PopupMenuItem(
+              value: _LibraryAction.duplicates,
+              child: Text(l10n.duplicatesTitle),
+            ),
+            PopupMenuItem(
+              value: _LibraryAction.artwork,
+              child: Text(l10n.artworkTitle),
+            ),
+          ],
+        ),
+      ],
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'add-folder',
         onPressed: state.scanning ? null : () => _add(context, ref),
         icon: const Icon(Icons.create_new_folder_outlined),
         label: Text(l10n.foldersAdd),
       ),
-      body: ListView(
-        padding: const EdgeInsets.only(bottom: 96),
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(AppTokens.space16),
-            child: Text(
-              l10n.foldersIntro,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+      progress: scan == null
+          ? null
+          : scan.total == 0
+          ? double.nan
+          : scan.done / scan.total,
+      padding: const EdgeInsets.only(bottom: 96),
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(AppTokens.space16),
+          child: Text(
+            l10n.foldersIntro,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
-          const _PlacementTile(),
-          ListTile(
-            leading: const Icon(Icons.schedule),
-            title: Text(l10n.foldersAutoScan),
-            trailing: DropdownButton<FolderScanSchedule>(
-              value: schedule,
-              onChanged: (value) {
-                if (value == null) return;
-                ref
-                    .read(settingsProvider.notifier)
-                    .setFolderScanSchedule(value);
-              },
-              items: [
-                for (final (value, label) in [
-                  (FolderScanSchedule.onOpen, l10n.foldersAutoScanOnOpen),
-                  (FolderScanSchedule.daily, l10n.foldersAutoScanDaily),
-                  (FolderScanSchedule.weekly, l10n.foldersAutoScanWeekly),
-                  (FolderScanSchedule.manual, l10n.foldersAutoScanManual),
-                ])
-                  DropdownMenuItem(value: value, child: Text(label)),
-              ],
-            ),
+        ),
+        const _PlacementTile(),
+        ListTile(
+          leading: const Icon(Icons.schedule),
+          title: Text(l10n.foldersAutoScan),
+          trailing: DropdownButton<FolderScanSchedule>(
+            value: schedule,
+            onChanged: (value) {
+              if (value == null) return;
+              ref.read(settingsProvider.notifier).setFolderScanSchedule(value);
+            },
+            items: [
+              for (final (value, label) in [
+                (FolderScanSchedule.onOpen, l10n.foldersAutoScanOnOpen),
+                (FolderScanSchedule.daily, l10n.foldersAutoScanDaily),
+                (FolderScanSchedule.weekly, l10n.foldersAutoScanWeekly),
+                (FolderScanSchedule.manual, l10n.foldersAutoScanManual),
+              ])
+                DropdownMenuItem(value: value, child: Text(label)),
+            ],
           ),
-          for (final folder in state.folders)
-            _FolderTile(
-              folder: folder,
-              scan: scan?.folderId == folder.id ? scan : null,
-              busy: state.scanning,
-              onScan: () async {
-                final result = await controller.scan(folder);
-                if (context.mounted) _report(context, result);
-              },
-              onCancel: controller.cancel,
-              onRemove: () => _remove(context, ref, folder),
-            ),
-        ],
-      ),
+        ),
+        for (final folder in state.folders)
+          _FolderTile(
+            folder: folder,
+            scan: scan?.folderId == folder.id ? scan : null,
+            busy: state.scanning,
+            onScan: () async {
+              final result = await controller.scan(folder);
+              if (context.mounted) _report(context, result);
+            },
+            onCancel: controller.cancel,
+            onRemove: () => _remove(context, ref, folder),
+          ),
+      ],
     );
   }
 }
@@ -274,17 +267,16 @@ class _PlacementTile extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final settings = ref.watch(settingsProvider);
     final folder = settings.instrumentalFolderUri;
-    return ListTile(
-      leading: const Icon(Icons.music_note_outlined),
-      title: Text(l10n.placementSetting),
-      subtitle: Text(switch (settings.instrumentalPlacement) {
+    return SettingsItem(
+      icon: Icons.music_note_outlined,
+      title: l10n.placementSetting,
+      subtitle: switch (settings.instrumentalPlacement) {
         InstrumentalPlacement.undecided => l10n.placementSettingUndecided,
         InstrumentalPlacement.besideOriginal => l10n.placementSettingBeside,
         InstrumentalPlacement.separateFolder => l10n.placementFolder(
           folder == null ? '' : treeFolderName(folder),
         ),
-      }),
-      trailing: const Icon(Icons.chevron_right),
+      },
       onTap: () => Navigator.of(context).push<bool>(
         MaterialPageRoute(
           fullscreenDialog: true,
@@ -411,16 +403,14 @@ class _SkippedSheet extends ConsumerWidget {
             ),
           ),
           for (final file in files)
-            ListTile(
-              title: Text(file.name),
-              subtitle: Text(
-                [
-                  if (file.dir.isNotEmpty) file.dir,
-                  file.reason == 'format'
-                      ? l10n.foldersSkipFormat
-                      : l10n.foldersSkipUnreadable,
-                ].join(' · '),
-              ),
+            SettingsItem(
+              title: file.name,
+              subtitle: [
+                if (file.dir.isNotEmpty) file.dir,
+                file.reason == 'format'
+                    ? l10n.foldersSkipFormat
+                    : l10n.foldersSkipUnreadable,
+              ].join(' · '),
             ),
         ],
       ),
