@@ -1,18 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:kalao/app.dart';
 import 'package:kalao/constants/app_info.dart';
 import 'package:kalao/models/lyrics.dart';
 import 'package:kalao/services/history_database.dart';
 import 'package:kalao/models/settings.dart';
 import 'package:kalao/models/song.dart';
 import 'package:kalao/providers/library_provider.dart';
-import 'package:kalao/providers/settings_provider.dart';
-import 'package:kalao/screens/library/library_pages.dart';
 import 'package:kalao/services/backup_service.dart';
 import 'package:kalao/services/library_browse.dart';
 import 'package:kalao/services/library_database.dart';
@@ -479,46 +474,5 @@ void main() {
     expect(isDiscFolder('Disk 02'), isTrue);
     expect(isDiscFolder('CDs'), isFalse);
     expect(isDiscFolder('Discography'), isFalse);
-  });
-
-  testWidgets('the Library opens on the last view and browses albums', (
-    tester,
-  ) async {
-    await tester.runAsync(() async {
-      await add('One', album: 'Light', albumArtist: 'Teresa', track: 1);
-      await add('Two', album: 'Light', albumArtist: 'Teresa', track: 2);
-    });
-    final preferences = await SharedPreferences.getInstance();
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          sharedPreferencesProvider.overrideWithValue(preferences),
-          ...testOverrides(services),
-        ],
-        child: const KalaoApp(),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Library'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Albums'));
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 50)),
-    );
-    await tester.pumpAndSettle();
-    expect(find.byType(AlbumsView), findsOneWidget);
-    await tester.tap(find.text('Light'));
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 50)),
-    );
-    await tester.pumpAndSettle();
-    expect(find.byType(AlbumScreen), findsOneWidget);
-    expect(find.text('Sing all'), findsOneWidget);
-    expect(find.text('One'), findsOneWidget);
-    final container = ProviderScope.containerOf(
-      tester.element(find.byType(AlbumScreen)),
-    );
-    expect(container.read(settingsProvider).libraryTab, LibraryTab.albums);
-    await tester.pumpWidget(const SizedBox.shrink());
   });
 }

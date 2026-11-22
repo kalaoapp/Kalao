@@ -718,14 +718,27 @@ id IN (SELECT m.song_id FROM media_file m
     await batch.commit(noResult: true);
   });
 
+  /// Shortest query that a `likelyOnly` [search] matches inside a key.
+  static const likelyMinLength = 3;
+
   /// Songs where every word of [query] is in some title, artist, pinyin,
   /// initials or romaji key, in any order (Mornye's word rule; punctuation
   /// separates words). Songs with a key that starts with the whole query
   /// come first, then those containing it, then the rest.
-  Future<List<Song>> search(String query, {int limit = 100}) async {
+  ///
+  /// With [likelyOnly], a query shorter than [likelyMinLength] matches only
+  /// at the start of a key: one or two letters inside a word say little about
+  /// what someone is looking for (Home then shows extension results alone).
+  Future<List<Song>> search(
+    String query, {
+    int limit = 100,
+    bool likelyOnly = false,
+  }) async {
     final words = searchWords(query);
     if (words.isEmpty) return const [];
-    final full = _likeEscape(normalizeSearchText(query));
+    final key = normalizeSearchText(query);
+    final full = _likeEscape(key);
+    final inside = !likelyOnly || key.length >= likelyMinLength ? '%' : '';
     final rows = await db.rawQuery(
       '''
 SELECT song_id, MIN(CASE WHEN key LIKE ? ESCAPE '\\' THEN 0
@@ -737,8 +750,8 @@ ORDER BY rank, song_id DESC
 LIMIT ?''',
       [
         '$full%',
-        '%$full%',
-        for (final word in words) '%${_likeEscape(word)}%',
+        '$inside$full%',
+        for (final word in words) '$inside${_likeEscape(word)}%',
         limit,
       ],
     );

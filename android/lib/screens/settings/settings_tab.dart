@@ -10,6 +10,7 @@ import 'package:kalao/l10n/supported_locales.dart';
 import 'package:kalao/providers/library_provider.dart';
 import 'package:kalao/providers/settings_provider.dart';
 import 'package:kalao/providers/update_provider.dart';
+import 'package:kalao/screens/import_sheet.dart';
 import 'package:kalao/screens/lyrics_options_sheet.dart';
 import 'package:kalao/services/custom_font_service.dart';
 import 'package:kalao/services/external_links.dart';
@@ -68,8 +69,27 @@ class SettingsTab extends ConsumerWidget {
             ],
           ),
           SettingsGroup(
+            title: l10n.navExtensions,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.extension_outlined),
+                title: Text(l10n.navExtensions),
+                subtitle: Text(l10n.settingsExtensionsSubtitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/settings/extensions'),
+              ),
+            ],
+          ),
+          SettingsGroup(
             title: l10n.settingsData,
             children: [
+              ListTile(
+                leading: const Icon(Icons.file_upload_outlined),
+                title: Text(l10n.importSettingsTitle),
+                subtitle: Text(l10n.importSettingsSubtitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => pickAndImport(context, ref),
+              ),
               ListTile(
                 leading: const Icon(Icons.folder_outlined),
                 title: Text(l10n.foldersTitle),

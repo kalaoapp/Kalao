@@ -73,6 +73,20 @@ class LibraryRevision extends Notifier<int> {
   void bump() => state++;
 }
 
+/// Home's library list; [LibraryView.favoritesOnly] shows favorites.
+typedef LibraryView = ({SongSort sort, bool favoritesOnly});
+
+final librarySongsProvider = FutureProvider.family<List<Song>, LibraryView>((
+  ref,
+  view,
+) {
+  ref.watch(libraryRevisionProvider);
+  return ref
+      .watch(libraryServicesProvider)
+      .library
+      .songs(sort: view.sort, favoritesOnly: view.favoritesOnly);
+});
+
 final favoriteProvider = FutureProvider.family<bool, int>((ref, songId) {
   ref.watch(libraryRevisionProvider);
   return ref.watch(libraryServicesProvider).library.isFavorite(songId);
@@ -115,12 +129,16 @@ final continueSingingProvider =
       return (song: song, position: position);
     });
 
-final librarySearchProvider = FutureProvider.family<List<Song>, String>((
+/// Home's library results: likely matches only, best first.
+final homeSearchProvider = FutureProvider.family<List<Song>, String>((
   ref,
   query,
 ) {
   ref.watch(libraryRevisionProvider);
-  return ref.watch(libraryServicesProvider).library.search(query);
+  return ref
+      .watch(libraryServicesProvider)
+      .library
+      .search(query, likelyOnly: true);
 });
 
 final songLyricsProvider = FutureProvider.family<LyricDocument?, int>((

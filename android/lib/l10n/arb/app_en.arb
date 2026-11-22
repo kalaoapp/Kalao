@@ -7,7 +7,7 @@
   "navExtensions": "Extensions",
   "navSettings": "Settings",
   "homeEmptyTitle": "Nothing to sing yet",
-  "homeEmptyBody": "Import songs with the button below. Your recent plays will appear here.",
+  "homeEmptyBody": "Import songs or add a music folder in Settings → Your data. Your recent plays will appear here.",
   "libraryEmptyTitle": "Your library is empty",
   "libraryEmptyBody": "Import an original and, if you have one, its instrumental. Kalao pairs them for you.",
   "queueEmptyTitle": "The queue is empty",
@@ -1067,5 +1067,17 @@
         "type": "String"
       }
     }
-  }
+  },
+  "extensionPrioritySubtitle": "Which extension is asked first",
+  "settingsRepositoriesCount": "{count, plural, =0{None added} =1{1 repository} other{{count} repositories}}",
+  "@settingsRepositoriesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsExtensionsSubtitle": "Install from a file, order, repositories and options",
+  "importSettingsTitle": "Import songs",
+  "importSettingsSubtitle": "Copy audio and lyrics files into Kalao; an original and its instrumental are paired"
 }

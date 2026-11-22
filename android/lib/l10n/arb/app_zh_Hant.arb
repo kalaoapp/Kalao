@@ -7,7 +7,7 @@
   "navExtensions": "擴充功能",
   "navSettings": "設定",
   "homeEmptyTitle": "還沒有可以唱的歌",
-  "homeEmptyBody": "用下方按鈕匯入歌曲。最近播放的歌曲會顯示在這裡。",
+  "homeEmptyBody": "在「設定 → 你的資料」中匯入歌曲或新增音樂資料夾。最近播放的歌曲會顯示在這裡。",
   "libraryEmptyTitle": "曲庫是空的",
   "libraryEmptyBody": "匯入原唱，如有伴奏也一併匯入，Kalao 會自動配對。",
   "queueEmptyTitle": "點歌清單是空的",
@@ -546,5 +546,10 @@
   "songReplaceInstrumental": "替換伴奏",
   "songInstrumentalBody": "選擇這首歌的伴奏音軌",
   "songInstrumentalAdded": "已新增伴奏",
-  "songInstrumentalFailed": "無法新增伴奏：{error}"
+  "songInstrumentalFailed": "無法新增伴奏：{error}",
+  "extensionPrioritySubtitle": "優先詢問哪個擴充功能",
+  "settingsRepositoriesCount": "{count, plural, =0{尚未新增} other{{count} 個儲存庫}}",
+  "settingsExtensionsSubtitle": "從檔案安裝、順序、儲存庫和選項",
+  "importSettingsTitle": "匯入歌曲",
+  "importSettingsSubtitle": "將音訊和歌詞檔案複製到 Kalao，原唱與伴奏會自動配對"
 }

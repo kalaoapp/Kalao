@@ -16,6 +16,9 @@ import 'package:kalao/providers/settings_provider.dart';
 import 'package:kalao/screens/extensions/extension_detail_screen.dart';
 import 'package:kalao/screens/extensions/extension_install.dart';
 import 'package:kalao/screens/extensions/extensions_tab.dart';
+import 'package:kalao/screens/home_tab.dart';
+import 'package:kalao/screens/settings/extension_settings_screen.dart';
+import 'package:kalao/screens/settings/repository_settings_screen.dart';
 import 'package:kalao/screens/shared_files.dart';
 import 'package:kalao/services/backup_service.dart';
 import 'package:kalao/services/extension_service.dart';
@@ -430,6 +433,95 @@ void main() {
     await tester.tap(find.byType(Switch).first);
     await _settle(tester);
     expect(backend.extensions.single['enabled'], isFalse);
+  });
+
+  testWidgets('Settings → Extensions holds order, install and options', (
+    tester,
+  ) async {
+    await _pump(tester, services, secrets, const ExtensionSettingsScreen());
+    expect(find.text('Order'), findsOneWidget);
+    expect(find.text('Repositories'), findsOneWidget);
+    expect(find.text('Install from file'), findsOneWidget);
+    expect(find.text('Fetch lyrics automatically'), findsOneWidget);
+    expect(
+      find.text('Developer mode'),
+      AppInfo.developerModeAvailable ? findsOneWidget : findsNothing,
+    );
+  });
+
+  testWidgets('repositories are added after trusting the key and removed', (
+    tester,
+  ) async {
+    await _pump(tester, services, secrets, const RepositorySettingsScreen());
+    await tester.tap(find.byKey(const ValueKey('repository-add')));
+    await _settle(tester);
+    final field = find.byKey(const ValueKey('repository-url-field'));
+    expect(tester.widget<TextField>(field).controller!.text, isEmpty);
+    await tester.enterText(field, 'https://repo.example.org/index.json');
+    await tester.tap(find.widgetWithText(FilledButton, 'Add repository'));
+    await _settle(tester);
+    expect(find.text('aaaa:bbbb'), findsOneWidget);
+    await tester.tap(find.text('Trust and add'));
+    await _settle(tester);
+    expect(find.text('https://repo.example.org/index.json'), findsOneWidget);
+    expect(find.text('No extensions'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Remove'));
+    await _settle(tester);
+    await tester.tap(find.widgetWithText(TextButton, 'Remove'));
+    await _settle(tester);
+    expect(backend.repositoryListings, isEmpty);
+    expect(find.text('https://repo.example.org/index.json'), findsNothing);
+  });
+
+  testWidgets('Home lists the library and searches it before extensions', (
+    tester,
+  ) async {
+    backend.addExtension(
+      FakeBackend.extensionInfo('dev.test.music', capabilities: ['metadata']),
+    );
+    backend.tracks.add({
+      'extensionId': 'dev.test.music',
+      'extensionName': 'Music',
+      'id': 't9',
+      'title': 'Moonlight Online',
+      'artists': ['Someone'],
+    });
+    final id = (await tester.runAsync(() async {
+      final id = await services.library.insertSong(
+        const NewSong(title: 'Blue Moon', media: []),
+      );
+      await services.library.replaceSearchKeys(
+        [id],
+        [
+          {'songId': id, 'keyKind': 'title', 'key': 'bluemoon'},
+        ],
+      );
+      return id;
+    }))!;
+    await _pump(tester, services, secrets, const HomeTab());
+    expect(find.text('Library'), findsOneWidget);
+    // Import lives in Settings → Your data.
+    expect(find.byType(FloatingActionButton), findsNothing);
+    expect(find.text('Blue Moon'), findsWidgets);
+
+    await tester.enterText(find.byType(SearchBar), 'moo');
+    await _settle(tester);
+    await _settle(tester);
+    expect(find.text('Library'), findsOneWidget);
+    expect(find.text('Blue Moon'), findsOneWidget);
+    expect(find.text('Moonlight Online'), findsOneWidget);
+    final library = tester.getTopLeft(find.text('Blue Moon')).dy;
+    final online = tester.getTopLeft(find.text('Moonlight Online')).dy;
+    expect(library, lessThan(online));
+
+    // Nothing likely in the library: extension results alone.
+    await tester.enterText(find.byType(SearchBar), 'oo');
+    await _settle(tester);
+    await _settle(tester);
+    expect(find.text('Library'), findsNothing);
+    expect(find.text('From extensions'), findsOneWidget);
+    expect(id, isPositive);
   });
 
   testWidgets('the settings form saves a secret to secure storage', (

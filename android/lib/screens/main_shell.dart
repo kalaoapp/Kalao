@@ -12,7 +12,6 @@ import 'package:kalao/providers/player_provider.dart';
 import 'package:kalao/providers/update_provider.dart';
 import 'package:kalao/screens/extensions/extensions_tab.dart';
 import 'package:kalao/screens/home_tab.dart';
-import 'package:kalao/screens/library_screen.dart';
 import 'package:kalao/screens/queue_tab.dart';
 import 'package:kalao/screens/settings/settings_tab.dart';
 import 'package:kalao/screens/shared_files.dart';
@@ -21,7 +20,8 @@ import 'package:kalao/widgets/app_crash_banner.dart';
 import 'package:kalao/widgets/mini_player.dart';
 import 'package:kalao/widgets/update_dialog.dart';
 
-/// The tabbed home of the app. Tabs keep their state while hidden.
+/// The tabbed home of the app: Home (with the library), Queue, Extensions
+/// and Settings. Tabs keep their state while hidden.
 class MainShell extends ConsumerStatefulWidget {
   const MainShell({super.key});
 
@@ -89,7 +89,6 @@ class _MainShellState extends ConsumerState<MainShell> {
     final updates = ref.watch(extensionsProvider.select((s) => s.updates));
     const tabs = <Widget>[
       HomeTab(),
-      LibraryScreen(),
       QueueTab(),
       ExtensionsTab(),
       SettingsTab(),
@@ -127,11 +126,6 @@ class _MainShellState extends ConsumerState<MainShell> {
                 icon: const Icon(Icons.home_outlined),
                 selectedIcon: const Icon(Icons.home),
                 label: l10n.navHome,
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.library_music_outlined),
-                selectedIcon: const Icon(Icons.library_music),
-                label: l10n.navLibrary,
               ),
               NavigationDestination(
                 icon: const Icon(Icons.queue_music_outlined),

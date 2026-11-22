@@ -213,6 +213,9 @@ class FakeBackend {
       case 'setExtensionDeveloperMode':
       case 'extensionAuthCallback':
       case 'removeRepository':
+        repositoryListings.removeWhere(
+          (listing) => (listing['repository']! as Map)['url'] == args['url'],
+        );
         return null;
       case 'addRepository':
         repositoryListings.add({

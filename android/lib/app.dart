@@ -16,9 +16,11 @@ import 'package:kalao/screens/lyrics_sync_screen.dart';
 import 'package:kalao/screens/main_shell.dart';
 import 'package:kalao/screens/now_playing_screen.dart';
 import 'package:kalao/screens/settings/backup_screen.dart';
+import 'package:kalao/screens/settings/extension_settings_screen.dart';
 import 'package:kalao/screens/settings/library_folders_screen.dart';
 import 'package:kalao/screens/settings/log_screen.dart';
 import 'package:kalao/screens/settings/privacy_screen.dart';
+import 'package:kalao/screens/settings/repository_settings_screen.dart';
 import 'package:kalao/screens/stats_screen.dart';
 import 'package:kalao/screens/setup_screen.dart';
 import 'package:kalao/screens/song_detail_screen.dart';
@@ -87,6 +89,16 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings/folders',
         builder: (context, state) => const LibraryFoldersScreen(),
+      ),
+      GoRoute(
+        path: '/settings/extensions',
+        builder: (context, state) => const ExtensionSettingsScreen(),
+        routes: [
+          GoRoute(
+            path: 'repositories',
+            builder: (context, state) => const RepositorySettingsScreen(),
+          ),
+        ],
       ),
       GoRoute(
         path: '/settings/privacy',
